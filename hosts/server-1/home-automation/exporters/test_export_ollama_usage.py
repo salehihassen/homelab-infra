@@ -1,14 +1,11 @@
-"""Cover API format changes and authenticated monthly quota extraction."""
+"""Cover the API-key-only export of Ollama's included monthly credit."""
 
 import importlib.util
 import json
 import os
-import sqlite3
 import tempfile
 import unittest
 import urllib.error
-from email.message import Message
-from io import BytesIO
 from pathlib import Path
 from unittest.mock import patch
 
@@ -19,156 +16,116 @@ spec = importlib.util.spec_from_file_location(
 exporter = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(exporter)
 
-SETTINGS = """
-<h2><span>Included usage</span><span>free</span></h2>
-<section>
-  <div><span>Monthly usage</span><span>$0.15 of $5 used</span
-  ></div>
-  <div data-usage-track><div style="width: 3%;"></div></div>
-  <div data-time="2026-10-25T12:00:00Z">Resets in 3 weeks.</div>
-</section>
-<section><span>Weekly usage</span><span>99% used</span>
-<div data-time="2026-10-08T00:00:00Z">Resets tomorrow</div></section>
-"""
-ACTIVITY = {"range": "7d", "scope": "self", "totals": {"request_count": 71}, "buckets": []}
-ACCOUNT = {"Plan": "free", "CreatedAt": "2026-01-25T12:00:00Z", "Email": "private@example.test"}
+BALANCE = {
+    "included": {"balance_usd": 2.42106, "allowance_usd": 2.5,
+                 "period": {"from": "2026-09-26T05:36:52.170186Z",
+                            "until": "2026-10-26T05:36:52.170186Z"}},
+    "purchased": {"balance_usd": 0},
+}
+USAGE = {"range": "30d", "granularity": "day", "totals": {"request_count": 120}, "buckets": [
+    # Ends before the billing period starts: not counted.
+    {"from": "2026-09-24T00:00:00Z", "until": "2026-09-25T00:00:00Z", "request_count": 40},
+    # Overlaps the period start: counted (daily buckets cannot be split).
+    {"from": "2026-09-26T00:00:00Z", "until": "2026-09-27T00:00:00Z", "request_count": 5},
+    {"from": "2026-10-07T00:00:00Z", "until": "2026-10-08T00:00:00Z", "request_count": 70,
+     "usage_usd": 0.003},
+    {"from": "2026-10-08T00:00:00Z", "until": "2026-10-08T15:00:00Z", "request_count": 5,
+     "partial": True},
+]}
+ACCOUNT = {"Plan": "free", "CreatedAt": "2026-01-26T05:36:52Z", "Email": "private@example.test"}
+RESET = 1792993012
+
+
+def responses(balance=BALANCE, usage=USAGE, account=ACCOUNT):
+    """Answer each endpoint by URL, so call order does not matter."""
+    def fetch(url, api_key, method="GET"):
+        if url.startswith(exporter.BALANCE_URL):
+            return balance
+        if url.startswith(exporter.USAGE_URL):
+            return usage
+        if url.startswith(exporter.ACCOUNT_URL):
+            return account
+        raise AssertionError(url)
+    return fetch
 
 
 class OllamaExporterTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.root = Path(self.tmp.name)
-        self.output = self.root / "usage.json"
-        self.cookie = self.root / "cookie"
-        self.cookie.write_text("wos-session=test-session-secret")
+        self.output = Path(self.tmp.name) / "usage.json"
         self.env = patch.dict(os.environ, {
             "OLLAMA_CLOUD_API_KEY": "test-api-secret",
-            "OLLAMA_USAGE_COOKIE_FILE": str(self.cookie),
-            "OLLAMA_USAGE_BROWSER_COOKIES_FILE": "",
             "OLLAMA_USAGE_OUTPUT": str(self.output),
         })
         self.env.start()
         self.addCleanup(self.env.stop)
 
-    def test_changed_activity_api_uses_settings_quota_not_request_totals(self):
-        with patch.object(exporter, "fetch", side_effect=[ACTIVITY, ACCOUNT]), \
-                patch.object(exporter, "fetch_settings", return_value=SETTINGS, create=True):
+    def test_exports_included_credit_period_and_requests(self):
+        with patch.object(exporter, "fetch", side_effect=responses()):
             exporter.main()
         data = json.loads(self.output.read_text())
-        self.assertEqual(data["monthly_used"], 3.0)
-        self.assertEqual(data["monthly_remaining"], 97.0)
-        self.assertEqual(data["monthly_resets_at"], 1792929600)
-        # Seven-day activity cannot stand in for the billing-cycle request count.
-        self.assertIsNone(data["monthly_requests"])
+        # (2.5 - 2.42106) / 2.5 = 3.16% used.
+        self.assertEqual(data["monthly_used"], 3.2)
+        self.assertEqual(data["monthly_remaining"], 96.8)
+        self.assertEqual(data["monthly_resets_at"], RESET)
+        self.assertEqual(data["monthly_requests"], 80)
         self.assertEqual(data["plan"], "free")
+        self.assertEqual(data["included_balance_usd"], 2.42106)
+        self.assertEqual(data["included_allowance_usd"], 2.5)
+        self.assertEqual(data["purchased_balance_usd"], 0)
         self.assertEqual(self.output.stat().st_mode & 0o777, 0o600)
-        for secret in ("test-api-secret", "test-session-secret", ACCOUNT["Email"]):
+        for secret in ("test-api-secret", ACCOUNT["Email"]):
             self.assertNotIn(secret, self.output.read_text())
 
-    def test_legacy_api_still_exports_monthly_usage_and_requests(self):
-        payload = {"limits": {"monthly": {"usage": 0.029,
-                    "models": [{"request_count": 123}]}}}
-        with patch.object(exporter, "fetch", side_effect=[payload, ACCOUNT]), \
-                patch.object(exporter, "fetch_settings") as settings:
-            data = exporter.get_usage()
-        self.assertEqual(data["monthly_remaining"], 97.1)
-        self.assertEqual(data["monthly_requests"], 123)
-        settings.assert_not_called()
+    def test_overspent_and_unused_credit_are_clamped(self):
+        for balance, used in ((-1.0, 100.0), (3.0, 0.0)):
+            with self.subTest(balance=balance):
+                payload = json.loads(json.dumps(BALANCE))
+                payload["included"]["balance_usd"] = balance
+                with patch.object(exporter, "fetch", side_effect=responses(balance=payload)):
+                    self.assertEqual(exporter.get_usage()["monthly_used"], used)
 
-    def test_current_settings_use_monthly_reset_and_clamp_exhausted_credit(self):
-        used, reset = exporter.parse_monthly_settings(SETTINGS.replace("$0.15 of $5", "$7 of $5"))
-        self.assertEqual(used, 100)
-        self.assertEqual(reset, 1792929600)
+    def test_missing_request_counts_do_not_block_the_quota(self):
+        with patch.object(exporter, "fetch", side_effect=responses(usage={"buckets": "bad"})):
+            self.assertIsNone(exporter.get_usage()["monthly_requests"])
 
-    def test_free_plan_percentage_meter_and_current_session_cookie(self):
-        html = SETTINGS.replace("Monthly usage", "Free usage").replace("$0.15 of $5 used", "2.9% used")
-        self.assertEqual(exporter.parse_monthly_settings(html), (2.9, 1792929600))
-
-    def test_imported_session_survives_browser_lock_and_saves_server_rotation(self):
-        db = self.root / "cookies.sqlite"
-        connection = sqlite3.connect(db)
-        connection.execute("CREATE TABLE moz_cookies(host TEXT,path TEXT,name TEXT,value TEXT,expiry INTEGER)")
-        connection.execute("INSERT INTO moz_cookies VALUES('.ollama.com','/','__Secure-session','imported-session',9999999999)")
-        connection.commit()
-        self.addCleanup(connection.close)
-        self.cookie.unlink()
-        os.environ["OLLAMA_USAGE_BROWSER_COOKIES_FILE"] = str(db)
-        headers = Message()
-        headers.add_header("Set-Cookie", "__Secure-session=renewed-session; Path=/; Secure; HttpOnly")
-        headers.add_header("Set-Cookie", "tracking=ignore-this; Path=/")
-        response = BytesIO(SETTINGS.encode())
-        response.headers = headers
-        with patch.object(exporter.urllib.request, "build_opener") as build:
-            build.return_value.open.return_value = response
-            exporter.fetch_settings()
-        self.assertEqual(self.cookie.read_text().strip(), "__Secure-session=renewed-session")
-        self.assertEqual(self.cookie.stat().st_mode & 0o777, 0o600)
-        connection.execute("BEGIN EXCLUSIVE")
-        self.assertEqual(exporter.session_cookie(), "__Secure-session=renewed-session")
-        connection.rollback()
-
-    def test_invalid_settings_preserve_last_good_sample(self):
+    def test_invalid_balance_preserves_last_good_sample(self):
         self.output.write_text('{"sampled_at":1,"monthly_remaining":80}')
         original = self.output.read_bytes()
-        for html in ("<html>Sign in</html>", SETTINGS.replace("$5 used", "$0 used"),
-                     SETTINGS.replace("2026-10-25T12:00:00Z", "invalid"),
-                     SETTINGS.replace("$0.15 of $5 used", "$bad of $5 used")):
-            with self.subTest(html=html), \
-                    patch.object(exporter, "fetch", side_effect=[ACTIVITY, ACCOUNT]), \
-                    patch.object(exporter, "fetch_settings", return_value=html):
-                with self.assertRaises(ValueError):
+        broken = []
+        for path, value in ((("included", "allowance_usd"), 0),
+                            (("included", "allowance_usd"), float("nan")),
+                            (("included", "balance_usd"), "2.4"),
+                            (("included", "period", "until"), "not-a-time"),
+                            (("included", "period", "until"), "2026-10-26T05:36:52")):
+            payload = json.loads(json.dumps(BALANCE))
+            target = payload
+            for key in path[:-1]:
+                target = target[key]
+            target[path[-1]] = value
+            broken.append(payload)
+        broken.append({"purchased": {"balance_usd": 0}})
+        for payload in broken:
+            with self.subTest(payload=payload), \
+                    patch.object(exporter, "fetch", side_effect=responses(balance=payload)):
+                with self.assertRaises((ValueError, KeyError, TypeError)):
                     exporter.main()
                 self.assertEqual(self.output.read_bytes(), original)
 
-    def test_missing_session_is_actionable_without_showing_secrets(self):
-        self.cookie.unlink()
-        with patch.object(exporter, "fetch", side_effect=[ACTIVITY, ACCOUNT]):
-            with self.assertRaisesRegex(RuntimeError, "Ollama.*session"):
-                exporter.get_usage()
+    def test_http_errors_are_reported_without_the_api_key(self):
+        error = urllib.error.HTTPError(exporter.BALANCE_URL, 401, "unauthorized", {}, None)
+        with patch.object(exporter.urllib.request, "urlopen", side_effect=error) as opener:
+            with self.assertRaisesRegex(RuntimeError, "HTTP 401") as raised:
+                exporter.fetch(exporter.BALANCE_URL, "test-api-secret")
+        self.assertNotIn("test-api-secret", str(raised.exception))
+        request = opener.call_args.args[0]
+        self.assertEqual(request.get_header("Authorization"), "Bearer test-api-secret")
 
-    def test_expired_browser_session_never_reaches_network(self):
-        db = self.root / "cookies.sqlite"
-        connection = sqlite3.connect(db)
-        connection.execute("CREATE TABLE moz_cookies(host TEXT,path TEXT,name TEXT,value TEXT,expiry INTEGER)")
-        connection.execute("INSERT INTO moz_cookies VALUES('.ollama.com','/','wos-session','expired-secret',1)")
-        connection.commit()
-        connection.close()
-        os.environ["OLLAMA_USAGE_COOKIE_FILE"] = ""
-        os.environ["OLLAMA_USAGE_BROWSER_COOKIES_FILE"] = str(db)
-        with patch.object(exporter.urllib.request, "build_opener") as opener:
-            with self.assertRaisesRegex(RuntimeError, "Ollama.*session"):
-                exporter.fetch_settings()
-            opener.assert_not_called()
-
-    def test_browser_cookie_read_is_scoped_read_only_and_sees_session_rotation(self):
-        db = self.root / "cookies.sqlite"
-        connection = sqlite3.connect(db)
-        connection.execute("CREATE TABLE moz_cookies(host TEXT,path TEXT,name TEXT,value TEXT,expiry INTEGER)")
-        connection.executemany("INSERT INTO moz_cookies VALUES(?,?,?,?,?)", [
-            (".ollama.com", "/", "wos-session", "first-session", 9999999999),
-            (".ollama.com", "/", "tracking-cookie", "unrelated-secret", 9999999999),
-            ("other.example", "/", "wos-session", "other-site-secret", 9999999999),
-        ])
-        connection.commit()
-        os.environ["OLLAMA_USAGE_COOKIE_FILE"] = ""
-        os.environ["OLLAMA_USAGE_BROWSER_COOKIES_FILE"] = str(db)
-        original = db.read_bytes()
-        self.assertEqual(exporter.session_cookie(), "wos-session=first-session")
-        self.assertEqual(db.read_bytes(), original)
-        connection.execute("UPDATE moz_cookies SET value='rotated-session' WHERE host='.ollama.com' AND name='wos-session'")
-        connection.commit()
-        connection.close()
-        self.assertEqual(exporter.session_cookie(), "wos-session=rotated-session")
-
-    def test_settings_redirect_rejects_expired_session_without_following_it(self):
-        error = urllib.error.HTTPError("https://ollama.com/settings", 303, "redirect", {}, None)
-        with patch.object(exporter.urllib.request, "build_opener") as build:
-            build.return_value.open.side_effect = error
-            with self.assertRaisesRegex(RuntimeError, "Ollama.*session"):
-                exporter.fetch_settings()
-        request = build.return_value.open.call_args.args[0]
-        self.assertEqual(request.get_header("Cookie"), "wos-session=test-session-secret")
+    def test_missing_api_key_is_actionable(self):
+        del os.environ["OLLAMA_CLOUD_API_KEY"]
+        with self.assertRaisesRegex(ValueError, "OLLAMA_CLOUD_API_KEY"):
+            exporter.get_usage()
 
 
 if __name__ == "__main__":

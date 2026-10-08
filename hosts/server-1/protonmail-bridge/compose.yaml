@@ -38,7 +38,7 @@ services:
   # haproxy.cfg is rendered on the host by the source repo's
   # scripts/render-imap-gateway.py; it holds tailnet addresses, so it stays private.
   protonmail-bridge-imap-gateway:
-    image: haproxy:3.2.24-alpine3.24
+    image: haproxy:3.2.24-alpine3.24@sha256:1aca32ee932b96d2a75f1882909325839dd23c138ba9c6fd26e4d88179f30f13
     container_name: protonmail-bridge-imap-gateway
     restart: unless-stopped
     network_mode: host

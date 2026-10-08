@@ -56,35 +56,21 @@ and its timestamp; Home Assistant marks it unavailable after 30 minutes.
 
 ## Ollama usage exporter
 
-The Ollama usage endpoint can return either the older `limits.monthly` response
-or activity totals with `totals` and `buckets`. Activity totals are not monthly
-quota limits: their supported ranges are trailing 24h, 7d, and 30d rather than
-the account's billing cycle. With that response, the exporter reads monthly
-included credits and the reset timestamp from the authenticated settings page.
-See [Ollama's usage and reset rules](https://ollama.com/pricing).
+Uses only Ollama's API with an API key; no browser session is involved.
+`GET /api/balance` returns the included monthly credit (`allowance_usd`), what
+is left of it (`balance_usd`) and the billing period (`period.from`/`until`).
+The exporter turns those into `monthly_used`/`monthly_remaining` percentages
+and `monthly_resets_at`. `monthly_requests` sums the daily buckets of
+`GET /api/usage?range=30d` that overlap the billing period (the first day counts
+whole). `POST /api/me` supplies the plan. See
+[Ollama's cloud usage API](https://docs.ollama.com/api/cloud-usage); the API
+allows 10 requests a minute, and the 5-minute timer makes three.
 
-Keep `OLLAMA_CLOUD_API_KEY`, `OLLAMA_USAGE_OUTPUT`, and session-source paths in
-a mode-0600 local environment file loaded through the user unit's
-`EnvironmentFile=`. Run `export-ollama-usage.py` directly. Configure
-`OLLAMA_USAGE_BROWSER_COOKIES_FILE` (a signed-in local Firefox profile's
-`cookies.sqlite`) and `OLLAMA_USAGE_COOKIE_FILE` (a private, single-line Cookie
-header). Close Firefox once after signing in to import its saved session; its
-database can be exclusively locked while running. The browser database is
-opened read-only and only unexpired Ollama session cookies are read. After a
-successful quota request the exporter saves that session atomically with mode
-0600, then uses the saved cookie on subsequent polls, including any session
-renewals returned by Ollama. Firefox can then be reopened. If the session expires,
-sign in again, close Firefox, and remove the saved cookie file to reimport it.
-Either source can also be used alone. Sign-in redirects are rejected without
-forwarding session cookies. Free-plan percentage meters and monthly dollar
-meters are supported, with the reset scoped to the same usage section.
-The exporter never logs or exports API keys, cookies, or account email.
-
-When using the settings page, `monthly_requests` is null because the activity
-API doesn't expose an exact billing-cycle request count. The older response
-still supplies that count. Invalid pages, expired sessions, and malformed
-quotas preserve the previous output and its original timestamp; Home Assistant
-then marks the sample unavailable after 20 minutes. If the page omits a reset,
-Free accounts use the documented monthly signup anniversary; paid-plan resets
-remain unknown. Tests:
+Keep `OLLAMA_CLOUD_API_KEY` and `OLLAMA_USAGE_OUTPUT` in a mode-0600 local
+environment file loaded through the user unit's `EnvironmentFile=`, and run
+`export-ollama-usage.py` directly. The exporter never logs or exports the API
+key or the account email. An invalid balance or failed request preserves the
+previous output and its timestamp; Home Assistant then marks the sample
+unavailable after 20 minutes. Missing request counts leave `monthly_requests`
+null without blocking the quota. Tests:
 `python3 -m unittest discover -s hosts/server-1/home-automation/exporters -p 'test_export_ollama_usage.py'`.

@@ -14,7 +14,7 @@ services:
   #   docker compose --profile deprecated up -d pg-deprecated
   pg-deprecated:
     container_name: pg-deprecated
-    image: postgres:12.3-alpine
+    image: postgres:12.3-alpine@sha256:7693f2082c681571d1dfa66d63f21689192c0c36108f4eb28be0aee0dc285921
     profiles: ["deprecated"]
     restart: "no"
     env_file: "/opt/postgres.env"
@@ -28,7 +28,7 @@ services:
   # Published on loopback only -- reach it from other tailnet hosts through
   # pgadmin, or bind a private host address for direct client connections.
   postgres:
-    image: pgvector/pgvector:0.8.6-pg18-trixie
+    image: pgvector/pgvector:0.8.6-pg18-trixie@sha256:78bf48b801e792f99e3ac62b5036fd3876e9be48afda16c1e331af1c75ceb2ff
     container_name: postgres
     restart: unless-stopped
     # POSTGRES_PASSWORD comes from this 0600 file rather than being inlined

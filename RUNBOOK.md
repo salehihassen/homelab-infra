@@ -177,6 +177,16 @@ sudo bash hosts/server-1/backup/install.sh
    bash scripts/env-files.sh link
    bash scripts/env-files.sh check
    ```
+   Then log in to the container registry, so private images can be pulled.
+   Docker credentials are not in the backup; use the read-only token
+   (`read:packages` scope only) from the password manager:
+   ```bash
+   docker login ghcr.io -u <github user>   # paste the token at the prompt
+   cd hosts/server-1 && docker compose pull --ignore-buildable
+   ```
+   Pulling every image now surfaces an expired token or a missing image
+   before any service is stopped or started. Komodo needs the same token as
+   a registry account (Settings -> Providers) to deploy private images.
 5. Before starting application writers, restore staged state from
    `/restore/var/lib/infra-backup/staging/`:
    - Load `images/local-images.tar` with `docker image load --input`.
