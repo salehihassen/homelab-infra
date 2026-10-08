@@ -1,4 +1,4 @@
-# infra
+# Homelab infra
 
 Deployment source of truth for a small self-hosted fleet: Docker Compose,
 Caddy, DNS-01 certificates, and Tailscale. Every service is reachable only
