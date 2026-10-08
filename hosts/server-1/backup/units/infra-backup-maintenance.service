@@ -1,0 +1,19 @@
+[Unit]
+Description=Prune and verify the restic repository
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+UMask=0077
+EnvironmentFile=/etc/infra-backup/backup.env
+ExecStart=/usr/local/sbin/infra-backup-maintenance
+Nice=15
+IOSchedulingClass=idle
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

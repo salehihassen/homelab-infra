@@ -1,0 +1,16 @@
+https://{$HOME_DOMAIN} {
+	bind {$CADDY_BIND_ADDRESSES}
+
+	reverse_proxy http://127.0.0.1:8123 {
+		header_up -Tailscale-*
+	}
+}
+
+# Z-Wave JS UI (admin). Its web port is published on loopback only.
+https://{$ZWAVE_DOMAIN} {
+	bind {$CADDY_BIND_ADDRESSES}
+
+	reverse_proxy http://127.0.0.1:8091 {
+		header_up -Tailscale-*
+	}
+}

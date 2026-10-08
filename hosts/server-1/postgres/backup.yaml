@@ -1,0 +1,21 @@
+# Nightly backup declaration for the postgres stack; format in docs/backups.md.
+paths:
+  - /opt/postgresql/routing.env
+  - /opt/postgresql/compose.env
+  - /opt/postgresql/initdb18
+  - /opt/postgresql/postgres18.env
+  - /opt/postgresql/backups
+  - /opt/postgres.env
+  - /opt/pgadmin
+exclude:
+  /opt/postgresql/data18: live cluster files; captured by pg_dump below instead
+# Databases owned by consumer stacks are declared in those stacks. This one is
+# the cluster's default maintenance database. Roles and other globals are
+# always dumped once with pg_dumpall --globals-only.
+postgres:
+  - postgres
+sqlite:
+  - /opt/pgadmin/pgadmin4.db
+offline:
+  # Retired 12.3 cluster (pg-deprecated); archived only while it is stopped.
+  - /opt/postgresql/data

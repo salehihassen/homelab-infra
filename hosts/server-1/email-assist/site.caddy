@@ -1,0 +1,8 @@
+# Email Assist: private read-only inbox triage; application HTTP basic auth.
+https://{$EMAIL_ASSIST_DOMAIN} {
+	bind {$CADDY_BIND_ADDRESSES}
+
+	reverse_proxy http://127.0.0.1:8901 {
+		header_up -Tailscale-*
+	}
+}

@@ -1,0 +1,7 @@
+# Nightly backup declaration for the quotes stack; format in docs/backups.md.
+paths:
+  - /opt/quotes/routing.env
+  - /opt/quotes/compose.env
+  - /opt/postgresql/quotes.env
+postgres:
+  - ductape

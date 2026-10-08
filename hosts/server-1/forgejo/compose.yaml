@@ -1,0 +1,138 @@
+# Forgejo git forge (FORGEJO_DOMAIN) and its CI: an isolated Docker-in-Docker
+# daemon plus the runner. Repositories live in /opt/forgejo/data; metadata in
+# the shared Postgres cluster (database configured in /opt/forgejo/forgejo.env).
+x-stack:
+  requires:
+    - postgres   # network postgres_network, service postgres
+
+services:
+  # Forgejo git forge. Web UI is published on loopback only and exposed on the
+  # tailnet by Caddy; git-over-SSH listens on 2222.
+  forgejo:
+    image: codeberg.org/forgejo/forgejo:16.0.4-rootless@sha256:a263a1298e89e0bdf019005ce1927e9aadaa8f1bd2a94a3e66ad94e2a89e19ce
+    container_name: forgejo
+    restart: unless-stopped
+    user: "1000:1000"
+    # Metadata lives in Postgres; repositories stay in /opt/forgejo/data.
+    # Runtime settings are kept outside this tracked Compose file.
+    env_file:
+      - /opt/forgejo/forgejo.env
+    environment:
+      FORGEJO__security__INSTALL_LOCK: "true"
+    ports:
+      - "127.0.0.1:3001:3000"
+      - "2222:2222"
+    volumes:
+      - /opt/forgejo/data:/var/lib/gitea
+      - /opt/forgejo/config:/etc/gitea
+      - /etc/localtime:/etc/localtime:ro
+    secrets:
+      - source: forgejo_db_password
+        target: forgejo_db_password
+    networks:
+      postgres_network:
+      forgejo:
+      forgejo_ci:
+        ipv4_address: ${FORGEJO_CI_IP:?Set FORGEJO_CI_IP in forgejo/.env}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 512
+    mem_limit: 1g
+    cpus: 2.0
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # Dedicated Docker daemon for CI: the runner starts job containers here and
+  # jobs use it for docker build/run, so workflows never touch the host's
+  # daemon. TLS client certs are generated into /opt/forgejo-runner/certs.
+  # Privileged, so any workflow that can reach it is effectively root on the
+  # host; only run workflows you trust.
+  forgejo-docker:
+    image: docker:29.8.0-dind@sha256:5efed980cba3fc126cf54e21a5a6ff8849d05b6e0623d6e7612f48e9cd6cd17e
+    container_name: forgejo-docker
+    hostname: forgejo-docker
+    restart: unless-stopped
+    privileged: true
+    environment:
+      DOCKER_TLS_CERTDIR: /certs
+    volumes:
+      - /opt/forgejo-runner/certs:/certs
+      - /opt/forgejo-runner/docker:/var/lib/docker
+    networks:
+      forgejo_ci:
+        ipv4_address: ${FORGEJO_DOCKER_IP:?Set FORGEJO_DOCKER_IP in forgejo/.env}
+    pids_limit: 4096
+    mem_limit: 4g
+    cpus: 4.0
+    healthcheck:
+      test: ["CMD", "docker", "-H", "unix:///var/run/docker.sock", "info"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  forgejo-runner:
+    image: data.forgejo.org/forgejo/runner:13.1.0@sha256:c4af85fd9f0dd03788676a534781a87c71aa2c6a37737143e017eb94d4312952
+    container_name: forgejo-runner
+    restart: unless-stopped
+    user: "1000:1000"
+    command: ["forgejo-runner", "daemon", "--config", "/data/config.yml"]
+    environment:
+      HOME: /data
+      DOCKER_HOST: tcp://forgejo-docker:2376
+      DOCKER_TLS_VERIFY: "1"
+      DOCKER_CERT_PATH: /certs/client
+    volumes:
+      - /opt/forgejo-runner/data:/data
+      - /opt/forgejo-runner/certs/client:/certs/client:ro
+    secrets:
+      - source: forgejo_runner_token
+        target: forgejo_runner_token
+    networks:
+      forgejo:
+      forgejo_ci:
+        # Job containers inside forgejo-docker reach the runner's cache server here.
+        ipv4_address: ${FORGEJO_RUNNER_IP:?Set FORGEJO_RUNNER_IP in forgejo/.env}
+    depends_on:
+      forgejo:
+        condition: service_healthy
+      forgejo-docker:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m,uid=1000,gid=1000
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    mem_limit: 512m
+    cpus: 1.0
+
+networks:
+  # Runner <-> Forgejo API, and Forgejo's own egress (mirrors, webhooks).
+  forgejo:
+    ipam:
+      config:
+        - subnet: ${FORGEJO_SUBNET:?Set FORGEJO_SUBNET in forgejo/.env}
+    driver: bridge
+  forgejo_ci:
+    ipam:
+      config:
+        - subnet: ${FORGEJO_CI_SUBNET:?Set FORGEJO_CI_SUBNET in forgejo/.env}
+    driver: bridge
+
+secrets:
+  forgejo_db_password:
+    file: /opt/forgejo/secrets/db-password
+  forgejo_runner_token:
+    file: /opt/forgejo-runner/secrets/runner-token

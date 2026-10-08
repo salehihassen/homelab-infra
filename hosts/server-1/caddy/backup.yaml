@@ -1,0 +1,7 @@
+# Nightly backup declaration for the caddy stack; format in docs/backups.md.
+paths:
+  - /opt/caddy/compose.env
+  - /opt/caddy/secrets
+exclude:
+  /opt/caddy/data: certificates and ACME account; reissued automatically on restore
+  /opt/caddy/config: Caddy's autosaved runtime config; regenerated at start

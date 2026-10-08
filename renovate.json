@@ -1,0 +1,28 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", "docker:pinDigests", "helpers:pinGitHubActionDigests"],
+  "dependencyDashboard": true,
+  "docker-compose": {
+    "managerFilePatterns": ["/(^|/)hosts/[^/]+/[^/]+/compose\\.yaml$/"]
+  },
+  "dockerfile": {
+    "managerFilePatterns": ["/(^|/)Dockerfile$/", "/\\.Dockerfile$/"]
+  },
+  "packageRules": [
+    {
+      "description": "Group each stack's image updates into one PR",
+      "matchManagers": ["docker-compose"],
+      "groupName": "{{parentDir}} images"
+    },
+    {
+      "description": "Let new releases settle for a week before proposing them",
+      "matchDatasources": ["docker"],
+      "minimumReleaseAge": "7 days"
+    },
+    {
+      "description": "Locally built images are tagged by commit, not by a registry",
+      "matchDepNames": ["jobsmith", "condenseit", "speakable", "email-assist", "job-sentinel-api", "job-sentinel-web", "local/protonmail-bridge"],
+      "enabled": false
+    }
+  ]
+}

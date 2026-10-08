@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+umask 077
+
+# Settings come from /etc/infra-backup/backup.env (see backup.env.example),
+# loaded by infra-backup.service. Nothing host-specific is built in.
+: "${RESTIC_REPOSITORY:?Set RESTIC_REPOSITORY in /etc/infra-backup/backup.env}"
+: "${RESTIC_PASSWORD_FILE:?Set RESTIC_PASSWORD_FILE in /etc/infra-backup/backup.env}"
+: "${RCLONE_CONFIG:?Set RCLONE_CONFIG in /etc/infra-backup/backup.env}"
+: "${RESTIC_CACHE_DIR:=/var/cache/infra-backup}"
+# Restic host name and tag; retention groups snapshots by it, so never change
+# it for an existing repository.
+: "${BACKUP_HOST:?Set BACKUP_HOST in /etc/infra-backup/backup.env}"
+# What to back up is declared in the infra repo: hosts/<INFRA_HOST>/backup/
+# host.yaml (+ optional host.local.yaml) and hosts/<INFRA_HOST>/<stack>/backup.yaml.
+# The run fails if a Compose mount is undeclared.
+: "${INFRA_DIR:?Set INFRA_DIR in /etc/infra-backup/backup.env}"
+: "${INFRA_HOST:?Set INFRA_HOST in /etc/infra-backup/backup.env}"
+# Optional pre-2026-10 exclude list; every entry in it is now declared, so it
+# only adds belt-and-braces until it is reviewed and removed.
+readonly LEGACY_EXCLUDE_FILE="${BACKUP_EXCLUDES:-/opt/backup/restic-excludes.txt}"
+: "${BACKUP_STATE_DIR:=/var/lib/infra-backup}"
+readonly STAGING_PARENT="${BACKUP_STATE_DIR}"
+export RESTIC_REPOSITORY RESTIC_PASSWORD_FILE RCLONE_CONFIG RESTIC_CACHE_DIR INFRA_DIR INFRA_HOST BACKUP_STATE_DIR
+
+[[ ${EUID} -eq 0 ]] || { echo "This backup must run as root." >&2; exit 1; }
+for name in docker python3 rclone restic flock; do
+  command -v "${name}" >/dev/null || { echo "Missing command: ${name}" >&2; exit 1; }
+done
+[[ -r "${RESTIC_PASSWORD_FILE}" ]] || { echo "Unreadable: ${RESTIC_PASSWORD_FILE}" >&2; exit 1; }
+[[ -r "${RCLONE_CONFIG}" ]] || { echo "Unreadable: ${RCLONE_CONFIG}" >&2; exit 1; }
+[[ -d "${INFRA_DIR}/hosts/${INFRA_HOST}" ]] || { echo "Missing infra repo: ${INFRA_DIR}/hosts/${INFRA_HOST}" >&2; exit 1; }
+
+mkdir -p "${STAGING_PARENT}" "${RESTIC_CACHE_DIR}"
+exec 9>"${STAGING_PARENT}/backup.lock"
+flock -n 9 || { echo "Another backup is running." >&2; exit 1; }
+
+staging_dir="${STAGING_PARENT}/staging"
+[[ ! -e "${staging_dir}" && ! -L "${staging_dir}" ]] || {
+  echo "Stale staging directory exists; inspect and move it before retrying: ${staging_dir}" >&2
+  exit 1
+}
+mkdir -m 700 "${staging_dir}"
+cleanup() {
+  case "${staging_dir}" in
+    "${STAGING_PARENT}"/staging) rm -rf -- "${staging_dir}" ;;
+    *) echo "Refusing to remove unexpected path: ${staging_dir}" >&2 ;;
+  esac
+}
+trap cleanup EXIT
+mkdir -p "${staging_dir}/databases" "${staging_dir}/inventory"
+
+echo "Checking backup declarations against the running stacks"
+python3 /usr/local/sbin/infra-backup-declared.py plan "${staging_dir}"
+
+echo "Creating consistent database snapshots"
+python3 /usr/local/sbin/infra-backup-sqlite.py "${staging_dir}"
+python3 /usr/local/sbin/infra-backup-declared.py dump-postgres "${staging_dir}"
+
+echo "Archiving unused state and exporting additional PostgreSQL containers"
+python3 /usr/local/sbin/infra-backup-extra-state.py "${staging_dir}"
+
+echo "Recording non-secret recovery inventory"
+date --iso-8601=seconds >"${staging_dir}/inventory/generated-at.txt"
+hostnamectl >"${staging_dir}/inventory/hostnamectl.txt"
+lsblk -o NAME,TYPE,SIZE,FSTYPE,MOUNTPOINTS,MODEL,TRAN >"${staging_dir}/inventory/block-devices.txt"
+dpkg-query -W -f='${binary:Package}\t${Version}\n' >"${staging_dir}/inventory/packages.tsv"
+docker ps -a --format 'name={{.Names}} image={{.Image}} status={{.Status}} ports={{.Ports}}' \
+  >"${staging_dir}/inventory/docker-containers.txt"
+mapfile -t container_ids < <(docker ps -aq)
+if ((${#container_ids[@]})); then
+  docker inspect "${container_ids[@]}" --format \
+    '{{.Name}}|image={{.Config.Image}}|project={{index .Config.Labels "com.docker.compose.project"}}|service={{index .Config.Labels "com.docker.compose.service"}}|mounts={{range .Mounts}}{{.Type}}:{{.Source}}=>{{.Destination}};{{end}}' \
+    >"${staging_dir}/inventory/docker-mounts.txt"
+  docker inspect "${container_ids[@]}" --format \
+    '{{.Name}}|image_id={{.Image}}|tag={{.Config.Image}}' \
+    >"${staging_dir}/inventory/docker-image-ids.txt"
+fi
+
+mapfile -t requested_sources < <(python3 -c 'import json, sys; print("\n".join(json.load(open(sys.argv[1]))["sources"]))' "${staging_dir}/plan.json")
+requested_sources+=("${staging_dir}")
+backup_sources=()
+missing=()
+for source_path in "${requested_sources[@]}"; do
+  if [[ -e "${source_path}" ]]; then backup_sources+=("${source_path}"); else missing+=("${source_path}"); fi
+done
+if ((${#missing[@]})); then
+  echo "Declared backup paths are missing: ${missing[*]}" >&2
+  exit 1
+fi
+exclude_args=(--exclude-file "${staging_dir}/excludes.txt" --exclude-file "${staging_dir}/sqlite-excludes.txt")
+[[ -r "${LEGACY_EXCLUDE_FILE}" ]] && exclude_args+=(--exclude-file "${LEGACY_EXCLUDE_FILE}")
+
+echo "Uploading encrypted, deduplicated Restic snapshot"
+restic backup --host "${BACKUP_HOST}" --tag "${BACKUP_HOST}" --tag automated --exclude-caches \
+  "${exclude_args[@]}" "${backup_sources[@]}"
+echo "Verifying repository metadata"
+restic check
+echo "Backup completed successfully"

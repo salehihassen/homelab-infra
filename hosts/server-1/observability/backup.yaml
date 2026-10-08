@@ -1,0 +1,13 @@
+# Nightly backup declaration for the observability stack; format in docs/backups.md.
+paths:
+  - /opt/observability/routing.env
+  - /opt/observability/.env
+  - /opt/observability/secrets
+  - /opt/observability/data/grafana
+  - /opt/observability/warning-diagnosis-2026-09-24.md
+exclude:
+  /opt/observability/data/loki: 14-day log retention; logs are not restored
+  /opt/observability/data/alloy: Alloy read positions; rebuilt from Docker logs
+  /opt/observability/loki-data.ext4: Loki volume image; same data as data/loki
+sqlite:
+  - /opt/observability/data/grafana/grafana.db

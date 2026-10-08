@@ -1,0 +1,20 @@
+# Settings and secrets never enter Git. Hosts keep them under /opt, backed up
+# by restic; only *.env.example templates are tracked (see RUNBOOK.md).
+.env
+*.env
+!.env.example
+!*.env.example
+secrets/
+*.key
+*.pem
+!**/testdata/**
+
+# Host-specific values that identify this deployment (see README.md).
+/local/
+*.local.yaml
+
+# Local tooling.
+__pycache__/
+*.pyc
+/.venv/
+/tmp/

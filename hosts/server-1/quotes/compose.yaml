@@ -1,0 +1,34 @@
+# Quotes web app (QUOTE_DOMAIN / QUOTES_DOMAIN); image built from
+# its own repository and published to GHCR (QUOTES_IMAGE).
+x-stack:
+  requires:
+    - postgres   # network postgres_network, service postgres
+
+services:
+  quotes:
+    image: ${QUOTES_IMAGE:?Set QUOTES_IMAGE in quotes/.env}
+    container_name: quotes
+    restart: unless-stopped
+    env_file: /opt/postgresql/quotes.env
+    environment:
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGUSER: ${QUOTES_PGUSER:?Set QUOTES_PGUSER in quotes/.env}
+      PGDATABASE: ${QUOTES_PGDATABASE:?Set QUOTES_PGDATABASE in quotes/.env}
+    ports:
+      - "127.0.0.1:8088:8000"
+    networks:
+      - postgres_network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health').read()==b'ok' else 1)\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging:
+      options:
+        max-size: 10m
+        max-file: "3"

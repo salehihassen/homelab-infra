@@ -1,0 +1,63 @@
+# Speakable Markdown-to-speech-text converter (SPEAK_DOMAIN); image published to
+# GHCR from its own repository (SPEAKABLE_IMAGE).
+x-stack:
+  requires:
+    - ai-gateway   # network cpa_policy_model, service ai-policy-proxy
+
+services:
+  # Markdown-to-plain-text converter for TTS clients. Stateless; configuration
+  # and its dedicated AI proxy credential live under /opt/speakable.
+  speakable:
+    image: ${SPEAKABLE_IMAGE:?Set SPEAKABLE_IMAGE in speakable/.env}
+    container_name: speakable
+    restart: unless-stopped
+    init: true
+    user: "1000:1000"
+    environment:
+      SPEAKABLE_CONFIG: /app/config.yaml
+      TZ: ${TZ:?Set TZ in /opt/.env}
+    ports:
+      - "127.0.0.1:8900:8000"
+    volumes:
+      - /opt/speakable/config.yaml:/app/config.yaml:ro
+    secrets:
+      - source: speakable_cpa_key
+        target: speakable_cpa_key
+    networks:
+      - speakable
+      - cpa_policy_model
+    depends_on:
+      ai-policy-proxy:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m,uid=1000,gid=1000
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 256m
+    cpus: 1.0
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging:
+      options:
+        max-size: 10m
+        max-file: "3"
+
+networks:
+  # Stack-private bridge; also gives Speakable a published loopback port.
+  speakable:
+    ipam:
+      config:
+        - subnet: ${SPEAKABLE_SUBNET:?Set SPEAKABLE_SUBNET in speakable/.env}
+    driver: bridge
+
+secrets:
+  speakable_cpa_key:
+    file: /opt/speakable/secrets/cpa-client-key

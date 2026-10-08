@@ -1,0 +1,6 @@
+# Nightly backup declaration for the condenseit stack; format in docs/backups.md.
+paths:
+  - /opt/condenseit/compose.env
+  - /opt/condenseit
+sqlite:
+  - /opt/condenseit/data/condenseit.db

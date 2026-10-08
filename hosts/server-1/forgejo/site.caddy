@@ -1,0 +1,8 @@
+https://{$FORGEJO_DOMAIN} {
+	bind {$CADDY_BIND_ADDRESSES}
+
+	# No request_body limit: container image layers are pushed in one request.
+	reverse_proxy http://127.0.0.1:3001 {
+		header_up -Tailscale-*
+	}
+}

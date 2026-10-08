@@ -1,0 +1,6 @@
+# Nightly backup declaration for the ai-gateway stack; format in docs/backups.md.
+paths:
+  - /opt/cpa
+sqlite:
+  - /opt/cpa/data/cpamp/usage.sqlite
+  - /opt/cpa/data/ai-policy-proxy/affinity.sqlite

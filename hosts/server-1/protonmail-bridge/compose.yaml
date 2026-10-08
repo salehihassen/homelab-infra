@@ -1,0 +1,57 @@
+# Proton Mail Bridge (MBRIDGE_DOMAIN serves its noVNC GUI) and an HAProxy
+# gateway that exposes Bridge IMAP to allowlisted tailnet clients. Image published to
+# GHCR from its own repository (PROTONMAIL_BRIDGE_IMAGE); state in /opt/protonmail-bridge.
+x-stack:
+  requires: []
+
+services:
+  protonmail-bridge:
+    image: ${PROTONMAIL_BRIDGE_IMAGE:?Set PROTONMAIL_BRIDGE_IMAGE in protonmail-bridge/.env}
+    container_name: protonmail-bridge
+    restart: unless-stopped
+    init: true
+    network_mode: host
+    cpus: 1.0
+    environment:
+      TZ: ${TZ:?Set TZ in /opt/.env}
+      QT_QUICK_BACKEND: software
+      QSG_RENDER_LOOP: basic
+    volumes:
+      - /opt/protonmail-bridge/data:/data
+      - /opt/protonmail-bridge/secrets/keyring-password:/run/secrets/keyring_password:ro
+      - /opt/protonmail-bridge/secrets/vnc-password:/run/secrets/vnc_password:ro
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f '/usr/lib/protonmail/bridge/proton-bridge' >/dev/null && curl -fsS http://127.0.0.1:15980/vnc.html >/dev/null"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    logging:
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  # haproxy.cfg is rendered on the host by the source repo's
+  # scripts/render-imap-gateway.py; it holds tailnet addresses, so it stays private.
+  protonmail-bridge-imap-gateway:
+    image: haproxy:3.2.24-alpine3.24
+    container_name: protonmail-bridge-imap-gateway
+    restart: unless-stopped
+    network_mode: host
+    user: "99:99"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - /opt/protonmail-bridge/mail-gateway/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    mem_limit: 64m
+    logging:
+      options:
+        max-size: 10m
+        max-file: "3"

@@ -1,0 +1,133 @@
+# Fleet inventory: which host runs what, where its state lives, how it is
+# backed up, and who can reach it. Hosts use aliases; local/site.md (untracked)
+# maps them to real machines. scripts/check-stacks.py keeps each host's stack
+# list in sync with hosts/<host>/compose.yaml.
+#
+# exposure:
+#   tailnet  - HTTPS through Caddy on the host's Tailscale addresses only
+#   loopback - no direct network listener; reached only through Caddy or the host
+#   lan      - a port is also published on the host's LAN interfaces
+#   public   - reachable from the internet (only through server-2)
+hosts:
+  server-1:
+    role: home mini PC; primary Compose host
+    repo_path: hosts/server-1
+    data_root: /opt
+    caddy: true
+    backup: nightly restic to Backblaze B2 (infra-backup.timer, 03:15)
+  server-2:
+    role: VPS; public entry point
+    status: not yet managed from this repo
+  server-3:
+    role: NAS (Immich, Jellyfin, Kiwix)
+    status: not yet managed from this repo
+
+stacks:
+  server-1:
+    postgres:
+      services: [postgres, pgadmin, pg-deprecated]
+      urls: [PGADMIN_DOMAIN]
+      data: [/opt/postgresql, /opt/postgres.env, /opt/pgadmin]
+      backup: pg_dump per database + globals; pgAdmin SQLite copy
+      exposure: [tailnet, loopback]
+    ai-gateway:
+      services: [cli-proxy-api, cpa-manager-plus, ai-policy-proxy]
+      urls: [CADDY_HOST_DOMAIN, POLICY_PROXY_DOMAIN, CPA_DOMAIN, CPAMP_DOMAIN]
+      data: [/opt/cpa]
+      backup: files + SQLite copies
+      exposure: [tailnet, loopback]
+    caddy:
+      services: [caddy]
+      urls: [T3C_DOMAIN, OPENWEBUI_ALIAS_DOMAIN, OPENWEBUI_LEGACY_DOMAIN]
+      data: [/opt/caddy]
+      backup: secrets only; certificates are reissued
+      exposure: [tailnet, lan]   # the two Open WebUI redirects listen on all interfaces
+    observability:
+      services: [loki, grafana, alloy]
+      urls: [GRAFANA_DOMAIN, LOKI_DOMAIN]
+      data: [/opt/observability]
+      backup: Grafana state + secrets; logs excluded
+      exposure: [tailnet, loopback]
+    home-automation:
+      services: [homeassistant, zwavejs2mqtt]
+      urls: [HOME_DOMAIN, ZWAVE_DOMAIN]
+      data: [/opt/homeassistant, /opt/z-wave-js]
+      backup: files + SQLite copies
+      exposure: [tailnet, lan]   # Home Assistant is host-networked on 8123
+      hardware: Z-Wave USB stick (ZWAVE_DEVICE)
+    protonmail-bridge:
+      services: [protonmail-bridge, protonmail-bridge-imap-gateway]
+      urls: [MBRIDGE_DOMAIN]
+      data: [/opt/protonmail-bridge]
+      backup: files + Gluon SQLite copies + saved image
+      exposure: [tailnet]   # IMAP gateway allowlists specific tailnet clients
+    quotes:
+      services: [quotes]
+      urls: [QUOTE_DOMAIN, QUOTES_DOMAIN]
+      data: [postgres:ductape, /opt/postgresql/quotes.env]
+      backup: pg_dump
+      exposure: [tailnet, loopback]
+    countdown:
+      services: [countdown-timer]
+      urls: [COUNTDOWN_DOMAIN]
+      data: []
+      backup: stateless
+      exposure: [tailnet, lan]   # 8081 embedded by a Home Assistant panel
+    jobsmith:
+      services: [jobsmith]
+      urls: [JOBSMITH_DOMAIN]
+      image: JOBSMITH_IMAGE (GHCR)
+      data: [/opt/jobsmith]
+      backup: files + SQLite copy
+      exposure: [tailnet, loopback]
+    condenseit:
+      services: [condenseit]
+      urls: [NEWS_DOMAIN]
+      image: CONDENSEIT_IMAGE (GHCR)
+      data: [/opt/condenseit]
+      backup: files + SQLite copy
+      exposure: [tailnet, loopback]
+    speakable:
+      services: [speakable]
+      urls: [SPEAK_DOMAIN]
+      image: SPEAKABLE_IMAGE (GHCR)
+      data: [/opt/speakable]
+      backup: config + secrets (stateless)
+      exposure: [tailnet, loopback]
+    email-assist:
+      services: [email-assist, email-assist-imap-socket]
+      urls: [EMAIL_ASSIST_DOMAIN]
+      image: EMAIL_ASSIST_IMAGE (GHCR)
+      data: [postgres:email_assist, /opt/email-assist]
+      backup: pg_dump + secrets/state
+      exposure: [tailnet, loopback]
+    job-sentinel:
+      services: [job-sentinel-api, job-sentinel-web]
+      urls: [JOB_SENTINEL_DOMAIN]
+      data: [/opt/job-sentinel]
+      backup: config + SQLite copy; logs excluded
+      exposure: [tailnet, loopback]
+    metube:
+      services: [metube]
+      urls: [METUBE_DOMAIN]
+      data: [/opt/youtube-download]
+      backup: none (re-downloadable media)
+      exposure: [tailnet, lan]   # 8082 kept for LAN devices
+    komodo:
+      services: [komodo-postgres, komodo-ferretdb, komodo-core, komodo-periphery]
+      urls: [KOMODO_DOMAIN]
+      data: [/opt/komodo]
+      backup: Komodo's dated database exports + keys and secrets
+      exposure: [tailnet, loopback]
+    forgejo:
+      services: [forgejo, forgejo-docker, forgejo-runner]
+      urls: [FORGEJO_DOMAIN]
+      data: [postgres:forgejo, /opt/forgejo, /opt/forgejo-runner]
+      backup: paused pg_dump + repository copy
+      exposure: [tailnet, lan]   # git over SSH on 2222
+
+  # Running on server-1 but outside hosts/server-1 (development or separately owned).
+  server-1-unmanaged:
+    media-extract: {path: ~/apps/media-extract, note: own compose project; config backed up, media excluded}
+    t3code: {path: ~/apps/t3code, note: host process on 3773, routed by caddy (T3C_DOMAIN)}
+    demos: {note: condenseit-pr1-demo, model-a/b-surface-select, jobsmith-*-demo containers}

@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+umask 077
+# Settings come from /etc/infra-backup/backup.env, loaded by the service unit.
+: "${RESTIC_REPOSITORY:?Set RESTIC_REPOSITORY in /etc/infra-backup/backup.env}"
+: "${RESTIC_PASSWORD_FILE:?Set RESTIC_PASSWORD_FILE in /etc/infra-backup/backup.env}"
+: "${RCLONE_CONFIG:?Set RCLONE_CONFIG in /etc/infra-backup/backup.env}"
+: "${RESTIC_CACHE_DIR:=/var/cache/infra-backup}"
+: "${BACKUP_HOST:?Set BACKUP_HOST in /etc/infra-backup/backup.env}"
+: "${BACKUP_STATE_DIR:=/var/lib/infra-backup}"
+export RESTIC_REPOSITORY RESTIC_PASSWORD_FILE RCLONE_CONFIG RESTIC_CACHE_DIR
+[[ ${EUID} -eq 0 ]] || { echo "This job must run as root." >&2; exit 1; }
+mkdir -p "${BACKUP_STATE_DIR}" "${RESTIC_CACHE_DIR}"
+exec 9>"${BACKUP_STATE_DIR}/backup.lock"
+flock -n 9 || { echo "A backup or maintenance job is running." >&2; exit 1; }
+restic forget --host "${BACKUP_HOST}" --tag "${BACKUP_HOST}" --group-by host --keep-daily 14 --keep-weekly 8 --keep-monthly 12 --prune
+restic check

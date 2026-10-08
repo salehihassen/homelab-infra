@@ -1,0 +1,19 @@
+# Nightly backup declaration for the komodo stack; format in docs/backups.md.
+# Komodo Core writes dated database exports to /opt/komodo/backups through its
+# default "Backup Core Database" procedure. The backup runner also refreshes
+# those exports and dumps the DocumentDB/PostgreSQL cluster before every upload.
+paths:
+  - /opt/komodo/routing.env
+  - /opt/komodo/compose.env
+  - /opt/komodo/komodo.env
+  - /opt/komodo/keys
+  - /opt/komodo/backups
+exclude:
+  /opt/komodo/postgres: live DocumentDB cluster; captured by Komodo's own exports in backups/
+  /opt/komodo/ferretdb: FerretDB runtime state; rebuilt at start
+  /opt/komodo/periphery: Periphery working directory (clones, generated files)
+# Read-only windows onto data owned by other stacks and host.yaml, so Compose
+# inside Periphery resolves paths exactly as on the host. The checkout root
+# (KOMODO_REPOS_DIR) is declared as a view in backup/host.local.yaml.
+views:
+  - /opt

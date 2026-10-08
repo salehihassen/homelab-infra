@@ -1,0 +1,8 @@
+# Komodo UI and API (Core's WebSocket updates included).
+https://{$KOMODO_DOMAIN} {
+	bind {$CADDY_BIND_ADDRESSES}
+
+	reverse_proxy http://127.0.0.1:9120 {
+		header_up -Tailscale-*
+	}
+}

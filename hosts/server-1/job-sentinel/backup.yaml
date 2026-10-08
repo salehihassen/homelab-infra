@@ -1,0 +1,10 @@
+# Nightly backup declaration for the job-sentinel stack; format in docs/backups.md.
+paths:
+  - /opt/job-sentinel/routing.env
+  - /opt/job-sentinel/compose.env
+  - /opt/job-sentinel/config
+  - /opt/job-sentinel/data
+exclude:
+  /opt/job-sentinel/logs: application logs
+sqlite:
+  - /opt/job-sentinel/data/jobs.db

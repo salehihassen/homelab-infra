@@ -1,0 +1,61 @@
+# The host's Caddy: global options, the wildcard certificate, and host-level sites.
+# Each stack's own sites live in hosts/<host>/<stack>/site.caddy (mounted read-only
+# at /etc/caddy/stacks). render-sites.sh selects imports whose env values exist.
+{
+	auto_https disable_redirects
+	acme_ca {$ACME_CA}
+
+	acme_dns porkbun {
+		api_key {file./run/secrets/porkbun_api_key}
+		api_secret_key {file./run/secrets/porkbun_api_secret_key}
+	}
+}
+
+# One wildcard certificate covers every *.{$PRIVATE_ZONE} site below. Caddy 2.10+
+# uses it instead of ordering per-site certificates, so new service hostnames
+# no longer appear in public Certificate Transparency logs.
+#
+# The parent zone has a wildcard parking CNAME. The host's stub resolver answers
+# the ACME challenge name with that wildcard instead of the TXT record Caddy
+# just wrote, so the DNS-01 propagation check never completes; public
+# resolvers see the TXT correctly, so ask them directly.
+https://*.{$PRIVATE_ZONE} {
+	bind {$CADDY_BIND_ADDRESSES}
+
+	tls {
+		dns porkbun {
+			api_key {file./run/secrets/porkbun_api_key}
+			api_secret_key {file./run/secrets/porkbun_api_secret_key}
+		}
+		resolvers 1.1.1.1 8.8.8.8
+		propagation_delay 30s
+		propagation_timeout 5m
+	}
+
+	# Hostnames without a site block.
+	respond "unknown site" 404
+}
+
+# The host's own hostname identifies this HTTPS entry point.
+https://{$CADDY_HOST_DOMAIN} {
+	bind {$CADDY_BIND_ADDRESSES}
+	respond "Caddy is running." 200
+}
+
+# T3 Code runs directly on the host (not in Compose).
+https://{$T3C_DOMAIN} {
+	bind {$CADDY_BIND_ADDRESSES}
+
+	reverse_proxy http://127.0.0.1:3773
+}
+
+# Redirect legacy Open Web UI aliases to the canonical deployment.
+https://{$OPENWEBUI_ALIAS_DOMAIN} {
+	redir {$OPENWEBUI_REDIRECT_URL}{uri} temporary
+}
+
+https://{$OPENWEBUI_LEGACY_DOMAIN} {
+	redir {$OPENWEBUI_REDIRECT_URL}{uri} temporary
+}
+
+import /tmp/active-sites.caddy

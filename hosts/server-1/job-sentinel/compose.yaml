@@ -1,0 +1,77 @@
+# Job Sentinel (JOB_SENTINEL_DOMAIN), experimental. Images published to GHCR from
+# the fork's deploy/ Dockerfiles (JOB_SENTINEL_API_IMAGE, JOB_SENTINEL_WEB_IMAGE).
+# Caddy sends /api, /health and /docs to the API (8903) and the rest to the UI (8902).
+x-stack:
+  requires: []
+
+services:
+  job-sentinel-api:
+    image: ${JOB_SENTINEL_API_IMAGE:?Set JOB_SENTINEL_API_IMAGE in job-sentinel/.env}
+    container_name: job-sentinel-api
+    restart: unless-stopped
+    init: true
+    ports: ["127.0.0.1:8903:8000"]
+    environment:
+      TZ: ${TZ:?Set TZ in /opt/.env}
+      HEADLESS: "true"
+      HOME: /tmp
+      XDG_CACHE_HOME: /tmp/cache
+      DB_PATH: /app/data/jobs.db
+      LOG_DIR: /app/logs
+    volumes:
+      - /opt/job-sentinel/config:/config
+      - /opt/job-sentinel/data:/app/data
+      - /opt/job-sentinel/logs:/app/logs
+    networks:
+      - job_sentinel
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,size=512m,uid=1000,gid=1000
+      - /home/pwuser:rw,nosuid,size=256m,uid=1000,gid=1000
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    shm_size: 512m
+    mem_limit: 2g
+    cpus: 2.0
+    pids_limit: 256
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging:
+      options: {max-size: 10m, max-file: '3'}
+
+  job-sentinel-web:
+    image: ${JOB_SENTINEL_WEB_IMAGE:?Set JOB_SENTINEL_WEB_IMAGE in job-sentinel/.env}
+    container_name: job-sentinel-web
+    restart: unless-stopped
+    init: true
+    ports: ["127.0.0.1:8902:3000"]
+    networks:
+      - job_sentinel
+    depends_on:
+      job-sentinel-api: {condition: service_healthy}
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,size=64m,uid=1000,gid=1000
+      - /app/.next/cache:rw,nosuid,size=128m,uid=1000,gid=1000
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 1g
+    cpus: 2.0
+    pids_limit: 128
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging:
+      options: {max-size: 10m, max-file: '3'}
+
+networks:
+  job_sentinel:
+    ipam:
+      config:
+        - subnet: ${JOB_SENTINEL_SUBNET:?Set JOB_SENTINEL_SUBNET in job-sentinel/.env}
+    driver: bridge

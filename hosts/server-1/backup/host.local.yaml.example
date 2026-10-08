@@ -1,0 +1,17 @@
+# Copy to host.local.yaml (untracked) for paths that identify you or this
+# machine: home directories, source checkouts, other apps. Same keys as
+# host.yaml; it is merged with host.yaml on every run.
+paths:
+  - /home/user/.ssh
+  - /home/user/.config/systemd
+  # Source repositories, including this infra repo.
+  - /home/user/repos
+
+sqlite:
+  - /home/user/apps/example/data/app.db
+
+sqlite_scan:
+  - /home/user/apps/example/config
+
+exclude:
+  /home/user/apps/example/media: re-downloadable

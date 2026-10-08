@@ -1,0 +1,6 @@
+# Nightly backup declaration for the metube stack; format in docs/backups.md.
+exclude:
+  /opt/youtube-download: downloaded media; re-downloadable
+paths:
+  - /opt/metube/routing.env
+  - /opt/metube/compose.env

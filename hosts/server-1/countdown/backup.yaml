@@ -1,0 +1,5 @@
+# Nightly backup declaration for the countdown stack; format in docs/backups.md.
+# Stateless: the image and COUNTDOWN_IMAGE in .env are all it needs.
+paths:
+  - /opt/countdown/routing.env
+  - /opt/countdown/compose.env

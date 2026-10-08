@@ -1,0 +1,15 @@
+https://{$QUOTE_DOMAIN} {
+	bind {$CADDY_BIND_ADDRESSES}
+
+	reverse_proxy http://127.0.0.1:8088 {
+		header_up -Tailscale-*
+	}
+}
+
+# Alias for the canonical quote site. Temporary (302) rather than permanent so the
+# canonical name can still be changed later without browsers holding a cached 301.
+https://{$QUOTES_DOMAIN} {
+	bind {$CADDY_BIND_ADDRESSES}
+
+	redir https://{$QUOTE_DOMAIN}{uri} temporary
+}

@@ -1,0 +1,27 @@
+https://{$GRAFANA_DOMAIN} {
+	bind {$CADDY_BIND_ADDRESSES}
+
+	reverse_proxy http://127.0.0.1:13000 {
+		header_up -Tailscale-*
+	}
+}
+
+# Loki log API, tailnet-only like the other private sites.
+https://{$LOKI_DOMAIN} {
+	bind {$CADDY_BIND_ADDRESSES}
+
+	# Write-only door: log writers authenticate, and only push/readiness paths
+	# exist here. Reads stay behind Grafana's login over the docker network.
+	@push path /loki/api/v1/push /ready
+	handle @push {
+		basic_auth {
+			logshipper {$LOKI_WRITER_PASSWORD_HASH}
+		}
+		reverse_proxy http://127.0.0.1:3100 {
+			header_up -Tailscale-*
+		}
+	}
+	handle {
+		respond "log push endpoint only; read logs via {$GRAFANA_DOMAIN}" 403
+	}
+}

@@ -1,0 +1,11 @@
+# Proton Mail Bridge GUI (noVNC), accessible only on the host's Tailscale addresses.
+https://{$MBRIDGE_DOMAIN} {
+	bind {$CADDY_BIND_ADDRESSES}
+
+	@root path /
+	redir @root /vnc.html temporary
+
+	reverse_proxy http://127.0.0.1:15980 {
+		header_up -Tailscale-*
+	}
+}

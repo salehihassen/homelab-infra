@@ -1,0 +1,198 @@
+# Tailnet-only AI gateway: CLIProxyAPI, its manager UI, and the policy proxy
+# that every AI-using app talks to. Persistent configuration and state live in
+# /opt/cpa.
+#
+# Provides to other stacks:
+#   network `cpa_policy_model` (opt_cpa_policy_model, internal) - join it to
+#     reach `http://ai-policy-proxy:18443/v1`; it has no internet egress
+#   service `ai-policy-proxy` - depend on it with `condition: service_healthy`
+# Each client app has its own CPA client key under its own /opt/<app>/secrets.
+x-stack:
+  requires: []
+
+services:
+  cli-proxy-api:
+    image: eceasy/cli-proxy-api:v7.3.15@sha256:86032129fa65496428752ec6e5c7480f07fde137160b728cd850cc65e9eaa391
+    container_name: cli-proxy-api
+    restart: unless-stopped
+    user: "1000:1000"
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        export MANAGEMENT_PASSWORD="$$(cat /run/secrets/cpa_management_key)"
+        exec /CLIProxyAPI/CLIProxyAPI -config /CLIProxyAPI/config/config.yaml
+    environment:
+      HOME: /tmp
+      TZ: ${TZ:?Set TZ in /opt/.env}
+    ports:
+      - "127.0.0.1:8317:8317"
+      # OAuth callback listeners; use an SSH local forward from the admin browser.
+      - "127.0.0.1:1455:1455"
+      - "127.0.0.1:54545:54545"
+      - "127.0.0.1:51121:51121"
+    volumes:
+      # Mount the parent directory read-write: CPA validates edits using a
+      # sibling temporary file before replacing config.yaml.
+      - /opt/cpa/config/cpa:/CLIProxyAPI/config:rw
+      - /opt/cpa/data/cpa-auth:/data/auth
+    secrets:
+      - source: cpa_management_key
+        target: cpa_management_key
+    networks:
+      cpa_policy_model:
+        ipv4_address: ${CPA_API_POLICY_IP:?Set CPA_API_POLICY_IP in ai-gateway/.env}
+      cpa_management:
+        ipv4_address: ${CPA_API_MANAGEMENT_IP:?Set CPA_API_MANAGEMENT_IP in ai-gateway/.env}
+      cpa_direct_egress:
+        ipv4_address: ${CPA_API_EGRESS_IP:?Set CPA_API_EGRESS_IP in ai-gateway/.env}
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m,uid=1000,gid=1000
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 512m
+    cpus: 2.0
+    healthcheck:
+      test: ["CMD-SHELL", "kill -0 1 && test -r /CLIProxyAPI/config/config.yaml"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  cpa-manager-plus:
+    image: seakee/cpa-manager-plus:v1.13.2@sha256:df53bff100f31a928357ad97360b9e6613fc9d70c10e910f6c9483910a5ec2e7
+    container_name: cpa-manager-plus
+    restart: unless-stopped
+    user: "1000:1000"
+    environment:
+      HTTP_ADDR: "0.0.0.0:18317"
+      USAGE_DATA_DIR: /data
+      USAGE_DB_PATH: /data/usage.sqlite
+      CPA_MANAGER_DATA_KEY_PATH: /data/data.key
+      CPA_MANAGER_ADMIN_KEY_FILE: /run/secrets/cpamp_admin_key
+      CPA_UPSTREAM_URL: http://cli-proxy-api:8317
+      CPA_MANAGEMENT_KEY_FILE: /run/secrets/cpa_management_key
+      USAGE_COLLECTOR_MODE: http
+      USAGE_BATCH_SIZE: "100"
+      USAGE_POLL_INTERVAL_MS: "500"
+      USAGE_QUERY_LIMIT: "50000"
+      USAGE_CORS_ORIGINS: "http://127.0.0.1:18317,http://localhost:18317,https://${CPAMP_DOMAIN:?Set CPAMP_DOMAIN in ai-gateway/routing.env}"
+      USAGE_QUOTA_COOLDOWN_ENABLED: "false"
+      USAGE_ACCOUNT_ACTIONS_ENABLED: "false"
+      USAGE_ACCOUNT_ACTIONS_AUTO_DISABLE: "false"
+    # Docker 29 intentionally ignores published ports on internal-only networks.
+    # No host port is published. Caddy reaches the configured management-network
+    # address for tailnet HTTPS access; SSH tunnels remain available.
+    # CPAMP also has direct egress.
+    volumes:
+      - /opt/cpa/data/cpamp:/data
+    secrets:
+      - source: cpamp_admin_key
+        target: cpamp_admin_key
+      - source: cpa_management_key
+        target: cpa_management_key
+    networks:
+      cpa_management:
+        ipv4_address: ${CPAMP_MANAGEMENT_IP:?Set CPAMP_MANAGEMENT_IP in ai-gateway/routing.env}
+      cpa_direct_egress:
+        ipv4_address: ${CPAMP_EGRESS_IP:?Set CPAMP_EGRESS_IP in ai-gateway/.env}
+    depends_on:
+      cli-proxy-api:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m,uid=1000,gid=1000
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 512m
+    cpus: 1.5
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:18317/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  ai-policy-proxy:
+    # Published by .github/workflows/publish-image.yml on the v0.4.0 tag.
+    # Digest-pinned so the release is unambiguous even when a stale local tag
+    # of the same name exists. To upgrade: push a new vX.Y.Z tag, then set the
+    # tag and digest here from `docker manifest inspect`.
+    image: ${AI_POLICY_PROXY_IMAGE:?Set AI_POLICY_PROXY_IMAGE in ai-gateway/.env}
+    container_name: ai-policy-proxy
+    restart: unless-stopped
+    user: "1000:1000"
+    environment:
+      CPA_UPSTREAM: http://cli-proxy-api:8317
+      CATALOG_PATH: /config/catalog.json
+      AFFINITY_DB_PATH: /data/affinity.sqlite
+      HMAC_SECRET_PATH: /run/secrets/policy_hmac_key
+      LISTEN_HOST: 0.0.0.0
+      LISTEN_PORT: "18443"
+      MAX_BODY_BYTES: "26214400"
+      UPSTREAM_TIMEOUT_SECONDS: "900"
+    # Host-networked Caddy targets the configured policy-network address.
+    volumes:
+      - /opt/cpa/config/ai-policy-proxy:/config:ro
+      - /opt/cpa/data/ai-policy-proxy:/data
+    secrets:
+      - source: policy_hmac_key
+        target: policy_hmac_key
+    networks:
+      cpa_policy_model:
+        ipv4_address: ${AI_POLICY_PROXY_IP:?Set AI_POLICY_PROXY_IP in ai-gateway/routing.env}
+    depends_on:
+      cli-proxy-api:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m,uid=1000,gid=1000
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 64
+    mem_limit: 256m
+    cpus: 1.0
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:18443/healthz', timeout=2).read()"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+networks:
+  cpa_policy_model:
+    ipam:
+      config:
+        - subnet: ${CPA_POLICY_SUBNET:?Set CPA_POLICY_SUBNET in ai-gateway/.env}
+    name: opt_cpa_policy_model
+    driver: bridge
+    internal: true
+  cpa_management:
+    ipam:
+      config:
+        - subnet: ${CPA_MANAGEMENT_SUBNET:?Set CPA_MANAGEMENT_SUBNET in ai-gateway/.env}
+    name: opt_cpa_management
+    driver: bridge
+    internal: true
+  cpa_direct_egress:
+    ipam:
+      config:
+        - subnet: ${CPA_EGRESS_SUBNET:?Set CPA_EGRESS_SUBNET in ai-gateway/.env}
+    name: opt_cpa_direct_egress
+    driver: bridge
+
+secrets:
+  cpa_management_key:
+    file: /opt/cpa/secrets/cpa-management-key
+  cpamp_admin_key:
+    file: /opt/cpa/secrets/cpamp-admin-key
+  policy_hmac_key:
+    file: /opt/cpa/secrets/policy-hmac-key

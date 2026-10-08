@@ -1,0 +1,4 @@
+# Nightly backup declaration for the speakable stack; format in docs/backups.md.
+paths:
+  - /opt/speakable/compose.env
+  - /opt/speakable

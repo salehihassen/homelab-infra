@@ -1,0 +1,5 @@
+# Nightly backup declaration for the protonmail-bridge stack; format in docs/backups.md.
+paths:
+  - /opt/protonmail-bridge
+sqlite_scan:
+  - /opt/protonmail-bridge/data/.local/share/protonmail/bridge-v3/gluon/backend/db

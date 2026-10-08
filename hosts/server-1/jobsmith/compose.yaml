@@ -1,0 +1,62 @@
+# Jobsmith job-application assistant; image published to GHCR (JOBSMITH_IMAGE).
+x-stack:
+  requires:
+    - ai-gateway   # network cpa_policy_model, service ai-policy-proxy
+
+services:
+  jobsmith:
+    image: ${JOBSMITH_IMAGE:?Set JOBSMITH_IMAGE in jobsmith/.env}
+    container_name: jobsmith
+    restart: unless-stopped
+    init: true
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        export JOBSMITH_AI_API_KEY="$$(cat /run/secrets/jobsmith_cpa_key)"
+        exec /usr/local/bin/docker-entrypoint.sh serve
+    environment:
+      TZ: ${TZ:?Set TZ in /opt/.env}
+      JOBSMITH_AI_BASE_URL: http://ai-policy-proxy:18443/v1
+      JOBSMITH_EXTERNAL_URL: https://${JOBSMITH_DOMAIN:?Set JOBSMITH_DOMAIN in jobsmith/routing.env}
+      BROWSER_HEADLESS: "true"
+      USE_BROWSER_USE: "false"
+    ports:
+      - "127.0.0.1:8888:8888"
+    shm_size: "1gb"
+    volumes:
+      - /opt/jobsmith/config:/app/config
+      - /opt/jobsmith/data:/app/data
+      - /opt/jobsmith/resumes:/app/resumes
+      - /opt/jobsmith/sessions:/app/sessions
+      - /opt/jobsmith/failed_screenshots:/app/failed_screenshots
+      - /opt/jobsmith/.browser-profile:/app/.browser-profile
+    secrets:
+      - source: jobsmith_cpa_key
+        target: jobsmith_cpa_key
+    networks:
+      - jobsmith
+      - cpa_policy_model
+    depends_on:
+      ai-policy-proxy:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 512
+    mem_limit: 3g
+    cpus: 4.0
+    logging:
+      options:
+        max-size: 10m
+        max-file: "3"
+
+networks:
+  # Stack-private bridge for internet egress (browser automation).
+  jobsmith:
+    ipam:
+      config:
+        - subnet: ${JOBSMITH_SUBNET:?Set JOBSMITH_SUBNET in jobsmith/.env}
+    driver: bridge
+
+secrets:
+  jobsmith_cpa_key:
+    file: /opt/jobsmith/secrets/cpa-client-key

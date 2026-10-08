@@ -1,0 +1,16 @@
+# Experimental Job Sentinel: trusted tailnet, loopback-only UI/API backends.
+https://{$JOB_SENTINEL_DOMAIN} {
+	bind {$CADDY_BIND_ADDRESSES}
+
+	@api path /api /api/* /health /docs /docs/* /openapi.json /redoc
+	handle @api {
+		reverse_proxy http://127.0.0.1:8903 {
+			header_up -Tailscale-*
+		}
+	}
+	handle {
+		reverse_proxy http://127.0.0.1:8902 {
+			header_up -Tailscale-*
+		}
+	}
+}

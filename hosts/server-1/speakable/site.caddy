@@ -1,0 +1,13 @@
+https://{$SPEAK_DOMAIN} {
+	bind {$CADDY_BIND_ADDRESSES}
+
+	# Reject oversized bodies before FastAPI parses JSON. Keep this aligned with
+	# conversion.max_body_bytes in /opt/speakable/config.yaml.
+	request_body {
+		max_size 256KB
+	}
+
+	reverse_proxy http://127.0.0.1:8900 {
+		header_up -Tailscale-*
+	}
+}

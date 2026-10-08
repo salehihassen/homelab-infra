@@ -1,0 +1,21 @@
+# Nightly backup declaration for the forgejo stack; format in docs/backups.md.
+# Repositories on disk and metadata in Postgres must agree, so Forgejo and its
+# runner are paused while the database is dumped and the repositories staged.
+paths:
+  - /opt/forgejo/routing.env
+  - /opt/forgejo/compose.env
+  - /opt/forgejo/config
+  - /opt/forgejo/forgejo.env
+  - /opt/forgejo/secrets
+  - /opt/forgejo/runner
+  - /opt/forgejo-runner/data
+  - /opt/forgejo-runner/certs
+  - /opt/forgejo-runner/secrets
+exclude:
+  /opt/forgejo-runner/docker: CI daemon's image and build cache
+postgres:
+  - forgejo
+quiesce:
+  services: [forgejo, forgejo-runner]
+  copy:
+    - /opt/forgejo/data

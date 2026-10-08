@@ -1,0 +1,11 @@
+# Nightly backup declaration for the home-automation stack; format in docs/backups.md.
+paths:
+  - /opt/homeassistant/routing.env
+  - /opt/homeassistant/compose.env
+  - /opt/homeassistant/config
+  - /opt/homeassistant/secrets
+  - /opt/homeassistant/other_assets
+  - /opt/z-wave-js
+sqlite:
+  - /opt/homeassistant/config/home-assistant_v2.db
+  - /opt/homeassistant/config/zigbee.db

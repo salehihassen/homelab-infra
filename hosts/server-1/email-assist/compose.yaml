@@ -1,0 +1,83 @@
+# Email Assist (EMAIL_ASSIST_DOMAIN): private read-only inbox triage; image
+# published to GHCR from its own repository (EMAIL_ASSIST_IMAGE). Reads mail through the Proton Mail Bridge
+# IMAP socket relay, stores state in its own Postgres database, and classifies
+# through the AI gateway.
+x-stack:
+  requires:
+    - postgres            # network postgres_network, service postgres (database email_assist)
+    - ai-gateway          # network cpa_policy_model, service ai-policy-proxy
+    - protonmail-bridge   # service protonmail-bridge (IMAP on host loopback 1143)
+
+services:
+  email-assist:
+    image: ${EMAIL_ASSIST_IMAGE:?Set EMAIL_ASSIST_IMAGE in email-assist/.env}
+    container_name: email-assist
+    restart: unless-stopped
+    init: true
+    ports:
+      - 127.0.0.1:8901:8000
+    environment:
+      PGHOST: postgres
+      PGDATABASE: email_assist
+      PGUSER: email_assist
+      AI_BASE_URL: http://ai-policy-proxy:18443/v1
+      AI_MODEL: ai-policy/internal
+      PUBLIC_ORIGIN: https://${EMAIL_ASSIST_DOMAIN:?Set EMAIL_ASSIST_DOMAIN in email-assist/routing.env}
+      # Web login name (password: secrets/web-password) and the mailbox address,
+      # used when state/imap-username is absent.
+      WEB_USERNAME: ${EMAIL_ASSIST_WEB_USERNAME:?Set EMAIL_ASSIST_WEB_USERNAME in email-assist/.env}
+      IMAP_USERNAME: ${EMAIL_ASSIST_IMAP_USERNAME:?Set EMAIL_ASSIST_IMAP_USERNAME in email-assist/.env}
+      TZ: ${TZ:?Set TZ in /opt/.env}
+    volumes:
+      - /opt/email-assist/secrets:/run/secrets:ro
+      - /opt/email-assist/run:/mail:ro
+      - /opt/email-assist/state:/state
+    networks:
+      - postgres_network
+      - cpa_policy_model
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ai-policy-proxy:
+        condition: service_healthy
+      email-assist-imap-socket:
+        condition: service_started
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m,uid=1000,gid=1000
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 96
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging:
+      options: {max-size: 10m, max-file: '3'}
+
+  # Relays the Bridge's host-loopback IMAP port into a Unix socket that the
+  # network-isolated app container mounts read-only.
+  email-assist-imap-socket:
+    image: ${EMAIL_ASSIST_IMAGE:?Set EMAIL_ASSIST_IMAGE in email-assist/.env}
+    container_name: email-assist-imap-socket
+    command: [python, relay.py]
+    restart: unless-stopped
+    init: true
+    network_mode: host
+    volumes:
+      - /opt/email-assist/run:/mail
+    depends_on:
+      # The relay connects per request, so it only needs the Bridge started.
+      protonmail-bridge:
+        condition: service_started
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 64m
+    cpus: 0.25
+    pids_limit: 32
+    logging:
+      options: {max-size: 10m, max-file: '3'}

@@ -1,0 +1,80 @@
+# server-1: every long-running stack on this machine, one directory per stack.
+#
+# Run from this directory: `docker compose up -d`. The project keeps its
+# historical name `opt`, so container, network, and volume names are unchanged.
+# Shared variables come from the host .env; each stack loads its own settings.
+# STACK_ENV_FILE / STACK_ROUTING_ENV_FILE select tracked examples for validation.
+#
+# Each stack declares the stacks it relies on under `x-stack.requires`; the
+# `scripts/check-stacks.py` check enforces that every cross-stack network,
+# service, or secret reference is declared. Order below is the recovery start
+# order: shared infrastructure first, then the apps that depend on it.
+name: opt
+
+include:
+  # Shared infrastructure.
+  - path: postgres/compose.yaml
+    env_file:
+      - postgres/${STACK_ENV_FILE:-.env}
+      - postgres/${STACK_ROUTING_ENV_FILE:-routing.env}
+  - path: ai-gateway/compose.yaml
+    env_file:
+      - ai-gateway/${STACK_ENV_FILE:-.env}
+      - ai-gateway/${STACK_ROUTING_ENV_FILE:-routing.env}
+  - path: caddy/compose.yaml
+    env_file:
+      - caddy/${STACK_ENV_FILE:-.env}
+  - path: observability/compose.yaml
+    env_file:
+      - observability/${STACK_ENV_FILE:-.env}
+      - observability/${STACK_ROUTING_ENV_FILE:-routing.env}
+  - path: komodo/compose.yaml
+    env_file:
+      - komodo/${STACK_ENV_FILE:-.env}
+      - komodo/${STACK_ROUTING_ENV_FILE:-routing.env}
+  # Home.
+  - path: home-automation/compose.yaml
+    env_file:
+      - home-automation/${STACK_ENV_FILE:-.env}
+      - home-automation/${STACK_ROUTING_ENV_FILE:-routing.env}
+  - path: protonmail-bridge/compose.yaml
+    env_file:
+      - protonmail-bridge/${STACK_ENV_FILE:-.env}
+      - protonmail-bridge/${STACK_ROUTING_ENV_FILE:-routing.env}
+  # Apps.
+  - path: quotes/compose.yaml
+    env_file:
+      - quotes/${STACK_ENV_FILE:-.env}
+      - quotes/${STACK_ROUTING_ENV_FILE:-routing.env}
+  - path: countdown/compose.yaml
+    env_file:
+      - countdown/${STACK_ENV_FILE:-.env}
+      - countdown/${STACK_ROUTING_ENV_FILE:-routing.env}
+  - path: jobsmith/compose.yaml
+    env_file:
+      - jobsmith/${STACK_ENV_FILE:-.env}
+      - jobsmith/${STACK_ROUTING_ENV_FILE:-routing.env}
+  - path: condenseit/compose.yaml
+    env_file:
+      - condenseit/${STACK_ENV_FILE:-.env}
+      - condenseit/${STACK_ROUTING_ENV_FILE:-routing.env}
+  - path: speakable/compose.yaml
+    env_file:
+      - speakable/${STACK_ENV_FILE:-.env}
+      - speakable/${STACK_ROUTING_ENV_FILE:-routing.env}
+  - path: email-assist/compose.yaml
+    env_file:
+      - email-assist/${STACK_ENV_FILE:-.env}
+      - email-assist/${STACK_ROUTING_ENV_FILE:-routing.env}
+  - path: job-sentinel/compose.yaml
+    env_file:
+      - job-sentinel/${STACK_ENV_FILE:-.env}
+      - job-sentinel/${STACK_ROUTING_ENV_FILE:-routing.env}
+  - path: metube/compose.yaml
+    env_file:
+      - metube/${STACK_ENV_FILE:-.env}
+      - metube/${STACK_ROUTING_ENV_FILE:-routing.env}
+  - path: forgejo/compose.yaml
+    env_file:
+      - forgejo/${STACK_ENV_FILE:-.env}
+      - forgejo/${STACK_ROUTING_ENV_FILE:-routing.env}

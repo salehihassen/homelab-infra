@@ -1,0 +1,10 @@
+# Nightly backup declaration for the email-assist stack; format in docs/backups.md.
+paths:
+  - /opt/email-assist/routing.env
+  - /opt/email-assist/compose.env
+  - /opt/email-assist/secrets
+  - /opt/email-assist/state
+exclude:
+  /opt/email-assist/run: IMAP relay socket; recreated at start
+postgres:
+  - email_assist

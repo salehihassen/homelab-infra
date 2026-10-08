@@ -1,0 +1,58 @@
+# Host-level backup declaration: everything that is not owned by a stack.
+# Stack data is declared in hosts/<host>/<stack>/backup.yaml. Personal paths
+# (home directories, source checkouts, other apps) go in the untracked
+# host.local.yaml beside this file; see host.local.yaml.example.
+# Same keys as a stack declaration plus `exclude_patterns`; see docs/backups.md.
+paths:
+  # /opt files that belong to no single stack.
+  - /opt/.env
+  - /opt/README.md
+  - /opt/backup
+  - /opt/mongodb_atlas/mongodb.env
+  # Backup tooling, its settings and credentials.
+  - /usr/local/sbin/infra-backup
+  - /usr/local/sbin/infra-backup-maintenance
+  - /usr/local/sbin/infra-backup-sqlite.py
+  - /usr/local/sbin/infra-backup-extra-state.py
+  - /usr/local/sbin/infra-backup-declared.py
+  - /etc/infra-backup
+  - /etc/restic
+  - /etc/rclone
+  # Host configuration.
+  - /etc/docker
+  - /etc/fstab
+  - /etc/crypttab
+  - /etc/cryptsetup-keys.d
+  - /etc/netplan
+  - /etc/systemd/system
+  - /etc/ssh
+  # Retired Shiori bookmark database (no running service).
+  - /opt/shiori
+
+sqlite:
+  - /opt/shiori/shiori.db
+
+exclude_patterns:
+  # Re-creatable dependencies, build products, caches, and logs.
+  - "**/node_modules"
+  - "**/.venv"
+  - "**/venv"
+  - "**/__pycache__"
+  - "**/.cache"
+  - "**/.firecrawl"
+  - "**/.next"
+  - "**/.turbo"
+  - "**/coverage"
+  - "**/dist"
+  - "**/target"
+  - "**/*.log"
+
+# Retired services' data. Archived as one tarball only while no running
+# container uses it; the run fails if one does.
+offline:
+  - /opt/clickhouse
+  - /opt/qdrant
+  - /opt/redis
+  - /opt/minio
+  - /opt/ollama
+  - /opt/mongodb_atlas

@@ -1,0 +1,8 @@
+# Nightly backup declaration for the jobsmith stack; format in docs/backups.md.
+paths:
+  - /opt/jobsmith/compose.env
+  - /opt/jobsmith
+exclude:
+  /opt/jobsmith/source: worktree of the Jobsmith repository, which the host backup covers
+sqlite:
+  - /opt/jobsmith/data/jobsmith.db

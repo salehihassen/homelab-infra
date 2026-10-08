@@ -1,0 +1,92 @@
+# Caddy: the single HTTPS entry point. Host-networked and bound only to the host's
+# Tailscale addresses; certificates come from Let's Encrypt via Porkbun DNS-01.
+# Certificates and ACME state stay in /opt/caddy/{data,config}.
+x-stack:
+  requires: []
+
+services:
+  caddy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ${CADDY_IMAGE:?Set CADDY_IMAGE in caddy/.env}
+    container_name: ${CADDY_CONTAINER_NAME:?Set CADDY_CONTAINER_NAME in caddy/.env}
+    network_mode: host
+    entrypoint: ["/usr/local/libexec/caddy/sh", "/etc/caddy/render-sites.sh"]
+    # A custom entrypoint clears the image CMD; explicitly launch Caddy.
+    command: ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]
+    restart: unless-stopped
+    user: "1000:1000"
+    read_only: true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+    # Optional routing/auth settings; a missing file disables only its sites.
+    env_file:
+      - path: ../ai-gateway/${STACK_ROUTING_ENV_FILE:-routing.env}
+        required: false
+      - path: ../condenseit/${STACK_ROUTING_ENV_FILE:-routing.env}
+        required: false
+      - path: ../countdown/${STACK_ROUTING_ENV_FILE:-routing.env}
+        required: false
+      - path: ../email-assist/${STACK_ROUTING_ENV_FILE:-routing.env}
+        required: false
+      - path: ../forgejo/${STACK_ROUTING_ENV_FILE:-routing.env}
+        required: false
+      - path: ../home-automation/${STACK_ROUTING_ENV_FILE:-routing.env}
+        required: false
+      - path: ../job-sentinel/${STACK_ROUTING_ENV_FILE:-routing.env}
+        required: false
+      - path: ../jobsmith/${STACK_ROUTING_ENV_FILE:-routing.env}
+        required: false
+      - path: ../komodo/${STACK_ROUTING_ENV_FILE:-routing.env}
+        required: false
+      - path: ../metube/${STACK_ROUTING_ENV_FILE:-routing.env}
+        required: false
+      - path: ../observability/${STACK_ROUTING_ENV_FILE:-routing.env}
+        required: false
+      - path: ../postgres/${STACK_ROUTING_ENV_FILE:-routing.env}
+        required: false
+      - path: ../protonmail-bridge/${STACK_ROUTING_ENV_FILE:-routing.env}
+        required: false
+      - path: ../quotes/${STACK_ROUTING_ENV_FILE:-routing.env}
+        required: false
+      - path: ../speakable/${STACK_ROUTING_ENV_FILE:-routing.env}
+        required: false
+    environment:
+      ACME_CA: https://acme-v02.api.letsencrypt.org/directory
+      CADDY_BIND_ADDRESSES: ${CADDY_BIND_ADDRESSES:?Set CADDY_BIND_ADDRESSES in caddy/.env}
+      PRIVATE_ZONE: ${PRIVATE_ZONE:?Set PRIVATE_ZONE in caddy/.env}
+      CADDY_HOST_DOMAIN: ${CADDY_HOST_DOMAIN:?Set CADDY_HOST_DOMAIN in caddy/.env}
+      T3C_DOMAIN: ${T3C_DOMAIN:?Set T3C_DOMAIN in caddy/.env}
+      OPENWEBUI_ALIAS_DOMAIN: ${OPENWEBUI_ALIAS_DOMAIN:?Set OPENWEBUI_ALIAS_DOMAIN in caddy/.env}
+      OPENWEBUI_LEGACY_DOMAIN: ${OPENWEBUI_LEGACY_DOMAIN:?Set OPENWEBUI_LEGACY_DOMAIN in caddy/.env}
+      OPENWEBUI_REDIRECT_URL: ${OPENWEBUI_REDIRECT_URL:?Set OPENWEBUI_REDIRECT_URL in caddy/.env}
+    volumes:
+      - ./render-sites.sh:/etc/caddy/render-sites.sh:ro
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Every stack's site.caddy, imported by the Caddyfile.
+      - ..:/etc/caddy/stacks:ro
+      - /opt/caddy/data:/data
+      - /opt/caddy/config:/config
+    secrets:
+      - porkbun_api_key
+      - porkbun_api_secret_key
+    pids_limit: 128
+    mem_limit: 256m
+    cpus: 1.0
+    logging:
+      options:
+        max-size: 10m
+        max-file: "3"
+
+secrets:
+  porkbun_api_key:
+    file: /opt/caddy/secrets/porkbun_api_key
+  porkbun_api_secret_key:
+    file: /opt/caddy/secrets/porkbun_api_secret_key

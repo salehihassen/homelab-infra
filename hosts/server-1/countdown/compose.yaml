@@ -1,0 +1,32 @@
+# Countdown timer page (COUNTDOWN_DOMAIN). Stateless.
+x-stack:
+  requires: []
+
+services:
+  countdown-timer:
+    restart: unless-stopped
+    ports:
+      - "8081:8080"
+    image: ${COUNTDOWN_IMAGE:?Set COUNTDOWN_IMAGE in countdown/.env}
+    container_name: countdown-timer
+    environment:
+      - TZ=${TZ:?Set TZ in /opt/.env}
+    networks:
+      - countdown
+    mem_limit: 128m
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:8080/"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+    logging:
+      options:
+        max-size: 10m
+        max-file: "3"
+
+networks:
+  countdown:
+    ipam:
+      config:
+        - subnet: ${COUNTDOWN_SUBNET:?Set COUNTDOWN_SUBNET in countdown/.env}
+    driver: bridge

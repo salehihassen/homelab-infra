@@ -1,0 +1,30 @@
+# The policy proxy has its own hostname; the host's hostname belongs to Caddy.
+https://{$POLICY_PROXY_DOMAIN} {
+	bind {$CADDY_BIND_ADDRESSES}
+
+	reverse_proxy http://{$POLICY_PROXY_UPSTREAM} {
+		header_up -Tailscale-*
+	}
+}
+
+# Direct CLIProxyAPI access for tailnet clients. Management uses the separate
+# CPAMP hostname or an SSH tunnel.
+https://{$CPA_DOMAIN} {
+	bind {$CADDY_BIND_ADDRESSES}
+
+	@management path /v0/management /v0/management/*
+	respond @management 403
+
+	reverse_proxy http://{$CPA_UPSTREAM} {
+		header_up -Tailscale-*
+	}
+}
+
+# CPAMP management UI and API: tailnet HTTPS plus CPAMP's existing admin key.
+https://{$CPAMP_DOMAIN} {
+	bind {$CADDY_BIND_ADDRESSES}
+
+	reverse_proxy http://{$CPAMP_UPSTREAM} {
+		header_up -Tailscale-*
+	}
+}

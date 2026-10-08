@@ -1,0 +1,65 @@
+# Home Assistant (host network, HOME_DOMAIN) and Z-Wave JS UI with the USB stick.
+x-stack:
+  requires: []
+
+services:
+  homeassistant:
+    container_name: homeassistant
+    image: ghcr.io/home-assistant/home-assistant:2026.8.3@sha256:14931c6b13756317849f46da1d01b45937a1150db66c081cfe529d48215943fe
+    volumes:
+      - /opt/homeassistant/config:/config
+      - /etc/localtime:/etc/localtime:ro
+    restart: unless-stopped
+    privileged: true
+    network_mode: host
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:8123/manifest.json"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
+    logging:
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  zwavejs2mqtt:
+    container_name: zwavejs2mqtt
+    image: zwavejs/zwave-js-ui:11.22.3@sha256:14d018bb689eecce4029229764d2191d9b8d8f211106fcabaef421e7b0f8cf9c
+    restart: unless-stopped
+    tty: true
+    stop_signal: SIGINT
+    environment:
+      - SESSION_SECRET=${SESSION_SECRET:?SESSION_SECRET must be set in home-automation/.env}
+      - ZWAVEJS_EXTERNAL_CONFIG=/usr/src/app/store/.config-db
+      - TZ=${TZ:?Set TZ in /opt/.env}
+    devices:
+      - '${ZWAVE_DEVICE:?Set ZWAVE_DEVICE in home-automation/.env}:/dev/zwave'
+    volumes:
+      - /opt/z-wave-js/:/usr/src/app/store
+    ports:
+      # Loopback only. The UI is on the tailnet through Caddy (ZWAVE_DOMAIN);
+      # Home Assistant (host network) uses ws://localhost:3000.
+      - "127.0.0.1:8091:8091" # port for web interface
+      - "127.0.0.1:3000:3000" # port for Z-Wave JS websocket server
+    networks:
+      - home_automation
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:8091/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    logging:
+      options:
+        max-size: 10m
+        max-file: "3"
+
+networks:
+  # Home Assistant reaches Z-Wave JS through the published host port 3000.
+  home_automation:
+    ipam:
+      config:
+        - subnet: ${HOME_AUTOMATION_SUBNET:?Set HOME_AUTOMATION_SUBNET in home-automation/.env}
+    driver: bridge
