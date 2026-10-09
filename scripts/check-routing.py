@@ -107,7 +107,8 @@ def check(config, loki_host, cpa_host, host_domain):
                 "Unexpected CPA route structure; review management protection")
         routes = inner[0].get("routes", [])
         require(routes and {p for m in routes[0].get("match", []) for p in m.get("path", [])}
-                == {"/v0/management", "/v0/management/*"}, "CPA management denial must precede proxy")
+                == {"/v0/management", "/v0/management/*", "/v8/management", "/v8/management/*"},
+                "CPA v0 and v8 management denial must precede proxy")
         require(routes[0].get("handle") == [{"handler": "static_response", "status_code": 403}],
                 "CPA management paths must return 403")
     print("Host identity, Caddy proxy listeners, and Loki path/auth boundary verified.")

@@ -14,6 +14,12 @@ does not serve the policy proxy.
   `AI_POLICY_PROXY_IP` in this stack's `.env` and `routing.env`; Caddy reaches
   CPAMP and the policy proxy at those addresses. The routing upstream values
   derive from their corresponding IP variables in the same env file.
+  `CPA_POLICY_DYNAMIC_RANGE` is a subset of `CPA_POLICY_SUBNET` that excludes
+  every fixed gateway address. Client containers allocate only from this pool,
+  so they cannot take a gateway address when Docker starts them first.
+- **Readiness:** The policy proxy checks both its local catalog and CPA's HTTP
+  endpoint; an unavailable CPA
+  marks the proxy unhealthy instead of allowing dependent apps to start.
 - **Data:** `/opt/cpa` (config, auth, usage databases, secrets, runbook in
   `/opt/cpa/docs/README.md`).
 - **Backup:** `/opt/cpa`, with SQLite online copies of the CPAMP usage and

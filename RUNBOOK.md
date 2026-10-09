@@ -68,6 +68,20 @@ Keep every subnet disjoint from the other Docker networks and host routes;
 automatic allocation can otherwise consume a subnet needed by a fixed network
 before that network is recreated during startup.
 
+Networks mixing static gateway addresses and dynamic clients must set an IPAM
+`ip_range` inside their subnet, excluding all static addresses. The AI gateway's
+`CPA_POLICY_DYNAMIC_RANGE` supplies this pool for the policy network. Compose
+dependencies do not order Docker daemon restarts; a startup race can otherwise
+give a client a stopped gateway's static address. `check-networks.py` rejects
+mixed allocations without a separate pool and duplicate static addresses.
+
+To change a network's IPAM settings, record all attached containers (including
+clients outside Compose), stop only those services, remove their containers,
+then remove the empty affected network. Recreate those services with Compose
+and restore any external attachments. Never remove volumes or stop the whole
+project for this operation. Verify the live network's IPAM settings and test
+startup with a dynamic client before its static gateway.
+
 `include.env_file` supplies interpolation values for the stack definitions;
 service-level `env_file` instead sets variables inside containers. Shell and
 host env values take precedence over stack-local defaults, so keep the main

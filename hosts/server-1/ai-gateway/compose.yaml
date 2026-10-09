@@ -12,7 +12,7 @@ x-stack:
 
 services:
   cli-proxy-api:
-    image: eceasy/cli-proxy-api:v7.3.15@sha256:86032129fa65496428752ec6e5c7480f07fde137160b728cd850cc65e9eaa391
+    image: eceasy/cli-proxy-api:v8.0.22@sha256:fb287227792ae14eff38063479568049c90cb692b1f299e39c6f54650584428f
     container_name: cli-proxy-api
     restart: unless-stopped
     user: "1000:1000"
@@ -63,7 +63,7 @@ services:
       start_period: 10s
 
   cpa-manager-plus:
-    image: seakee/cpa-manager-plus:v1.13.2@sha256:df53bff100f31a928357ad97360b9e6613fc9d70c10e910f6c9483910a5ec2e7
+    image: seakee/cpa-manager-plus:v1.14.5@sha256:f583a10f677cd14cb032373928dac42f12c28fe176b429eff09bcdd1ea8f3624
     container_name: cpa-manager-plus
     restart: unless-stopped
     user: "1000:1000"
@@ -161,9 +161,11 @@ services:
     mem_limit: 256m
     cpus: 1.0
     healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:18443/healthz', timeout=2).read()"]
+      # /healthz alone only checks the local catalog. Also require CPA to serve
+      # HTTP, so apps cannot see a healthy proxy with an unavailable backend.
+      test: ["CMD", "python3", "-c", "import os, urllib.request; urllib.request.urlopen('http://127.0.0.1:18443/healthz', timeout=2).read(); urllib.request.urlopen(os.environ['CPA_UPSTREAM'].rstrip('/') + '/', timeout=2).read()"]
       interval: 10s
-      timeout: 3s
+      timeout: 5s
       retries: 5
       start_period: 10s
 
@@ -172,6 +174,9 @@ networks:
     ipam:
       config:
         - subnet: ${CPA_POLICY_SUBNET:?Set CPA_POLICY_SUBNET in ai-gateway/.env}
+          # Dynamic clients must never claim CPA/Caddy's fixed gateway addresses,
+          # including when Docker restarts containers without dependency ordering.
+          ip_range: ${CPA_POLICY_DYNAMIC_RANGE:?Set CPA_POLICY_DYNAMIC_RANGE in ai-gateway/.env}
     name: opt_cpa_policy_model
     driver: bridge
     internal: true

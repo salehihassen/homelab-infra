@@ -12,7 +12,7 @@ https://{$POLICY_PROXY_DOMAIN} {
 https://{$CPA_DOMAIN} {
 	bind {$CADDY_BIND_ADDRESSES}
 
-	@management path /v0/management /v0/management/*
+	@management path /v0/management /v0/management/* /v8/management /v8/management/*
 	respond @management 403
 
 	reverse_proxy http://{$CPA_UPSTREAM} {
