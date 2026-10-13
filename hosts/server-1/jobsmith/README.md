@@ -2,6 +2,11 @@
 
 Jobsmith job-application assistant (`JOBSMITH_DOMAIN`).
 
+See [the hosted Apply Assist workflow](APPLY_ASSIST.md) for browser installation,
+automatic pairing, tailoring, and assisted form filling.
+Read the [Chromium extension security audit](EXTENSION_SECURITY_AUDIT.md) before
+installing the current extension build.
+
 - **Image:** published to GHCR by the application's GitHub Actions workflow.
   Set `JOBSMITH_IMAGE` in `.env` to the published image reference, preferably
   pinned by digest. From the host directory, run `docker compose pull jobsmith`,

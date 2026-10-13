@@ -9,5 +9,9 @@ README is the user guide. The login name and mailbox address are
   protonmail-bridge. The app container has no host networking: the
   `email-assist-imap-socket` relay (host network) exposes Bridge IMAP as a Unix
   socket in `/opt/email-assist/run`, mounted read-only into the app.
+- **Business tab:** Zoho Mail over IMAPS (`imappro.zoho.com:993`), reached
+  directly through `postgres_network`'s outbound access. Enable IMAP in Zoho
+  and use an app-specific password, either in the UI or as
+  `secrets/business-imap-password`.
 - **Data:** `/opt/email-assist/{secrets,state}`; mail state lives in Postgres.
 - **Backup:** `pg_dump` of `email_assist` plus secrets and state.

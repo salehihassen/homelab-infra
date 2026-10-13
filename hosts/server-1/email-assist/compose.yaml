@@ -1,7 +1,7 @@
 # Email Assist (EMAIL_ASSIST_DOMAIN): private read-only inbox triage; image
 # published to GHCR from its own repository (EMAIL_ASSIST_IMAGE). Reads mail through the Proton Mail Bridge
-# IMAP socket relay, stores state in its own Postgres database, and classifies
-# through the AI gateway.
+# IMAP socket relay and the Zoho business mailbox over IMAPS, stores state in
+# its own Postgres database, and classifies through the AI gateway.
 x-stack:
   requires:
     - postgres            # network postgres_network, service postgres (database email_assist)
@@ -27,6 +27,11 @@ services:
       # used when state/imap-username is absent.
       WEB_USERNAME: ${EMAIL_ASSIST_WEB_USERNAME:?Set EMAIL_ASSIST_WEB_USERNAME in email-assist/.env}
       IMAP_USERNAME: ${EMAIL_ASSIST_IMAP_USERNAME:?Set EMAIL_ASSIST_IMAP_USERNAME in email-assist/.env}
+      # Business tab: Zoho Mail (US). Password: secrets/business-imap-password
+      # or entered in the UI.
+      BUSINESS_IMAP_HOST: imappro.zoho.com
+      BUSINESS_IMAP_USERNAME: ${EMAIL_ASSIST_BUSINESS_IMAP_USERNAME:-}
+      BUSINESS_MAIL_URL: https://mail.zoho.com/
       TZ: ${TZ:?Set TZ in /opt/.env}
     volumes:
       - /opt/email-assist/secrets:/run/secrets:ro
