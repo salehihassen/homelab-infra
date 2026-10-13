@@ -161,7 +161,14 @@ otelcol.processor.transform "langfuse" {
 			`set(attributes["gen_ai.usage.output_tokens"], attributes["output_tokens"]) where attributes["span.type"] == "llm_request" and attributes["output_tokens"] != nil`,
 			`set(attributes["gen_ai.usage.cache_read_input_tokens"], attributes["cache_read_tokens"]) where attributes["span.type"] == "llm_request" and attributes["cache_read_tokens"] != nil`,
 			`set(attributes["gen_ai.usage.cache_creation_input_tokens"], attributes["cache_creation_tokens"]) where attributes["span.type"] == "llm_request" and attributes["cache_creation_tokens"] != nil`,
+			// Tool spans: name them after the tool; input is the most specific
+			// argument present (later statements win).
+			`set(name, Concat(["tool ", attributes["tool_name"]], "")) where attributes["span.type"] == "tool" and attributes["tool_name"] != nil`,
 			`set(attributes["langfuse.observation.input"], attributes["tool_input"]) where attributes["span.type"] == "tool" and attributes["tool_input"] != nil`,
+			`set(attributes["langfuse.observation.input"], attributes["url"]) where attributes["span.type"] == "tool" and attributes["url"] != nil`,
+			`set(attributes["langfuse.observation.input"], attributes["query"]) where attributes["span.type"] == "tool" and attributes["query"] != nil`,
+			`set(attributes["langfuse.observation.input"], attributes["pattern"]) where attributes["span.type"] == "tool" and attributes["pattern"] != nil`,
+			`set(attributes["langfuse.observation.input"], attributes["file_path"]) where attributes["span.type"] == "tool" and attributes["file_path"] != nil`,
 			`set(attributes["langfuse.observation.input"], attributes["full_command"]) where attributes["span.type"] == "tool" and attributes["full_command"] != nil`,
 			// Codex: sessions are conversations; sampling requests are model calls.
 			// Codex traces carry no content; prompts, tool I/O and responses are
@@ -175,7 +182,9 @@ otelcol.processor.transform "langfuse" {
 	trace_statements {
 		context    = "spanevent"
 		statements = [
-			// Claude Code: tool output arrives as a span event.
+			// Claude Code: tool output arrives as a span event; file tools
+			// (Read, Write) report it as `content`.
+			`set(span.attributes["langfuse.observation.output"], attributes["content"]) where name == "tool.output" and attributes["content"] != nil`,
 			`set(span.attributes["langfuse.observation.output"], attributes["output"]) where name == "tool.output" and attributes["output"] != nil`,
 			// Codex: name tool spans after the tool.
 			`set(span.attributes["langfuse.observation.type"], "tool") where attributes["event.name"] == "codex.tool_result"`,
