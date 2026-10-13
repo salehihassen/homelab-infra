@@ -61,3 +61,212 @@ loki.write "local" {
 		url = "http://loki:3100/loki/api/v1/push"
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Agent telemetry: OTLP/HTTP from coding agents and scripts. Caddy terminates
+// TLS and authenticates each writer on OTEL_DOMAIN; this receiver is published
+// on loopback only. Events go to Loki, metrics to Prometheus, traces to
+// Langfuse. The Docker log pipeline above is independent of this one.
+// ---------------------------------------------------------------------------
+
+otelcol.receiver.otlp "agents" {
+	http {
+		endpoint = "0.0.0.0:4318"
+	}
+
+	output {
+		logs    = [otelcol.processor.transform.redact.input]
+		metrics = [otelcol.processor.batch.agents.input]
+		traces  = [otelcol.processor.transform.redact.input]
+	}
+}
+
+// Narrow secret redaction before anything is stored. Agents may send full
+// prompts, responses and tool output; these patterns catch common key and
+// token formats only. Add patterns here as new formats show up.
+otelcol.processor.transform "redact" {
+	error_mode = "ignore"
+
+	trace_statements {
+		context    = "span"
+		statements = [
+			`replace_all_patterns(attributes, "value", "-----BEGIN [A-Z ]*PRIVATE KEY-----[^-]*-----END [A-Z ]*PRIVATE KEY-----", "[REDACTED:private-key]")`,
+			`replace_all_patterns(attributes, "value", "sk-ant-[A-Za-z0-9_-]{20,}", "[REDACTED:anthropic-key]")`,
+			`replace_all_patterns(attributes, "value", "sk-(proj-)?[A-Za-z0-9_-]{20,}", "[REDACTED:openai-key]")`,
+			`replace_all_patterns(attributes, "value", "(ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{40,}", "[REDACTED:github-token]")`,
+			`replace_all_patterns(attributes, "value", "(AKIA|ASIA)[0-9A-Z]{16}", "[REDACTED:aws-key]")`,
+			`replace_all_patterns(attributes, "value", "(?i)(bearer|basic)[[:space:]]+[A-Za-z0-9._~+/=-]{16,}", "$1 [REDACTED]")`,
+			`replace_all_patterns(attributes, "value", "([a-zA-Z][a-zA-Z0-9+.-]*://)[^/[:space:]:@]+:[^/[:space:]@]+@", "$1[REDACTED]@")`,
+			`replace_all_patterns(attributes, "value", "(?i)([a-z0-9_]*(token|secret|password|passwd|api_key|apikey|access_key)[a-z0-9_]*[\"']?[[:space:]]*[=:][[:space:]]*[\"']?)[^[:space:]\"',}]{8,}", "$1[REDACTED]")`,
+		]
+	}
+
+	trace_statements {
+		context    = "spanevent"
+		statements = [
+			`replace_all_patterns(attributes, "value", "-----BEGIN [A-Z ]*PRIVATE KEY-----[^-]*-----END [A-Z ]*PRIVATE KEY-----", "[REDACTED:private-key]")`,
+			`replace_all_patterns(attributes, "value", "sk-ant-[A-Za-z0-9_-]{20,}", "[REDACTED:anthropic-key]")`,
+			`replace_all_patterns(attributes, "value", "sk-(proj-)?[A-Za-z0-9_-]{20,}", "[REDACTED:openai-key]")`,
+			`replace_all_patterns(attributes, "value", "(ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{40,}", "[REDACTED:github-token]")`,
+			`replace_all_patterns(attributes, "value", "(AKIA|ASIA)[0-9A-Z]{16}", "[REDACTED:aws-key]")`,
+			`replace_all_patterns(attributes, "value", "(?i)(bearer|basic)[[:space:]]+[A-Za-z0-9._~+/=-]{16,}", "$1 [REDACTED]")`,
+			`replace_all_patterns(attributes, "value", "([a-zA-Z][a-zA-Z0-9+.-]*://)[^/[:space:]:@]+:[^/[:space:]@]+@", "$1[REDACTED]@")`,
+			`replace_all_patterns(attributes, "value", "(?i)([a-z0-9_]*(token|secret|password|passwd|api_key|apikey|access_key)[a-z0-9_]*[\"']?[[:space:]]*[=:][[:space:]]*[\"']?)[^[:space:]\"',}]{8,}", "$1[REDACTED]")`,
+		]
+	}
+
+	log_statements {
+		context    = "log"
+		statements = [
+			`replace_all_patterns(attributes, "value", "-----BEGIN [A-Z ]*PRIVATE KEY-----[^-]*-----END [A-Z ]*PRIVATE KEY-----", "[REDACTED:private-key]")`,
+			`replace_all_patterns(attributes, "value", "sk-ant-[A-Za-z0-9_-]{20,}", "[REDACTED:anthropic-key]")`,
+			`replace_all_patterns(attributes, "value", "sk-(proj-)?[A-Za-z0-9_-]{20,}", "[REDACTED:openai-key]")`,
+			`replace_all_patterns(attributes, "value", "(ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{40,}", "[REDACTED:github-token]")`,
+			`replace_all_patterns(attributes, "value", "(AKIA|ASIA)[0-9A-Z]{16}", "[REDACTED:aws-key]")`,
+			`replace_all_patterns(attributes, "value", "(?i)(bearer|basic)[[:space:]]+[A-Za-z0-9._~+/=-]{16,}", "$1 [REDACTED]")`,
+			`replace_all_patterns(attributes, "value", "([a-zA-Z][a-zA-Z0-9+.-]*://)[^/[:space:]:@]+:[^/[:space:]@]+@", "$1[REDACTED]@")`,
+			`replace_all_patterns(attributes, "value", "(?i)([a-z0-9_]*(token|secret|password|passwd|api_key|apikey|access_key)[a-z0-9_]*[\"']?[[:space:]]*[=:][[:space:]]*[\"']?)[^[:space:]\"',}]{8,}", "$1[REDACTED]")`,
+			`replace_pattern(body, "-----BEGIN [A-Z ]*PRIVATE KEY-----[^-]*-----END [A-Z ]*PRIVATE KEY-----", "[REDACTED:private-key]") where IsString(body)`,
+			`replace_pattern(body, "sk-ant-[A-Za-z0-9_-]{20,}", "[REDACTED:anthropic-key]") where IsString(body)`,
+			`replace_pattern(body, "sk-(proj-)?[A-Za-z0-9_-]{20,}", "[REDACTED:openai-key]") where IsString(body)`,
+			`replace_pattern(body, "(ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{40,}", "[REDACTED:github-token]") where IsString(body)`,
+			`replace_pattern(body, "(AKIA|ASIA)[0-9A-Z]{16}", "[REDACTED:aws-key]") where IsString(body)`,
+			`replace_pattern(body, "(?i)(bearer|basic)[[:space:]]+[A-Za-z0-9._~+/=-]{16,}", "$1 [REDACTED]") where IsString(body)`,
+			`replace_pattern(body, "([a-zA-Z][a-zA-Z0-9+.-]*://)[^/[:space:]:@]+:[^/[:space:]@]+@", "$1[REDACTED]@") where IsString(body)`,
+			`replace_pattern(body, "(?i)([a-z0-9_]*(token|secret|password|passwd|api_key|apikey|access_key)[a-z0-9_]*[\"']?[[:space:]]*[=:][[:space:]]*[\"']?)[^[:space:]\"',}]{8,}", "$1[REDACTED]") where IsString(body)`,
+		]
+	}
+
+	output {
+		logs   = [otelcol.processor.batch.agents.input]
+		traces = [otelcol.processor.transform.langfuse.input]
+	}
+}
+
+// Map agent span attributes onto the names Langfuse renders (input/output,
+// model, token usage). Runs after redaction, so copies are redacted too.
+// Each machine (host.name) becomes the Langfuse "user" for filtering.
+otelcol.processor.transform "langfuse" {
+	error_mode = "ignore"
+
+	trace_statements {
+		context    = "span"
+		statements = [
+			`set(attributes["langfuse.user.id"], resource.attributes["host.name"]) where resource.attributes["host.name"] != nil`,
+			// Claude Code: prompt on the interaction span; model and usage on
+			// llm_request spans; tool arguments on tool spans.
+			`set(attributes["langfuse.observation.input"], attributes["user_prompt"]) where attributes["span.type"] == "interaction" and attributes["user_prompt"] != nil`,
+			`set(attributes["langfuse.observation.model.name"], attributes["model"]) where attributes["span.type"] == "llm_request" and attributes["model"] != nil`,
+			`set(attributes["gen_ai.usage.input_tokens"], attributes["input_tokens"]) where attributes["span.type"] == "llm_request" and attributes["input_tokens"] != nil`,
+			`set(attributes["gen_ai.usage.output_tokens"], attributes["output_tokens"]) where attributes["span.type"] == "llm_request" and attributes["output_tokens"] != nil`,
+			`set(attributes["gen_ai.usage.cache_read_input_tokens"], attributes["cache_read_tokens"]) where attributes["span.type"] == "llm_request" and attributes["cache_read_tokens"] != nil`,
+			`set(attributes["gen_ai.usage.cache_creation_input_tokens"], attributes["cache_creation_tokens"]) where attributes["span.type"] == "llm_request" and attributes["cache_creation_tokens"] != nil`,
+			`set(attributes["langfuse.observation.input"], attributes["tool_input"]) where attributes["span.type"] == "tool" and attributes["tool_input"] != nil`,
+			`set(attributes["langfuse.observation.input"], attributes["full_command"]) where attributes["span.type"] == "tool" and attributes["full_command"] != nil`,
+			// Codex: sessions are conversations; sampling requests are model calls.
+			// Codex traces carry no content; prompts, tool I/O and responses are
+			// in its Loki events.
+			`set(attributes["langfuse.session.id"], attributes["conversation.id"]) where attributes["conversation.id"] != nil`,
+			`set(attributes["langfuse.observation.type"], "generation") where name == "run_sampling_request"`,
+			`set(attributes["langfuse.observation.model.name"], attributes["model"]) where name == "run_sampling_request" and attributes["model"] != nil`,
+		]
+	}
+
+	trace_statements {
+		context    = "spanevent"
+		statements = [
+			// Claude Code: tool output arrives as a span event.
+			`set(span.attributes["langfuse.observation.output"], attributes["output"]) where name == "tool.output" and attributes["output"] != nil`,
+			// Codex: name tool spans after the tool.
+			`set(span.attributes["langfuse.observation.type"], "tool") where attributes["event.name"] == "codex.tool_result"`,
+			`set(span.name, Concat(["tool ", attributes["tool_name"]], "")) where attributes["event.name"] == "codex.tool_result" and attributes["tool_name"] != nil`,
+		]
+	}
+
+	output {
+		traces = [otelcol.processor.filter.codex_noise.input]
+	}
+}
+
+// Codex emits hundreds of internal spans per turn (file reads, tool-router
+// setup, rollout bookkeeping). Keep only turns, model calls and tool calls so
+// its Langfuse trees stay readable; Loki keeps every Codex event.
+otelcol.processor.filter "codex_noise" {
+	error_mode = "ignore"
+
+	traces {
+		span = [
+			`IsMatch(resource.attributes["service.name"], "^codex") and not IsMatch(name, "^(thread/start|turn/start|codex[.]turn_input|codex[.]sampling|run_sampling_request|tool .*|unified_exec[.]exec_command|codex[.]exec_server[.]http_request)$")`,
+		]
+	}
+
+	output {
+		traces = [otelcol.processor.batch.agents.input]
+	}
+}
+
+otelcol.processor.batch "agents" {
+	output {
+		logs    = [otelcol.exporter.otlphttp.loki.input]
+		metrics = [otelcol.exporter.otlphttp.prometheus.input]
+		traces  = [otelcol.exporter.otlphttp.langfuse.input]
+	}
+}
+
+// Accepted telemetry survives backend and Alloy restarts in an on-disk queue
+// (public-preview component; see --stability.level in compose.yaml).
+otelcol.storage.file "agents" {
+	directory = "/var/lib/alloy/data/otel-queue"
+}
+
+otelcol.exporter.otlphttp "loki" {
+	client {
+		endpoint = "http://loki:3100/otlp"
+	}
+
+	sending_queue {
+		storage = otelcol.storage.file.agents.handler
+	}
+}
+
+// Claude Code and Codex send delta metrics; Prometheus converts them to
+// cumulative (its otlp-deltatocumulative feature), so no conversion here.
+otelcol.exporter.otlphttp "prometheus" {
+	client {
+		endpoint = "http://prometheus:9090/api/v1/otlp"
+	}
+
+	sending_queue {
+		storage = otelcol.storage.file.agents.handler
+	}
+}
+
+// Langfuse project keys are Compose secrets from /opt/observability/secrets.
+local.file "langfuse_public_key" {
+	filename  = "/run/secrets/langfuse_public_key"
+	is_secret = false
+}
+
+local.file "langfuse_secret_key" {
+	filename  = "/run/secrets/langfuse_secret_key"
+	is_secret = true
+}
+
+otelcol.auth.basic "langfuse" {
+	username = string.trim_space(local.file.langfuse_public_key.content)
+	password = local.file.langfuse_secret_key.content
+}
+
+otelcol.exporter.otlphttp "langfuse" {
+	client {
+		endpoint = "http://langfuse-web:3000/api/public/otel"
+		auth     = otelcol.auth.basic.langfuse.handler
+		headers  = {
+			"x-langfuse-ingestion-version" = "4",
+		}
+	}
+
+	sending_queue {
+		storage = otelcol.storage.file.agents.handler
+	}
+}

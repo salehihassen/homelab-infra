@@ -1,8 +1,10 @@
-# Loki + Grafana + Alloy. Grafana (GRAFANA_DOMAIN) reads Loki over the stack
-# network; remote hosts push through the authenticated LOKI_DOMAIN Caddy site.
+# Loki + Grafana + Alloy + Prometheus. Grafana (GRAFANA_DOMAIN) reads Loki and
+# Prometheus over the stack network; remote hosts push logs through the
+# authenticated LOKI_DOMAIN Caddy site and agent telemetry (OTLP) through
+# OTEL_DOMAIN. Alloy forwards agent traces to Langfuse over its network.
 # Configuration files are tracked here; data stays in /opt/observability/data.
 x-stack:
-  requires: []
+  requires: [langfuse]
 
 x-logging: &default-logging
   driver: json-file
@@ -31,7 +33,7 @@ services:
     container_name: grafana
     image: grafana/grafana:13.2.2@sha256:ac461fb352abc50da10a51c7d02462e9c05488f11f53f14b3ad79a8145f638a0
     restart: unless-stopped
-    depends_on: [loki]
+    depends_on: [loki, prometheus]
     ports:
       - "127.0.0.1:13000:3000"
     environment:
@@ -63,20 +65,54 @@ services:
       - --server.http.listen-addr=0.0.0.0:12345
       - --storage.path=/var/lib/alloy/data
       - --disable-reporting
+      # otelcol.storage.file (the agent telemetry queue) is public-preview.
+      - --stability.level=public-preview
       - /etc/alloy/config.alloy
     restart: unless-stopped
     depends_on: [loki]
     ports:
       - "127.0.0.1:12345:12345"
+      # OTLP/HTTP for agent telemetry. Localhost only; remote writers use the
+      # authenticated OTEL_DOMAIN Caddy site.
+      - "127.0.0.1:4318:4318"
     environment:
       HOST_LABEL: ${HOST_LABEL:?Set HOST_LABEL in /opt/observability/.env}
+    secrets:
+      - langfuse_public_key
+      - langfuse_secret_key
     volumes:
       - ./alloy-config.alloy:/etc/alloy/config.alloy:ro
       - /opt/observability/data/alloy:/var/lib/alloy/data
       - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [observability, langfuse]
+    logging: *default-logging
+    mem_limit: 512m
+
+  prometheus:
+    container_name: prometheus
+    image: prom/prometheus:v3.15.0@sha256:efd719c99d83b060d9daefdcf00360461adf279f45ef5391f8d111892118753e
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=90d
+      - --web.enable-otlp-receiver
+      # Agents send delta-temporality metrics; store them as cumulative.
+      - --enable-feature=otlp-deltatocumulative
+    restart: unless-stopped
+    user: "1000:1000"
+    # No host port: Alloy writes and Grafana reads over the stack network.
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - /opt/observability/data/prometheus:/prometheus
     networks: [observability]
     logging: *default-logging
     mem_limit: 512m
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:9090/-/healthy"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
 networks:
   observability:
@@ -87,3 +123,8 @@ networks:
 secrets:
   grafana_admin_password:
     file: /opt/observability/secrets/grafana_admin_password
+  # Langfuse project keys, written without a trailing newline.
+  langfuse_public_key:
+    file: /opt/observability/secrets/langfuse_public_key
+  langfuse_secret_key:
+    file: /opt/observability/secrets/langfuse_secret_key

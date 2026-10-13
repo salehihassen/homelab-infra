@@ -1,0 +1,24 @@
+# Prometheus stores agent metrics that Alloy forwards over OTLP
+# (/api/v1/otlp); it scrapes only itself.
+global:
+  scrape_interval: 60s
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["127.0.0.1:9090"]
+
+# Keep these OTLP resource attributes as labels so metrics can be split by
+# machine, agent and environment.
+otlp:
+  promote_resource_attributes:
+    - service.name
+    - service.version
+    - host.name
+    - deployment.environment
+    - deployment.environment.name
+
+storage:
+  tsdb:
+    # Clients batch and retry; accept samples that arrive a little late.
+    out_of_order_time_window: 30m

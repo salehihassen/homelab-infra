@@ -25,3 +25,28 @@ https://{$LOKI_DOMAIN} {
 		respond "log push endpoint only; read logs via {$GRAFANA_DOMAIN}" 403
 	}
 }
+
+# OTLP/HTTP ingest for agent telemetry, tailnet-only like the other sites.
+https://{$OTEL_DOMAIN} {
+	bind {$CADDY_BIND_ADDRESSES}
+
+	# Write-only door: one Basic-auth account per writer, and only the three
+	# OTLP signal paths. Accounts are `<user> <bcrypt hash>` lines in untracked
+	# files under /opt/observability/otel-writers (see README). Reads stay
+	# behind Grafana and Langfuse logins.
+	@otlp path /v1/traces /v1/logs /v1/metrics
+	handle @otlp {
+		basic_auth {
+			import /etc/caddy/otel-writers/*.caddy
+		}
+		request_body {
+			max_size 16MB
+		}
+		reverse_proxy http://127.0.0.1:4318 {
+			header_up -Tailscale-*
+		}
+	}
+	handle {
+		respond "OTLP push endpoint only; read telemetry via {$GRAFANA_DOMAIN}" 403
+	}
+}

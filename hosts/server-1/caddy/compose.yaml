@@ -42,6 +42,8 @@ services:
         required: false
       - path: ../job-sentinel/${STACK_ROUTING_ENV_FILE:-routing.env}
         required: false
+      - path: ../langfuse/${STACK_ROUTING_ENV_FILE:-routing.env}
+        required: false
       - path: ../jobsmith/${STACK_ROUTING_ENV_FILE:-routing.env}
         required: false
       - path: ../komodo/${STACK_ROUTING_ENV_FILE:-routing.env}
@@ -72,6 +74,8 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       # Every stack's site.caddy, imported by the Caddyfile.
       - ..:/etc/caddy/stacks:ro
+      # OTLP writer accounts (`<user> <bcrypt hash>` lines) for OTEL_DOMAIN.
+      - /opt/observability/otel-writers:/etc/caddy/otel-writers:ro
       - /opt/caddy/data:/data
       - /opt/caddy/config:/config
     secrets:

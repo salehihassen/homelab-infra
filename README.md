@@ -28,7 +28,7 @@ hosts/server-1/
   env-files.tsv           # which repo symlink points at which /opt env file
 inventory.yaml            # service -> host alias, URL variable, data, backup, exposure
 RUNBOOK.md                # rebuild, restore, secrets, day-to-day operations
-docs/                     # backups format, archived services
+docs/                     # backups format, agent telemetry, archived services
 scripts/                  # validation, dependency/backup/private-identifier checks
 local/                    # untracked: real host names, domains, scan patterns
 ```
@@ -80,8 +80,9 @@ requiring it, or requires a stack it does not use. Current graph:
 
 | Stack | Requires |
 | --- | --- |
-| postgres, ai-gateway, caddy, observability, komodo, home-automation, protonmail-bridge, countdown, metube, job-sentinel | - |
-| quotes, forgejo | postgres |
+| postgres, ai-gateway, caddy, komodo, home-automation, protonmail-bridge, countdown, metube, job-sentinel | - |
+| quotes, forgejo, langfuse | postgres |
+| observability | langfuse |
 | jobsmith, condenseit, speakable | ai-gateway |
 | email-assist | postgres, ai-gateway, protonmail-bridge |
 

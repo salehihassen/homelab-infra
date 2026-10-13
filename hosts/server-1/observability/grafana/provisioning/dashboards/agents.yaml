@@ -1,0 +1,10 @@
+apiVersion: 1
+
+# Dashboards tracked beside this file; edits in the UI are not saved.
+providers:
+  - name: tracked
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    options:
+      path: /etc/grafana/provisioning/dashboards

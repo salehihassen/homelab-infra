@@ -43,10 +43,16 @@ stacks:
       backup: secrets only; certificates are reissued
       exposure: [tailnet, lan]   # the two Open WebUI redirects listen on all interfaces
     observability:
-      services: [loki, grafana, alloy]
-      urls: [GRAFANA_DOMAIN, LOKI_DOMAIN]
+      services: [loki, grafana, alloy, prometheus]
+      urls: [GRAFANA_DOMAIN, LOKI_DOMAIN, OTEL_DOMAIN]
       data: [/opt/observability]
-      backup: Grafana state + secrets; logs excluded
+      backup: Grafana state + secrets + OTLP writer accounts; logs and metrics excluded
+      exposure: [tailnet, loopback]
+    langfuse:
+      services: [langfuse-web, langfuse-worker, clickhouse, redis, minio]
+      urls: [LANGFUSE_DOMAIN]
+      data: [/opt/langfuse, /opt/clickhouse/data, /opt/redis/data, /opt/minio/data]
+      backup: env files + pg_dump; trace stores excluded (agent archive is canonical)
       exposure: [tailnet, loopback]
     home-automation:
       services: [homeassistant, zwavejs2mqtt]

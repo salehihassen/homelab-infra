@@ -15,6 +15,7 @@ repository for this deployment are in the untracked `local/site.md`.
 | Domains | `PRIVATE_ZONE` in `caddy/.env`; each service's `<NAME>_DOMAIN` in its stack's `routing.env` |
 | Backups | `/etc/infra-backup/backup.env` (restic repository, password and rclone config paths, host tag) |
 | DNS | Each `<name>.PRIVATE_ZONE` resolves to the host's Tailscale addresses (a wildcard record covers every name) |
+| Agent telemetry | OTLP writer accounts in `/opt/observability/otel-writers` (`scripts/otel-writer.sh`); client setup and archive in `docs/agent-telemetry.md` |
 
 ## Secrets
 
@@ -61,7 +62,8 @@ docker compose -f compose.yaml config -q
 
 The current allocation is `10.66.0.0/24` for observability, `.1` for home
 automation, `.2` for Postgres, and `.3` for Komodo. `.4` through `.7` are reserved
-and have no Docker networks. The other stack-private networks start at `.8`.
+and have no Docker networks. The other stack-private networks start at `.8`
+(Langfuse has `.15`).
 CPA's three subnet variables live in `ai-gateway/.env`; Forgejo CI's lives in
 `forgejo/.env`. Their existing ranges and static IPs are preserved.
 Keep every subnet disjoint from the other Docker networks and host routes;

@@ -21,6 +21,10 @@ include:
     env_file:
       - ai-gateway/${STACK_ENV_FILE:-.env}
       - ai-gateway/${STACK_ROUTING_ENV_FILE:-routing.env}
+  - path: langfuse/compose.yaml
+    env_file:
+      - langfuse/${STACK_ENV_FILE:-.env}
+      - langfuse/${STACK_ROUTING_ENV_FILE:-routing.env}
   - path: caddy/compose.yaml
     env_file:
       - caddy/${STACK_ENV_FILE:-.env}

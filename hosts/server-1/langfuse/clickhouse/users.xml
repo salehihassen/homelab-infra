@@ -1,0 +1,21 @@
+<!-- The Langfuse ClickHouse user. The password comes from CLICKHOUSE_PASSWORD
+     in /opt/langfuse/clickhouse.env; nothing secret is tracked here. -->
+<clickhouse>
+    <users>
+        <default remove="remove"/>
+        <langfuse>
+            <password from_env="CLICKHOUSE_PASSWORD"/>
+            <networks>
+                <ip>::/0</ip>
+            </networks>
+            <profile>default</profile>
+            <quota>default</quota>
+            <access_management>1</access_management>
+        </langfuse>
+    </users>
+    <profiles>
+        <default>
+            <max_threads>4</max_threads>
+        </default>
+    </profiles>
+</clickhouse>

@@ -28,6 +28,9 @@ paths:
   - /etc/ssh
   # Retired Shiori bookmark database (no running service).
   - /opt/shiori
+  # Agent session histories (Claude Code, Codex, pi) synced from tailnet
+  # machines: the canonical copy behind Langfuse traces. See langfuse/README.md.
+  - /opt/agent-archive
 
 sqlite:
   - /opt/shiori/shiori.db
@@ -50,9 +53,6 @@ exclude_patterns:
 # Retired services' data. Archived as one tarball only while no running
 # container uses it; the run fails if one does.
 offline:
-  - /opt/clickhouse
   - /opt/qdrant
-  - /opt/redis
-  - /opt/minio
   - /opt/ollama
   - /opt/mongodb_atlas

@@ -1,0 +1,177 @@
+# Langfuse: the AI-agent trace UI. Alloy (observability stack) forwards agent
+# OTLP traces here over the `langfuse` network; people use LANGFUSE_DOMAIN.
+# Postgres is a `langfuse` database in the shared cluster; ClickHouse, Redis
+# and MinIO run here on their own logical volumes under /opt/{clickhouse,redis,minio}.
+#
+# Provides to other stacks:
+#   network `langfuse` (opt_langfuse) - join it to reach `http://langfuse-web:3000`
+# Secrets are service env files under /opt/langfuse (0600); see README.md.
+x-stack:
+  requires: [postgres]
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+# Settings shared by langfuse-web and langfuse-worker. Credentials (database
+# URL, salts, keys, ClickHouse/Redis/MinIO passwords) come from
+# /opt/langfuse/langfuse.env.
+x-langfuse-env: &langfuse-env
+  NEXTAUTH_URL: https://${LANGFUSE_DOMAIN:?Set LANGFUSE_DOMAIN in langfuse/routing.env}
+  TELEMETRY_ENABLED: "false"
+  LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES: "false"
+  CLICKHOUSE_MIGRATION_URL: clickhouse://clickhouse:9000
+  CLICKHOUSE_URL: http://clickhouse:8123
+  CLICKHOUSE_CLUSTER_ENABLED: "false"
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+  LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
+  LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://minio:9000
+  LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+  LANGFUSE_S3_EVENT_UPLOAD_PREFIX: events/
+  # Media uploads stay on the internal endpoint; browsers never reach MinIO.
+  LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
+  LANGFUSE_S3_MEDIA_UPLOAD_REGION: auto
+  LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://minio:9000
+  LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
+  LANGFUSE_S3_MEDIA_UPLOAD_PREFIX: media/
+
+x-langfuse-depends: &langfuse-depends
+  postgres:
+    condition: service_healthy
+  clickhouse:
+    condition: service_healthy
+  redis:
+    condition: service_healthy
+  minio:
+    condition: service_healthy
+
+services:
+  langfuse-web:
+    container_name: langfuse-web
+    image: docker.langfuse.com/langfuse/langfuse:4.57.0@sha256:326f54d976d645f96868a64a5c98d98471ed73bf757d180a8cb4b94be750ffc1
+    restart: unless-stopped
+    depends_on: *langfuse-depends
+    env_file: /opt/langfuse/langfuse.env
+    environment:
+      <<: *langfuse-env
+      HOSTNAME: 0.0.0.0
+      AUTH_DISABLE_SIGNUP: "true"
+      # Node sizes its heap from the container limit (about half); startup
+      # needs more than 512 MB.
+      NODE_OPTIONS: --max-old-space-size=1536
+    ports:
+      # Loopback only; tailnet access is through Caddy (LANGFUSE_DOMAIN).
+      - "127.0.0.1:13010:3000"
+    networks: [langfuse, postgres_network]
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging
+    mem_limit: 2g
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:3000/api/public/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 120s
+
+  langfuse-worker:
+    container_name: langfuse-worker
+    image: docker.langfuse.com/langfuse/langfuse-worker:4.57.0@sha256:9bfad6a90ee9930070b635e80afa27249b400ac862851c4a04e62dfba874290d
+    restart: unless-stopped
+    depends_on: *langfuse-depends
+    env_file: /opt/langfuse/langfuse.env
+    environment: *langfuse-env
+    networks: [langfuse, postgres_network]
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging
+    mem_limit: 1g
+
+  clickhouse:
+    container_name: langfuse-clickhouse
+    image: clickhouse/clickhouse-server:25.12.11.4@sha256:8a790dd3468db22b1d4e7b18a176f378ff5ff6053b9c48dd4ea1fa71a24c5ba6
+    restart: unless-stopped
+    user: "1000:1000"
+    # CLICKHOUSE_PASSWORD; the user itself is defined in clickhouse/users.xml.
+    env_file: /opt/langfuse/clickhouse.env
+    environment:
+      CLICKHOUSE_SKIP_USER_SETUP: "1"
+    volumes:
+      - ./clickhouse/config.xml:/etc/clickhouse-server/config.d/homelab.xml:ro
+      - ./clickhouse/users.xml:/etc/clickhouse-server/users.d/homelab.xml:ro
+      - /opt/clickhouse/data/langfuse:/var/lib/clickhouse
+    networks: [langfuse]
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    logging: *default-logging
+    mem_limit: 2g
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  redis:
+    container_name: langfuse-redis
+    image: redis:7.4.11@sha256:4fa24486b8bcca8eec45ee0eb166edc674795e53a2b53d1a9ef263eecebaac85
+    restart: unless-stopped
+    user: "1000:1000"
+    # REDIS_AUTH (server password) and REDISCLI_AUTH (healthcheck) come from
+    # this file so neither appears in compose output or process arguments.
+    env_file: /opt/langfuse/redis.env
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        printf 'requirepass %s\n' "$$REDIS_AUTH" > /tmp/redis.conf
+        exec redis-server /tmp/redis.conf --maxmemory-policy noeviction --appendonly yes --dir /data
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=1m,uid=1000,gid=1000,mode=0700
+    volumes:
+      - /opt/redis/data/langfuse:/data
+    networks: [langfuse]
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging
+    mem_limit: 256m
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    container_name: langfuse-minio
+    image: cgr.dev/chainguard/minio:latest@sha256:dc455cdd4db6e390b1b26514f15ff37681a777bf8dab41aac445a0259f751e56
+    restart: unless-stopped
+    user: "1000:1000"
+    # MINIO_ROOT_USER / MINIO_ROOT_PASSWORD; Langfuse uses the same pair.
+    env_file: /opt/langfuse/minio.env
+    entrypoint: sh
+    # Create the bucket directory before starting the server.
+    command: -c 'mkdir -p /data/langfuse && exec minio server --address ":9000" --console-address ":9001" /data'
+    volumes:
+      - /opt/minio/data/langfuse:/data
+    networks: [langfuse]
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging
+    mem_limit: 512m
+    healthcheck:
+      # uid 1000 has no writable home; keep mc's config in /tmp.
+      test: ["CMD", "mc", "--config-dir", "/tmp/.mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+networks:
+  langfuse:
+    ipam:
+      config:
+        - subnet: ${LANGFUSE_SUBNET:?Set LANGFUSE_SUBNET in langfuse/.env}

@@ -94,6 +94,10 @@ PY
   # The real basic_auth hash lives in observability/routing.env; use a throwaway.
   ci_password_hash="$(docker run --rm --network none --read-only --entrypoint caddy \
     services-caddy-ci hash-password --plaintext ci-placeholder | base64 -w0)"
+  # OTLP writer accounts are untracked files on the host; use a throwaway one.
+  mkdir "$ci_secrets/otel-writers"
+  printf 'ci-writer %s\n' "$(printf '%s' "$ci_password_hash" | base64 -d)" \
+    > "$ci_secrets/otel-writers/ci.caddy"
   ci_routing_overrides=()
   ci_caddy() {
     docker run --rm --network none --read-only \
@@ -106,6 +110,7 @@ PY
       --mount "type=bind,src=$host_dir/caddy/Caddyfile,dst=/etc/caddy/Caddyfile,readonly" \
       --mount "type=bind,src=$host_dir/caddy/render-sites.sh,dst=/etc/caddy/render-sites.sh,readonly" \
       --mount "type=bind,src=$host_dir,dst=/etc/caddy/stacks,readonly" \
+      --mount "type=bind,src=$ci_secrets/otel-writers,dst=/etc/caddy/otel-writers,readonly" \
       --mount "type=bind,src=$ci_secrets/porkbun_api_key,dst=/run/secrets/porkbun_api_key,readonly" \
       --mount "type=bind,src=$ci_secrets/porkbun_api_secret_key,dst=/run/secrets/porkbun_api_secret_key,readonly" \
       --entrypoint /bin/sh services-caddy-ci /etc/caddy/render-sites.sh \

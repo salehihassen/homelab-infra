@@ -1,0 +1,9 @@
+# Langfuse UI and API, tailnet-only. Langfuse's own login protects it; agents
+# do not write here directly (they push OTLP to OTEL_DOMAIN, Alloy forwards).
+https://{$LANGFUSE_DOMAIN} {
+	bind {$CADDY_BIND_ADDRESSES}
+
+	reverse_proxy http://127.0.0.1:13010 {
+		header_up -Tailscale-*
+	}
+}

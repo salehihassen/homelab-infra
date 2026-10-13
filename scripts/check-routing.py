@@ -55,7 +55,22 @@ def loki_proxies(routes, paths=None, authenticated=False):
                 yield branch_paths, auth
 
 
-def check(config, loki_host, cpa_host, host_domain):
+def check_push_door(sites, host, name, allowed):
+    """A write-only ingress: Basic auth before every proxy, fixed paths, 403 otherwise."""
+    require(host in sites, f"Missing {name} ingress route")
+    boundaries = list(loki_proxies([sites[host]]))
+    require(boundaries, f"Missing {name} proxy")
+    for paths, auth in boundaries:
+        require(paths and paths <= allowed, f"{name} proxy permits paths outside {sorted(allowed)}")
+        require(auth, f"{name} proxy has no preceding Basic authentication")
+    require(set().union(*(paths for paths, _ in boundaries)) == allowed,
+            f"{name} ingress must preserve all of {sorted(allowed)}")
+    require(any(node.get("handler") == "static_response" and
+                str(node.get("status_code")) == "403" for node in nodes(sites[host])),
+            f"Missing {name} denial response")
+
+
+def check(config, loki_host, cpa_host, host_domain, otel_host):
     sites = {}
     wildcard_redirects = 0
     for server in config.get("apps", {}).get("http", {}).get("servers", {}).values():
@@ -87,18 +102,8 @@ def check(config, loki_host, cpa_host, host_domain):
                 str(node.get("status_code")) == "200" for node in nodes(sites[host_domain])),
             "Host identity route must serve a Caddy response")
 
-    require(loki_host in sites, "Missing Loki ingress route")
-    allowed = {"/loki/api/v1/push", "/ready"}
-    boundaries = list(loki_proxies([sites[loki_host]]))
-    require(boundaries, "Missing Loki proxy")
-    for paths, auth in boundaries:
-        require(paths and paths <= allowed, "Loki proxy permits paths outside push/readiness")
-        require(auth, "Loki proxy has no preceding Basic authentication")
-    require(set().union(*(paths for paths, _ in boundaries)) == allowed,
-            "Loki ingress must preserve both push and readiness")
-    require(any(node.get("handler") == "static_response" and
-                str(node.get("status_code")) == "403" for node in nodes(sites[loki_host])),
-            "Missing Loki denial response")
+    check_push_door(sites, loki_host, "Loki", {"/loki/api/v1/push", "/ready"})
+    check_push_door(sites, otel_host, "OTLP", {"/v1/traces", "/v1/logs", "/v1/metrics"})
 
     if cpa_host is not None:
         require(cpa_host in sites, "Missing direct CPA route")
@@ -111,7 +116,7 @@ def check(config, loki_host, cpa_host, host_domain):
                 "CPA v0 and v8 management denial must precede proxy")
         require(routes[0].get("handle") == [{"handler": "static_response", "status_code": 403}],
                 "CPA management paths must return 403")
-    print("Host identity, Caddy proxy listeners, and Loki path/auth boundary verified.")
+    print("Host identity, Caddy proxy listeners, and Loki/OTLP path/auth boundaries verified.")
     if cpa_host is not None:
         print("CPA management denial verified.")
     if wildcard_redirects:
@@ -130,7 +135,8 @@ if __name__ == "__main__":
                         if line and not line.startswith("#") and "=" in line)
         config = json.load(sys.stdin)
         cpa_host = None if args.absent_domain == "CPA_DOMAIN" else examples["CPA_DOMAIN"]
-        check(config, examples["LOKI_DOMAIN"], cpa_host, examples["CADDY_HOST_DOMAIN"])
+        check(config, examples["LOKI_DOMAIN"], cpa_host, examples["CADDY_HOST_DOMAIN"],
+              examples["OTEL_DOMAIN"])
         if args.absent_domain:
             domain = examples[args.absent_domain]
             require(not any(domain in node.get("host", []) for node in nodes(config)),

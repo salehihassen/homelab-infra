@@ -7,6 +7,10 @@ observability/.env	/opt/observability/.env
 -	/opt/postgresql/quotes.env
 -	/opt/forgejo/forgejo.env
 -	/opt/komodo/komodo.env
+-	/opt/langfuse/langfuse.env
+-	/opt/langfuse/clickhouse.env
+-	/opt/langfuse/redis.env
+-	/opt/langfuse/minio.env
 home-automation/.env	/opt/homeassistant/compose.env
 postgres/.env	/opt/postgresql/compose.env
 komodo/.env	/opt/komodo/compose.env
@@ -18,6 +22,7 @@ jobsmith/.env	/opt/jobsmith/compose.env
 metube/.env	/opt/metube/compose.env
 speakable/.env	/opt/speakable/compose.env
 ai-gateway/.env	/opt/cpa/compose.env
+langfuse/.env	/opt/langfuse/compose.env
 observability/routing.env	/opt/observability/routing.env
 home-automation/routing.env	/opt/homeassistant/routing.env
 postgres/routing.env	/opt/postgresql/routing.env
@@ -30,6 +35,7 @@ jobsmith/routing.env	/opt/jobsmith/routing.env
 metube/routing.env	/opt/metube/routing.env
 speakable/routing.env	/opt/speakable/routing.env
 ai-gateway/routing.env	/opt/cpa/routing.env
+langfuse/routing.env	/opt/langfuse/routing.env
 caddy/.env	/opt/caddy/compose.env
 quotes/.env	/opt/quotes/compose.env
 quotes/routing.env	/opt/quotes/routing.env

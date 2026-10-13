@@ -1,0 +1,14 @@
+# Nightly backup declaration for the langfuse stack; format in docs/backups.md.
+paths:
+  - /opt/langfuse/compose.env
+  - /opt/langfuse/routing.env
+  - /opt/langfuse/langfuse.env
+  - /opt/langfuse/clickhouse.env
+  - /opt/langfuse/redis.env
+  - /opt/langfuse/minio.env
+exclude:
+  /opt/clickhouse/data: trace store; rebuildable from the agent session archive
+  /opt/minio/data: raw ingestion events; rebuildable from the agent session archive
+  /opt/redis/data: transient ingestion queue
+postgres:
+  - langfuse
