@@ -7,6 +7,12 @@ automatic pairing, tailoring, and assisted form filling.
 Read the [Chromium extension security audit](EXTENSION_SECURITY_AUDIT.md) before
 installing the current extension build.
 
+The manual-entry rollout uses application revision `43df941`. **Add job
+manually** in Inbox and Pipeline accepts recruiter messages and referrals
+without a posting URL; entries can start in Inbox, Shortlisted, or Applied.
+The deployed tag and digest are set through this repository's `.env` symlink
+to `/opt/jobsmith/compose.env`, rather than a tracked image reference.
+
 - **Image:** published to GHCR by the application's GitHub Actions workflow.
   Set `JOBSMITH_IMAGE` in `.env` to the published image reference, preferably
   pinned by digest. From the host directory, run `docker compose pull jobsmith`,
