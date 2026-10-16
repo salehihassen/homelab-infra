@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Check everything a push would publish. Enabled with the pre-commit hook:
+#   git config core.hooksPath .githooks
+set -euo pipefail
+remote="$1"
+zero=0000000000000000000000000000000000000000
+tips=()
+while read -r _local_ref local_sha _remote_ref _remote_sha; do
+  [[ "${local_sha}" == "${zero}" ]] && continue  # branch deletion
+  tips+=("${local_sha}")
+done
+((${#tips[@]})) || exit 0
+
+# Every commit the remote does not already have, not only the tips.
+range=("${tips[@]}" --not "--remotes=${remote}")
+if [[ -z "$(git rev-list "${range[@]}")" ]]; then
+  exit 0
+fi
+bash scripts/check-private.sh --commits "${range[@]}"
+command -v gitleaks >/dev/null || { echo "pre-push: gitleaks is not installed" >&2; exit 1; }
+gitleaks detect --config .gitleaks.toml --redact --no-banner --exit-code 1 \
+  --log-opts="${range[*]}" .
+for tip in $(printf '%s\n' "${tips[@]}" | sort -u); do
+  echo "pre-push: validating ${tip:0:12}" >&2
+  bash scripts/validate-snapshot.sh "${tip}" all
+done

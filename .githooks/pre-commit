@@ -11,3 +11,6 @@ if git diff --cached --name-only --diff-filter=AM | grep -E '(^|/)(\.env|[^/]*\.
 fi
 # Real hostnames, domains and paths never enter Git (patterns: local/).
 bash scripts/check-private.sh --staged
+# Compose config, stack dependencies and unit tests on the staged snapshot;
+# the full suite runs before push.
+bash scripts/validate-snapshot.sh --index compose

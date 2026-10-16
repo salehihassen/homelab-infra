@@ -6,6 +6,9 @@
 #
 #   bash scripts/check-private.sh           # tracked and untracked, unignored files
 #   bash scripts/check-private.sh --staged  # the index (pre-commit hook)
+#   bash scripts/check-private.sh --commits <rev-list args>
+#                                           # every file each commit changes,
+#                                           # and its message (pre-push hook)
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
@@ -28,8 +31,18 @@ check() {  # name, content on stdin
 }
 if [[ "${1:-}" == "--staged" ]]; then
   while IFS= read -r -d '' file; do
-    git show ":${file}" | check "${file}"
+    check "${file}" < <(git show ":${file}")
   done < <(git diff --cached --name-only --diff-filter=ACMR -z)
+elif [[ "${1:-}" == "--commits" ]]; then
+  # A push publishes every commit, not just the tip: a later fix does not
+  # unpublish an identifier an earlier commit added.
+  shift
+  while IFS= read -r commit; do
+    check "commit ${commit:0:12} message" < <(git log -1 --format=%B "${commit}")
+    while IFS= read -r -d '' file; do
+      check "${commit:0:12}:${file}" < <(git show "${commit}:${file}")
+    done < <(git diff-tree --root --no-commit-id -r --name-only --diff-filter=ACMR -z "${commit}")
+  done < <(git rev-list "$@")
 else
   while IFS= read -r -d '' file; do
     [[ -f "${file}" && ! -L "${file}" ]] && check "${file}" < "${file}"

@@ -97,5 +97,15 @@ python3 hosts/server-1/backup/infra-backup-declared.py check --live   # backup c
 
 Requires Docker Compose **v5.5.1** (pinned in CI). The Caddy check enforces
 tailnet-only proxy listeners, Loki's authenticated push-only boundary, and the
-CPA management denial. Gitleaks runs in CI and as a pre-commit hook. Enable
-the hook once per clone with `git config core.hooksPath .githooks`.
+CPA management denial. Gitleaks runs in CI and in the Git hooks. Enable the
+hooks once per clone with `git config core.hooksPath .githooks`:
+
+- **pre-commit**: Gitleaks, env files and private identifiers on the staged
+  files, then `validate-stack.sh compose` on the staged snapshot.
+- **pre-push**: private identifiers and Gitleaks on every commit being pushed
+  (a later fix does not unpublish an earlier commit), then the full
+  `validate-stack.sh` on each pushed tip.
+
+The hooks run `scripts/validate-snapshot.sh`, which validates exactly what is
+staged or pushed and, when the local Compose differs from the pin, uses a
+checksum-verified v5.5.1 cached under `~/.cache/homelab-infra/`.
