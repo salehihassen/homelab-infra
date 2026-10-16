@@ -17,6 +17,13 @@ with the USB stick from `ZWAVE_DEVICE`.
 
 Image tags are pinned; Renovate proposes Home Assistant upgrades.
 
+## CondenseIt headlines
+
+The [CondenseIt integration runbook](condenseit-digest.md) describes the
+five-minute local API exporter, compact `sensor.condenseit_top_news` entity,
+and a built-in Markdown card to paste into a UI-managed dashboard. Credentials
+stay in host files; dashboard YAML and storage records stay untouched.
+
 ## Claude usage exporter
 
 `export-claude-usage.py` writes the Claude quota sample used by Home

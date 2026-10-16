@@ -3,6 +3,70 @@ logging {
 	format = "logfmt"
 }
 
+// Self-monitoring stays on the Docker networks. Prometheus scrapes Alloy's
+// own /metrics independently, so an Alloy outage remains detectable.
+prometheus.exporter.unix "telemetry_disks" {
+	set_collectors = ["filesystem"]
+
+	filesystem {
+		mount_points_exclude = "^/(dev|proc|sys|etc|run)($|/)"
+	}
+}
+
+prometheus.exporter.blackbox "telemetry_dependencies" {
+	config = `modules:
+  http_ready:
+    prober: http
+    timeout: 3s
+    http:
+      preferred_ip_protocol: ip4
+  tcp_ready:
+    prober: tcp
+    timeout: 3s
+`
+	targets = [
+		{"name" = "telemetry/langfuse", "address" = "http://langfuse-web:3000/api/public/health", "module" = "http_ready", "dependency" = "langfuse-web"},
+		{"name" = "telemetry/worker", "address" = "http://langfuse-worker:3030/api/health", "module" = "http_ready", "dependency" = "langfuse-worker"},
+		{"name" = "telemetry/clickhouse", "address" = "http://clickhouse:8123/ping", "module" = "http_ready", "dependency" = "clickhouse"},
+		{"name" = "telemetry/minio", "address" = "http://minio:9000/minio/health/ready", "module" = "http_ready", "dependency" = "minio"},
+		{"name" = "telemetry/redis", "address" = "redis:6379", "module" = "tcp_ready", "dependency" = "redis"},
+		{"name" = "telemetry/loki", "address" = "http://loki:3100/ready", "module" = "http_ready", "dependency" = "loki"},
+		{"name" = "telemetry/grafana", "address" = "http://grafana:3000/api/health", "module" = "http_ready", "dependency" = "grafana"},
+	]
+}
+
+prometheus.scrape "telemetry_disks" {
+	targets         = prometheus.exporter.unix.telemetry_disks.targets
+	job_name        = "telemetry/disks"
+	scrape_interval = "30s"
+	forward_to      = [prometheus.relabel.telemetry_disks.receiver]
+}
+
+prometheus.relabel "telemetry_disks" {
+	forward_to = [prometheus.remote_write.control_plane.receiver]
+
+	rule {
+		source_labels = ["mountpoint"]
+		regex         = "^(/telemetry-disks/.*|/var/lib/alloy/data)?$"
+		action        = "keep"
+	}
+}
+
+prometheus.scrape "telemetry_dependencies" {
+	targets         = prometheus.exporter.blackbox.telemetry_dependencies.targets
+	scrape_interval = "15s"
+	scrape_timeout  = "5s"
+	forward_to      = [prometheus.remote_write.control_plane.receiver]
+}
+
+prometheus.remote_write "control_plane" {
+	external_labels = {"host" = sys.env("HOST_LABEL"), "stack" = "ai-observability"}
+
+	endpoint {
+		url = "http://prometheus:9090/api/v1/write"
+	}
+}
+
 discovery.docker "local" {
 	host             = "unix:///var/run/docker.sock"
 	refresh_interval = "5s"
@@ -148,6 +212,27 @@ otelcol.processor.transform "redact" {
 // Each machine (host.name) becomes the Langfuse "user" for filtering.
 otelcol.processor.transform "langfuse" {
 	error_mode = "ignore"
+
+	// Normalize harness identity on every span from every host. Preserve raw
+	// service.name (also used by codex_noise) and explicit client identities.
+	// Application/workflow identity is separate: a service can launch a harness.
+	trace_statements {
+		context    = "span"
+		statements = [
+			`set(attributes["langfuse.trace.metadata.harness"], attributes["harness"]) where attributes["langfuse.trace.metadata.harness"] == nil and IsString(attributes["harness"])`,
+			`set(attributes["langfuse.trace.metadata.harness"], resource.attributes["langfuse.trace.metadata.harness"]) where attributes["langfuse.trace.metadata.harness"] == nil and IsString(resource.attributes["langfuse.trace.metadata.harness"])`,
+			`set(attributes["langfuse.trace.metadata.harness"], resource.attributes["harness"]) where attributes["langfuse.trace.metadata.harness"] == nil and IsString(resource.attributes["harness"])`,
+			`set(attributes["langfuse.trace.metadata.harness"], "claude-code") where attributes["langfuse.trace.metadata.harness"] == nil and resource.attributes["service.name"] == "claude-code"`,
+			`set(attributes["langfuse.trace.metadata.harness"], "codex") where attributes["langfuse.trace.metadata.harness"] == nil and (resource.attributes["service.name"] == "codex_cli_rs" or resource.attributes["service.name"] == "codex_exec")`,
+			`set(attributes["langfuse.trace.metadata.harness"], "pi") where attributes["langfuse.trace.metadata.harness"] == nil and resource.attributes["service.name"] == "pi"`,
+			// append preserves existing tags; membership makes repeated processing
+			// idempotent. Normalize a scalar string tag to the expected string[].
+			`set(cache["harness_tag"], Concat(["harness:", attributes["langfuse.trace.metadata.harness"]], "")) where IsString(attributes["langfuse.trace.metadata.harness"]) and attributes["langfuse.trace.metadata.harness"] != ""`,
+			`set(attributes["langfuse.trace.tags"], []) where cache["harness_tag"] != nil and attributes["langfuse.trace.tags"] == nil`,
+			`set(attributes["langfuse.trace.tags"], [attributes["langfuse.trace.tags"]]) where cache["harness_tag"] != nil and IsString(attributes["langfuse.trace.tags"])`,
+			`append(attributes["langfuse.trace.tags"], cache["harness_tag"]) where cache["harness_tag"] != nil and IsList(attributes["langfuse.trace.tags"]) and Index(attributes["langfuse.trace.tags"], cache["harness_tag"]) == -1`,
+		]
+	}
 
 	trace_statements {
 		context    = "span"

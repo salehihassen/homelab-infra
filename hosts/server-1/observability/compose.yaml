@@ -42,6 +42,9 @@ services:
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_ANALYTICS_REPORTING_ENABLED: "false"
       GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      # Per-process Go soft target, not the container cap. Leave headroom for
+      # datasource subprocesses, mmap/native memory and dashboard asset serving.
+      GOMEMLIMIT: 256MiB
     secrets:
       - grafana_admin_password
     volumes:
@@ -49,7 +52,8 @@ services:
       - /opt/observability/data/grafana:/var/lib/grafana
     networks: [observability]
     logging: *default-logging
-    mem_limit: 512m
+    # Repeated Agents page loads exhausted the former 512 MiB cgroup limit.
+    mem_limit: 1g
     healthcheck:
       test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:3000/api/health"]
       interval: 30s
@@ -83,6 +87,12 @@ services:
     volumes:
       - ./alloy-config.alloy:/etc/alloy/config.alloy:ro
       - /opt/observability/data/alloy:/var/lib/alloy/data
+      # Narrow read-only mounts for filesystem free-space checks, not backups.
+      - /opt/observability/data/loki:/telemetry-disks/loki:ro
+      - /opt/observability/data/prometheus:/telemetry-disks/prometheus:ro
+      - /opt/clickhouse/data/langfuse:/telemetry-disks/clickhouse:ro
+      - /opt/minio/data/langfuse:/telemetry-disks/minio:ro
+      - /opt/redis/data/langfuse:/telemetry-disks/redis:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks: [observability, langfuse]
     logging: *default-logging
@@ -96,6 +106,8 @@ services:
       - --storage.tsdb.path=/prometheus
       - --storage.tsdb.retention.time=90d
       - --web.enable-otlp-receiver
+      # Alloy's embedded health/filesystem exporters write over the private network.
+      - --web.enable-remote-write-receiver
       # Agents send delta-temporality metrics; store them as cumulative.
       - --enable-feature=otlp-deltatocumulative
     restart: unless-stopped
@@ -103,6 +115,7 @@ services:
     # No host port: Alloy writes and Grafana reads over the stack network.
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus-rules.yml:/etc/prometheus/prometheus-rules.yml:ro
       - /opt/observability/data/prometheus:/prometheus
     networks: [observability]
     logging: *default-logging

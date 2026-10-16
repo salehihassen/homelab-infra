@@ -70,8 +70,11 @@ jobs:
       - name: Validate Caddyfile
         run: bash scripts/validate-stack.sh caddy
 
-      - name: Check Alloy formatting
+      - name: Validate Alloy formatting and configuration
         run: bash scripts/validate-stack.sh alloy
+
+      - name: Validate Prometheus configuration and alert rules
+        run: bash scripts/validate-stack.sh prometheus
 
       - name: Validate Loki configuration
         run: bash scripts/validate-stack.sh loki

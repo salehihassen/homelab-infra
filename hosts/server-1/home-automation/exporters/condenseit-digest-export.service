@@ -1,0 +1,10 @@
+[Unit]
+Description=Export latest CondenseIt digest headlines for Home Assistant
+After=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/opt/homeassistant/secrets/condenseit-digest-export.env
+ExecStart=/usr/bin/python3 ${CONDENSEIT_DIGEST_EXPORTER}
+UMask=0077
+TimeoutStartSec=45

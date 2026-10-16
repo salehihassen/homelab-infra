@@ -71,6 +71,70 @@ application data.
 Prometheus data (`/opt/observability/data/prometheus`, owned by uid 1000) is
 on the root filesystem and is not backed up.
 
+### Grafana memory headroom
+
+Grafana has a 1 GiB container limit and `GOMEMLIMIT=256MiB`. The latter is a
+Go soft memory target inherited by each datasource subprocess, not a cap on
+their combined memory or on all RSS. Keep substantial space between that
+target and the container limit for plugins, mapped files and non-Go memory.
+
+On 2026-10-16, the former 512 MiB limit caused confirmed memory-cgroup OOM
+kills during repeated Agents dashboard loads. An isolated seven-day replay
+returned modest query responses (largest about 1.8 MB), then a subsequent
+browser load killed Grafana before any panel queries were sent. A Go target
+reduced pressure in the isolated comparison; the larger container budget
+provides additional headroom. This is a bounded mitigation, not proof that
+memory cannot grow under future workloads. Verify repeated browser loads,
+query errors, container restarts and cgroup `memory.events` after changes.
+Do not assume a later recovered `State.OOMKilled=false` means no earlier OOM:
+also inspect kernel logs and Docker events. A brief reverse-proxy 502 during
+an OOM restart is an effect, not necessarily a routing fault.
+
+After applying the mitigation, seven-day browser checks passed for all hosts
+and concurrent loads of the local and remote host filters: 168 datasource
+requests, no query failures, and no restarts or cgroup OOM events. The sampled
+container working-set peak during the concurrent check was 549 MiB, above
+the former limit and below the new 1 GiB budget. Recheck under normal use;
+this short replay does not establish a long-term memory-growth baseline.
+
+## Control-plane monitoring
+
+Grafana provisions **Telemetry health** from
+`grafana/provisioning/dashboards/telemetry-health.json`. Prometheus scrapes
+Alloy's own metrics every 15 seconds, independently of Alloy's export pipeline.
+Alloy's embedded exporters send private remote-write samples for seven
+dependency probes and six filesystem mounts:
+
+- Langfuse web and worker, ClickHouse, MinIO, Loki and Grafana HTTP readiness;
+  Redis TCP availability only (not an authenticated Redis command).
+- Loki, Prometheus, ClickHouse, MinIO, Redis and Alloy queue filesystems.
+  Alloy receives only narrow read-only data-directory mounts for the first
+  five; it does not mount the whole host filesystem for this check.
+
+`prometheus-rules.yml` evaluates collector/dependency outages, sustained
+backlogs, queue capacity, export/enqueue failures, receiver refusals, low disk
+space, filesystem read errors and missing probe/disk metrics. Most outage
+rules wait one minute; missing metrics wait two minutes and low disk space
+waits five. Export/refusal counters look back five minutes, so those alerts
+can remain active briefly after recovery. Queue size is exporter batches,
+not a count of spans or bytes.
+
+`grafana/provisioning/alerting/telemetry.yaml` bridges firing Prometheus alerts
+into Grafana every 20 seconds, preserving their original name in the `signal`
+label. Configure a contact point and notification policy in Grafana before
+expecting messages; no destination or credentials are provisioned here.
+Never commit contact-point secrets. This monitors a running control plane,
+not total host loss: use a separate host for independent availability checks.
+
+After changes, validate with `bash scripts/validate-stack.sh prometheus` and
+`bash scripts/validate-stack.sh alloy` using the CI-pinned Compose version.
+Rule regression fixtures in `prometheus-rules.test.yml` cover healthy, failing,
+missing-metric and recovered states. Apply only the affected containers;
+Grafana alert provisioning changes require its restart. A scoped recovery
+drill must restore the stopped service in a finally/trap handler, verify
+queued IDs downstream, queue drain, and alert firing/resolution. Do not fill
+production disks or stop databases to simulate failures.
+
 ## Security note
 
 Alloy mounts Docker's socket read-only so it can discover containers, labels, and

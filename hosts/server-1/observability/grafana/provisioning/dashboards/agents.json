@@ -61,7 +61,8 @@
    "fieldConfig": {
     "defaults": {
      "unit": "currencyUSD",
-     "decimals": 2
+     "decimals": 2,
+     "displayName": "Total cost"
     },
     "overrides": []
    },
@@ -107,7 +108,20 @@
      "unit": "short",
      "decimals": 0
     },
-    "overrides": []
+    "overrides": [
+     {
+      "matcher": {"id": "byFrameRefID", "options": "A"},
+      "properties": [{"id": "displayName", "value": "Claude Code"}]
+     },
+     {
+      "matcher": {"id": "byFrameRefID", "options": "B"},
+      "properties": [{"id": "displayName", "value": "Codex"}]
+     },
+     {
+      "matcher": {"id": "byFrameRefID", "options": "C"},
+      "properties": [{"id": "displayName", "value": "pi"}]
+     }
+    ]
    },
    "options": {
     "reduceOptions": {
@@ -156,6 +170,7 @@
    "id": 3,
    "type": "stat",
    "title": "Tool calls",
+   "description": "Failure counts use the harness tool-success field, not shell exit codes. A nonzero command exit may still be exported as a successful tool call; inspect its output in Loki.",
    "gridPos": {
     "x": 15,
     "y": 0,
@@ -171,7 +186,16 @@
      "unit": "short",
      "decimals": 0
     },
-    "overrides": []
+    "overrides": [
+     {
+      "matcher": {"id": "byFrameRefID", "options": "A"},
+      "properties": [{"id": "displayName", "value": "All agents"}]
+     },
+     {
+      "matcher": {"id": "byFrameRefID", "options": "B"},
+      "properties": [{"id": "displayName", "value": "Failed"}]
+     }
+    ]
    },
    "options": {
     "reduceOptions": {
@@ -543,7 +567,7 @@
       "type": "loki",
       "uid": "loki"
      },
-     "expr": "{service_name=~\"claude-code|codex.*|pi\",host_name=~\"$host\"} | event_name=~\"tool_result|codex.tool_result|pi.tool.execution.end|api_error|codex.api_request\" | success=\"false\" or level=~\"(?i)error\""
+     "expr": "{service_name=~\"claude-code|codex.*|pi\",host_name=~\"$host\"} | event_name=~\"tool_result|codex.tool_result|pi.tool.execution.end|api_error|codex.api_request\" | event_name=\"api_error\" or (success=\"false\" or level=~\"(?i)error\")"
     }
    ]
   }

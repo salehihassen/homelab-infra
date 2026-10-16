@@ -1,0 +1,10 @@
+[Unit]
+Description=Refresh CondenseIt digest headlines for Home Assistant
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=5min
+Unit=condenseit-digest-export.service
+
+[Install]
+WantedBy=timers.target

@@ -132,6 +132,29 @@ validate_alloy() {
   docker run --rm --network none --read-only \
     --mount "type=bind,src=$host_dir/observability/alloy-config.alloy,dst=/etc/alloy/config.alloy,readonly" \
     "$(service_image alloy)" fmt --test /etc/alloy/config.alloy
+  docker run --rm --network none --read-only \
+    --env HOST_LABEL=docker-host \
+    --mount "type=bind,src=$host_dir/observability/alloy-config.alloy,dst=/etc/alloy/config.alloy,readonly" \
+    "$(service_image alloy)" validate --stability.level=public-preview /etc/alloy/config.alloy
+  python3 scripts/test-harness-normalization.py --image "$(service_image alloy)"
+}
+
+validate_prometheus() {
+  local prometheus_image
+  prometheus_image="$(service_image prometheus)"
+  local -a prometheus_mounts=(
+    --mount "type=bind,src=$host_dir/observability/prometheus.yml,dst=/etc/prometheus/prometheus.yml,readonly"
+    --mount "type=bind,src=$host_dir/observability/prometheus-rules.yml,dst=/etc/prometheus/prometheus-rules.yml,readonly"
+    --mount "type=bind,src=$host_dir/observability/prometheus-rules.test.yml,dst=/etc/prometheus/prometheus-rules.test.yml,readonly"
+  )
+  docker run --rm --network none --read-only \
+    "${prometheus_mounts[@]}" \
+    --entrypoint promtool "$prometheus_image" check config /etc/prometheus/prometheus.yml
+  docker run --rm --network none --read-only \
+    "${prometheus_mounts[@]}" \
+    --tmpfs /tmp:rw,noexec,nosuid,size=64m \
+    --workdir /etc/prometheus --entrypoint promtool "$prometheus_image" \
+    test rules prometheus-rules.test.yml
 }
 
 validate_loki() {
@@ -149,6 +172,7 @@ case "${1:-all}" in
   caddy-build) build_caddy ;;
   caddy) validate_caddy ;;
   alloy) validate_alloy ;;
+  prometheus) validate_prometheus ;;
   loki) validate_loki ;;
   private) validate_private ;;
   all)
@@ -156,8 +180,9 @@ case "${1:-all}" in
     build_caddy
     validate_caddy
     validate_alloy
+    validate_prometheus
     validate_loki
     validate_private
     ;;
-  *) echo "Usage: bash scripts/validate-stack.sh [all|compose|caddy-build|caddy|alloy|loki|private]" >&2; exit 2 ;;
+  *) echo "Usage: bash scripts/validate-stack.sh [all|compose|caddy-build|caddy|alloy|prometheus|loki|private]" >&2; exit 2 ;;
 esac

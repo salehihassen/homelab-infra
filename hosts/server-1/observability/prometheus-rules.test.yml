@@ -1,0 +1,477 @@
+{
+  "rule_files": [
+    "prometheus-rules.yml"
+  ],
+  "evaluation_interval": "15s",
+  "tests": [
+    {
+      "name": "healthy: all ten alerts quiet",
+      "interval": "15s",
+      "input_series": [
+        {
+          "series": "node_filesystem_size_bytes{stack=\"ai-observability\",mountpoint=\"/telemetry-disks/clickhouse\"}",
+          "values": "1000+0x40"
+        },
+        {
+          "series": "node_filesystem_size_bytes{stack=\"ai-observability\",mountpoint=\"/telemetry-disks/minio\"}",
+          "values": "1000+0x40"
+        },
+        {
+          "series": "node_filesystem_size_bytes{stack=\"ai-observability\",mountpoint=\"/telemetry-disks/redis\"}",
+          "values": "1000+0x40"
+        },
+        {
+          "series": "node_filesystem_size_bytes{stack=\"ai-observability\",mountpoint=\"/telemetry-disks/loki\"}",
+          "values": "1000+0x40"
+        },
+        {
+          "series": "node_filesystem_size_bytes{stack=\"ai-observability\",mountpoint=\"/telemetry-disks/prometheus\"}",
+          "values": "1000+0x40"
+        },
+        {
+          "series": "node_filesystem_size_bytes{stack=\"ai-observability\",mountpoint=\"/var/lib/alloy/data\"}",
+          "values": "1000+0x40"
+        },
+        {
+          "series": "probe_success{stack=\"ai-observability\",dependency=\"langfuse-web\"}",
+          "values": "1+0x40"
+        },
+        {
+          "series": "probe_success{stack=\"ai-observability\",dependency=\"langfuse-worker\"}",
+          "values": "1+0x40"
+        },
+        {
+          "series": "probe_success{stack=\"ai-observability\",dependency=\"clickhouse\"}",
+          "values": "1+0x40"
+        },
+        {
+          "series": "probe_success{stack=\"ai-observability\",dependency=\"minio\"}",
+          "values": "1+0x40"
+        },
+        {
+          "series": "probe_success{stack=\"ai-observability\",dependency=\"redis\"}",
+          "values": "1+0x40"
+        },
+        {
+          "series": "probe_success{stack=\"ai-observability\",dependency=\"loki\"}",
+          "values": "1+0x40"
+        },
+        {
+          "series": "probe_success{stack=\"ai-observability\",dependency=\"grafana\"}",
+          "values": "1+0x40"
+        },
+        {
+          "series": "up{job=\"alloy\",instance=\"alloy:12345\"}",
+          "values": "1+0x40"
+        }
+      ],
+      "alert_rule_test": [
+        {
+          "eval_time": "6m",
+          "alertname": "TelemetryCollectorDown",
+          "exp_alerts": []
+        },
+        {
+          "eval_time": "6m",
+          "alertname": "TelemetryDependencyDown",
+          "exp_alerts": []
+        },
+        {
+          "eval_time": "6m",
+          "alertname": "TelemetryExporterBacklog",
+          "exp_alerts": []
+        },
+        {
+          "eval_time": "6m",
+          "alertname": "TelemetryExporterQueueNearCapacity",
+          "exp_alerts": []
+        },
+        {
+          "eval_time": "6m",
+          "alertname": "TelemetryExportFailure",
+          "exp_alerts": []
+        },
+        {
+          "eval_time": "6m",
+          "alertname": "TelemetryReceiverRefusal",
+          "exp_alerts": []
+        },
+        {
+          "eval_time": "6m",
+          "alertname": "TelemetryDiskLow",
+          "exp_alerts": []
+        },
+        {
+          "eval_time": "6m",
+          "alertname": "TelemetryFilesystemReadError",
+          "exp_alerts": []
+        },
+        {
+          "eval_time": "6m",
+          "alertname": "TelemetryDiskMetricsMissing",
+          "exp_alerts": []
+        },
+        {
+          "eval_time": "6m",
+          "alertname": "TelemetryDependencyMetricsMissing",
+          "exp_alerts": []
+        }
+      ]
+    },
+    {
+      "name": "collector unavailable",
+      "interval": "15s",
+      "input_series": [
+        {
+          "series": "up{job=\"alloy\",instance=\"alloy:12345\"}",
+          "values": "0+0x40"
+        }
+      ],
+      "alert_rule_test": [
+        {
+          "eval_time": "2m",
+          "alertname": "TelemetryCollectorDown",
+          "exp_alerts": [
+            {
+              "exp_labels": {
+                "alertname": "TelemetryCollectorDown",
+                "stack": "ai-observability",
+                "severity": "critical",
+                "job": "alloy",
+                "instance": "alloy:12345"
+              },
+              "exp_annotations": {
+                "summary": "Alloy self-monitoring scrape is unavailable"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "dependency outage",
+      "interval": "15s",
+      "input_series": [
+        {
+          "series": "probe_success{stack=\"ai-observability\",dependency=\"langfuse-web\"}",
+          "values": "0+0x40"
+        }
+      ],
+      "alert_rule_test": [
+        {
+          "eval_time": "2m",
+          "alertname": "TelemetryDependencyDown",
+          "exp_alerts": [
+            {
+              "exp_labels": {
+                "alertname": "TelemetryDependencyDown",
+                "stack": "ai-observability",
+                "severity": "critical",
+                "dependency": "langfuse-web"
+              },
+              "exp_annotations": {
+                "summary": "A telemetry dependency or its probe is unavailable"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "backlog persists",
+      "interval": "15s",
+      "input_series": [
+        {
+          "series": "otelcol_exporter_queue_size{job=\"alloy\",component_id=\"trace-exporter\",data_type=\"traces\"}",
+          "values": "24+0x40"
+        }
+      ],
+      "alert_rule_test": [
+        {
+          "eval_time": "2m",
+          "alertname": "TelemetryExporterBacklog",
+          "exp_alerts": [
+            {
+              "exp_labels": {
+                "alertname": "TelemetryExporterBacklog",
+                "stack": "ai-observability",
+                "severity": "warning",
+                "job": "alloy",
+                "component_id": "trace-exporter",
+                "data_type": "traces"
+              },
+              "exp_annotations": {
+                "summary": "Telemetry remains in an exporter queue"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "capacity reached",
+      "interval": "15s",
+      "input_series": [
+        {
+          "series": "otelcol_exporter_queue_size{job=\"alloy\",component_id=\"trace-exporter\",data_type=\"traces\"}",
+          "values": "800+0x40"
+        },
+        {
+          "series": "otelcol_exporter_queue_capacity{job=\"alloy\",component_id=\"trace-exporter\",data_type=\"traces\"}",
+          "values": "1000+0x40"
+        }
+      ],
+      "alert_rule_test": [
+        {
+          "eval_time": "2m",
+          "alertname": "TelemetryExporterQueueNearCapacity",
+          "exp_alerts": [
+            {
+              "exp_labels": {
+                "alertname": "TelemetryExporterQueueNearCapacity",
+                "stack": "ai-observability",
+                "severity": "critical",
+                "job": "alloy",
+                "component_id": "trace-exporter",
+                "data_type": "traces"
+              },
+              "exp_annotations": {
+                "summary": "Telemetry exporter queue is at least 80 percent full"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "refusal counter increments",
+      "interval": "15s",
+      "input_series": [
+        {
+          "series": "otelcol_receiver_refused_spans_total{job=\"alloy\"}",
+          "values": "0+1x40"
+        }
+      ],
+      "alert_rule_test": [
+        {
+          "eval_time": "2m",
+          "alertname": "TelemetryReceiverRefusal",
+          "exp_alerts": [
+            {
+              "exp_labels": {
+                "alertname": "TelemetryReceiverRefusal",
+                "stack": "ai-observability",
+                "severity": "critical"
+              },
+              "exp_annotations": {
+                "summary": "Alloy refused telemetry in the last five minutes"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "export counter increments",
+      "interval": "15s",
+      "input_series": [
+        {
+          "series": "otelcol_exporter_send_failed_log_records_total{job=\"alloy\"}",
+          "values": "0+1x40"
+        }
+      ],
+      "alert_rule_test": [
+        {
+          "eval_time": "2m",
+          "alertname": "TelemetryExportFailure",
+          "exp_alerts": [
+            {
+              "exp_labels": {
+                "alertname": "TelemetryExportFailure",
+                "stack": "ai-observability",
+                "severity": "critical"
+              },
+              "exp_annotations": {
+                "summary": "Telemetry export or enqueue failure occurred in the last five minutes"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "enqueue counter increments",
+      "interval": "15s",
+      "input_series": [
+        {
+          "series": "otelcol_exporter_enqueue_failed_metric_points_total{job=\"alloy\"}",
+          "values": "0+1x40"
+        }
+      ],
+      "alert_rule_test": [
+        {
+          "eval_time": "2m",
+          "alertname": "TelemetryExportFailure",
+          "exp_alerts": [
+            {
+              "exp_labels": {
+                "alertname": "TelemetryExportFailure",
+                "stack": "ai-observability",
+                "severity": "critical"
+              },
+              "exp_annotations": {
+                "summary": "Telemetry export or enqueue failure occurred in the last five minutes"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "disk nearly full even through readonly monitoring bind",
+      "interval": "15s",
+      "input_series": [
+        {
+          "series": "node_filesystem_size_bytes{stack=\"ai-observability\",mountpoint=\"/telemetry-disks/loki\"}",
+          "values": "1000+0x40"
+        },
+        {
+          "series": "node_filesystem_avail_bytes{stack=\"ai-observability\",mountpoint=\"/telemetry-disks/loki\"}",
+          "values": "100+0x40"
+        },
+        {
+          "series": "node_filesystem_readonly{stack=\"ai-observability\",mountpoint=\"/telemetry-disks/loki\"}",
+          "values": "1+0x40"
+        }
+      ],
+      "alert_rule_test": [
+        {
+          "eval_time": "6m",
+          "alertname": "TelemetryDiskLow",
+          "exp_alerts": [
+            {
+              "exp_labels": {
+                "alertname": "TelemetryDiskLow",
+                "stack": "ai-observability",
+                "severity": "warning",
+                "mountpoint": "/telemetry-disks/loki"
+              },
+              "exp_annotations": {
+                "summary": "Telemetry filesystem has less than 15 percent available"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "unreadable filesystem",
+      "interval": "15s",
+      "input_series": [
+        {
+          "series": "node_filesystem_device_error{stack=\"ai-observability\",mountpoint=\"/telemetry-disks/loki\"}",
+          "values": "1+0x40"
+        }
+      ],
+      "alert_rule_test": [
+        {
+          "eval_time": "2m",
+          "alertname": "TelemetryFilesystemReadError",
+          "exp_alerts": [
+            {
+              "exp_labels": {
+                "alertname": "TelemetryFilesystemReadError",
+                "stack": "ai-observability",
+                "severity": "critical",
+                "mountpoint": "/telemetry-disks/loki"
+              },
+              "exp_annotations": {
+                "summary": "Telemetry filesystem statistics cannot be read"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "missing filesystem metrics",
+      "interval": "15s",
+      "input_series": [],
+      "alert_rule_test": [
+        {
+          "eval_time": "3m",
+          "alertname": "TelemetryDiskMetricsMissing",
+          "exp_alerts": [
+            {
+              "exp_labels": {
+                "alertname": "TelemetryDiskMetricsMissing",
+                "stack": "ai-observability",
+                "severity": "critical"
+              },
+              "exp_annotations": {
+                "summary": "One or more of the six telemetry disk mounts is not monitored"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "missing probe metrics",
+      "interval": "15s",
+      "input_series": [],
+      "alert_rule_test": [
+        {
+          "eval_time": "3m",
+          "alertname": "TelemetryDependencyMetricsMissing",
+          "exp_alerts": [
+            {
+              "exp_labels": {
+                "alertname": "TelemetryDependencyMetricsMissing",
+                "stack": "ai-observability",
+                "severity": "critical"
+              },
+              "exp_annotations": {
+                "summary": "One or more of the seven dependency probes is missing"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "recovery resolves dependency alert",
+      "interval": "15s",
+      "input_series": [
+        {
+          "series": "probe_success{stack=\"ai-observability\",dependency=\"langfuse-web\"}",
+          "values": "0+0x6 1+0x30"
+        }
+      ],
+      "alert_rule_test": [
+        {
+          "eval_time": "3m",
+          "alertname": "TelemetryDependencyDown",
+          "exp_alerts": []
+        }
+      ]
+    },
+    {
+      "name": "collector recovery resolves",
+      "interval": "15s",
+      "input_series": [
+        {
+          "series": "up{job=\"alloy\",instance=\"alloy:12345\"}",
+          "values": "0+0x6 1+0x30"
+        }
+      ],
+      "alert_rule_test": [
+        {
+          "eval_time": "3m",
+          "alertname": "TelemetryCollectorDown",
+          "exp_alerts": []
+        }
+      ]
+    }
+  ]
+}

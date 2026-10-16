@@ -44,15 +44,22 @@ in the Langfuse UI, update those two files and recreate `alloy`.
 - Backed up: the env files and the `langfuse` Postgres database (users, projects,
   keys, settings).
 - Not backed up: ClickHouse (traces), MinIO (raw ingestion events) and Redis
-  (queue). The canonical record is the agent session archive in
-  `/opt/agent-archive` (backed up by `backup/host.yaml`); see
-  `docs/agent-telemetry.md`. Traces can be re-sent from it if needed.
-- Retention: keep about 90 days of traces. Check ClickHouse volume use in
-  Grafana or with `df -h /opt/clickhouse/data`.
+  (queue). Agent session histories are backed up in place on the collector or
+  synced to `/opt/agent-archive` for remote clients; see `docs/agent-telemetry.md`
+  and the host's backup declarations. No archive-to-OTLP replay or full trace
+  reconstruction has been implemented or tested. Losing these stores can lose
+  telemetry even when the original session history survives.
+- Retention: 90 days is a desired policy, not an enforced setting. This deployment
+  has no automatic Langfuse trace cleanup configured. Langfuse's built-in
+  self-hosted retention feature requires Enterprise; choose licensed cleanup or
+  a separately designed and tested OSS cleanup job before enabling deletion.
+  Watch the **Telemetry health** dashboard or `df -h /opt/clickhouse/data`.
 
 ## Restore
 
 Restore the env files and the `langfuse` database (see `postgres/README.md`),
 create the three data directories owned by uid 1000, then
-`docker compose up -d langfuse-web langfuse-worker`. Langfuse runs its
-Postgres and ClickHouse migrations on start.
+`docker compose up -d clickhouse redis minio langfuse-web langfuse-worker`.
+Langfuse runs its Postgres and ClickHouse migrations on start. This restores
+configuration and accounts, not the excluded traces or ingestion backlog.
+A full-stack disaster-recovery drill remains pending.

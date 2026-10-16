@@ -1,0 +1,83 @@
+groups:
+  - name: ai-observability
+    rules:
+      - alert: TelemetryCollectorDown
+        expr: up{job="alloy"} == 0
+        for: 1m
+        labels:
+          stack: ai-observability
+          severity: critical
+        annotations:
+          summary: Alloy self-monitoring scrape is unavailable
+      - alert: TelemetryDependencyDown
+        expr: probe_success{stack="ai-observability"} == 0 or up{stack="ai-observability",job=~"integrations/blackbox/telemetry/.*"} == 0
+        for: 1m
+        labels:
+          stack: ai-observability
+          severity: critical
+        annotations:
+          summary: A telemetry dependency or its probe is unavailable
+      - alert: TelemetryExporterBacklog
+        expr: otelcol_exporter_queue_size{job="alloy"} > 0
+        for: 1m
+        labels:
+          stack: ai-observability
+          severity: warning
+        annotations:
+          summary: Telemetry remains in an exporter queue
+      - alert: TelemetryExporterQueueNearCapacity
+        expr: otelcol_exporter_queue_size{job="alloy"} / otelcol_exporter_queue_capacity{job="alloy"} >= 0.8
+        for: 1m
+        labels:
+          stack: ai-observability
+          severity: critical
+        annotations:
+          summary: Telemetry exporter queue is at least 80 percent full
+      - alert: TelemetryExportFailure
+        expr: sum(increase(otelcol_exporter_send_failed_spans_total{job="alloy"}[5m])) > 0 or sum(increase(otelcol_exporter_send_failed_log_records_total{job="alloy"}[5m])) > 0 or sum(increase(otelcol_exporter_send_failed_metric_points_total{job="alloy"}[5m])) > 0 or sum(increase(otelcol_exporter_enqueue_failed_spans_total{job="alloy"}[5m])) > 0 or sum(increase(otelcol_exporter_enqueue_failed_log_records_total{job="alloy"}[5m])) > 0 or sum(increase(otelcol_exporter_enqueue_failed_metric_points_total{job="alloy"}[5m])) > 0
+        labels:
+          stack: ai-observability
+          severity: critical
+        annotations:
+          summary: Telemetry export or enqueue failure occurred in the last five minutes
+      - alert: TelemetryReceiverRefusal
+        expr: sum(increase(otelcol_receiver_refused_spans_total{job="alloy"}[5m])) > 0 or sum(increase(otelcol_receiver_refused_log_records_total{job="alloy"}[5m])) > 0 or sum(increase(otelcol_receiver_refused_metric_points_total{job="alloy"}[5m])) > 0
+        labels:
+          stack: ai-observability
+          severity: critical
+        annotations:
+          summary: Alloy refused telemetry in the last five minutes
+      - alert: TelemetryDiskLow
+        # The exporter sees read-only bind mounts; the owning stores write to
+        # the same backing filesystems, so do not exclude readonly=1 here.
+        expr: node_filesystem_avail_bytes{stack="ai-observability"} / node_filesystem_size_bytes{stack="ai-observability"} < 0.15
+        for: 5m
+        labels:
+          stack: ai-observability
+          severity: warning
+        annotations:
+          summary: Telemetry filesystem has less than 15 percent available
+      - alert: TelemetryFilesystemReadError
+        expr: node_filesystem_device_error{stack="ai-observability"} != 0
+        for: 1m
+        labels:
+          stack: ai-observability
+          severity: critical
+        annotations:
+          summary: Telemetry filesystem statistics cannot be read
+      - alert: TelemetryDiskMetricsMissing
+        expr: count(node_filesystem_size_bytes{stack="ai-observability"}) < 6 or absent(node_filesystem_size_bytes{stack="ai-observability"})
+        for: 2m
+        labels:
+          stack: ai-observability
+          severity: critical
+        annotations:
+          summary: One or more of the six telemetry disk mounts is not monitored
+      - alert: TelemetryDependencyMetricsMissing
+        expr: count(probe_success{stack="ai-observability"}) < 7 or absent(probe_success{stack="ai-observability"})
+        for: 2m
+        labels:
+          stack: ai-observability
+          severity: critical
+        annotations:
+          summary: One or more of the seven dependency probes is missing

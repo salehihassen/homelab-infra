@@ -7,8 +7,8 @@ paths:
   - /opt/langfuse/redis.env
   - /opt/langfuse/minio.env
 exclude:
-  /opt/clickhouse/data: trace store; rebuildable from the agent session archive
-  /opt/minio/data: raw ingestion events; rebuildable from the agent session archive
+  /opt/clickhouse/data: trace store excluded by policy; archive-to-trace replay is not implemented or verified
+  /opt/minio/data: raw ingestion events excluded by policy; archive-to-trace replay is not implemented or verified
   /opt/redis/data: transient ingestion queue
 postgres:
   - langfuse
