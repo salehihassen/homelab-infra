@@ -18,7 +18,12 @@ services:
         export CONDENSEIT_AUTH_PASSWORD="$$(cat /run/secrets/condenseit_auth_password)"
         export DIGEST_PWA_SESSION_SECRET="$$(cat /run/secrets/condenseit_session_secret)"
         export OPENAI_API_KEY="$$(cat /run/secrets/condenseit_cpa_key)"
+        if [ "$${CONDENSEIT_OTEL_ENABLED:-false}" = true ]; then
+          export OTEL_EXPORTER_OTLP_HEADERS="$$(python -c 'import base64; from pathlib import Path; print("Authorization=Basic%20" + base64.b64encode(Path("/run/secrets/condenseit_otel_writer").read_bytes().strip()).decode())')"
+        fi
         exec condenseit serve --host 0.0.0.0 --port 8899
+    env_file:
+      - /opt/condenseit/telemetry.env
     environment:
       CONDENSEIT_CONFIG: /app/config.yaml
       CONDENSEIT_DATA_DIR: /app/data
@@ -37,6 +42,8 @@ services:
         target: condenseit_session_secret
       - source: condenseit_cpa_key
         target: condenseit_cpa_key
+      - source: condenseit_otel_writer
+        target: condenseit_otel_writer
     networks:
       - condenseit
       - cpa_policy_model
@@ -79,3 +86,5 @@ secrets:
     file: /opt/condenseit/secrets/session-secret
   condenseit_cpa_key:
     file: /opt/condenseit/secrets/cpa-client-key
+  condenseit_otel_writer:
+    file: /opt/condenseit/secrets/otel-writer

@@ -472,6 +472,124 @@
           "exp_alerts": []
         }
       ]
+    },
+    {
+      "name": "daily digest recent",
+      "interval": "1h",
+      "input_series": [
+        {
+          "series": "condenseit_digest_last_success_seconds{service_name=\"condenseit\",deployment_environment_name=\"production\",host_name=\"source-host\"}",
+          "values": "3600+3600x30"
+        }
+      ],
+      "alert_rule_test": [
+        {
+          "eval_time": "29h",
+          "alertname": "CondenseitDigestStale",
+          "exp_alerts": []
+        }
+      ]
+    },
+    {
+      "name": "digest stale after daily tolerance",
+      "interval": "1h",
+      "input_series": [
+        {
+          "series": "condenseit_digest_last_success_seconds{service_name=\"condenseit\",deployment_environment_name=\"production\",host_name=\"source-host\"}",
+          "values": "3600+0x30"
+        }
+      ],
+      "alert_rule_test": [
+        {
+          "eval_time": "29h",
+          "alertname": "CondenseitDigestStale",
+          "exp_alerts": [
+            {
+              "exp_labels": {
+                "host_name": "source-host",
+                "stack": "ai-observability",
+                "severity": "warning",
+                "application": "condenseit"
+              },
+              "exp_annotations": {
+                "summary": "Condenseit has not reported a successful digest for over 27 hours"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "restart zero retains recent success",
+      "interval": "1h",
+      "input_series": [
+        {
+          "series": "condenseit_digest_last_success_seconds{service_name=\"condenseit\",deployment_environment_name=\"production\",host_name=\"source-host\"}",
+          "values": "0 3600 0+0x10"
+        }
+      ],
+      "alert_rule_test": [
+        {
+          "eval_time": "6h",
+          "alertname": "CondenseitDigestStale",
+          "exp_alerts": []
+        }
+      ]
+    },
+    {
+      "name": "missing app telemetry",
+      "interval": "1m",
+      "input_series": [],
+      "alert_rule_test": [
+        {
+          "eval_time": "16m",
+          "alertname": "CondenseitTelemetryMissing",
+          "exp_alerts": [
+            {
+              "exp_labels": {
+                "service_name": "condenseit",
+                "deployment_environment_name": "production",
+                "stack": "ai-observability",
+                "severity": "warning",
+                "application": "condenseit"
+              },
+              "exp_annotations": {
+                "summary": "Condenseit freshness telemetry is missing"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "acceptance fixture cannot satisfy production freshness",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "condenseit_digest_last_success_seconds{service_name=\"condenseit\",deployment_environment_name=\"acceptance\"}",
+          "values": "3600+0x20"
+        }
+      ],
+      "alert_rule_test": [
+        {
+          "eval_time": "16m",
+          "alertname": "CondenseitTelemetryMissing",
+          "exp_alerts": [
+            {
+              "exp_labels": {
+                "service_name": "condenseit",
+                "deployment_environment_name": "production",
+                "stack": "ai-observability",
+                "severity": "warning",
+                "application": "condenseit"
+              },
+              "exp_annotations": {
+                "summary": "Condenseit freshness telemetry is missing"
+              }
+            }
+          ]
+        }
+      ]
     }
   ]
 }
