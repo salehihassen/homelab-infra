@@ -11,8 +11,8 @@ its own repository and set as `CONDENSEIT_IMAGE` in `.env`.
 
 ## Telemetry
 
-The image must contain the fork's optional telemetry change and be built with
-`CONDENSEIT_EXTRAS=telemetry`. Pin the published image by digest in the private
+The image includes telemetry dependencies; export is enabled through runtime
+settings. Pin the published image by digest in the private
 `/opt/condenseit/compose.env`. Application instrumentation is maintained in the
 application fork, on an upstream-compatible `feat/optional-otel` branch; image
 publishing integration lives on `deploy/condenseit-otel`. Neither requires
