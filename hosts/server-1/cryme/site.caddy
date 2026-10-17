@@ -1,0 +1,8 @@
+# Experimental game, deployed separately from the main Compose project.
+https://cryme.{$PRIVATE_ZONE} {
+	bind {$CADDY_BIND_ADDRESSES}
+
+	reverse_proxy http://127.0.0.1:8910 {
+		header_up -Tailscale-*
+	}
+}
