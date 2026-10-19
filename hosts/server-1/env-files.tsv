@@ -1,6 +1,8 @@
 # Runtime env files: they live only on the host and in its restic backups.
 # Repo symlink (- when compose reads the file directly)	File on the host
 .env	/opt/.env
+media-extract/.env	/opt/media-extract/compose.env
+-	/opt/media-extract/vpn.env
 observability/.env	/opt/observability/.env
 -	/opt/postgresql/postgres18.env
 -	/opt/postgres.env

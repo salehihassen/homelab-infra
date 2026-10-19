@@ -37,6 +37,9 @@ include:
       - komodo/${STACK_ENV_FILE:-.env}
       - komodo/${STACK_ROUTING_ENV_FILE:-routing.env}
   # Home.
+  - path: media-extract/compose.yaml
+    env_file:
+      - media-extract/${STACK_ENV_FILE:-.env}
   - path: home-automation/compose.yaml
     env_file:
       - home-automation/${STACK_ENV_FILE:-.env}

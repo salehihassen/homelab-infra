@@ -1,0 +1,3 @@
+# Opt-in reader workaround. Replace only in a private installed copy, never Git.
+# Must run before 60-persistent-storage.rules; keeps identity/by-id rules enabled.
+SUBSYSTEM=="block", KERNEL=="sr*", SUBSYSTEMS=="usb", ATTRS{serial}=="replace-with-reader-serial", ENV{UDEV_DISABLE_PERSISTENT_STORAGE_BLKID_FLAG}="1"

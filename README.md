@@ -1,9 +1,10 @@
 # Homelab infra
 
 Deployment source of truth for a small self-hosted fleet: Docker Compose,
-Caddy, DNS-01 certificates, and Tailscale. Every service is reachable only
-from the tailnet at `https://<name>.<PRIVATE_ZONE>`; the zone and each
-service's hostname are set in env files, never in Git.
+Caddy, DNS-01 certificates, and Tailscale. Routed services use tailnet HTTPS
+at `https://<name>.<PRIVATE_ZONE>`; the zone and each service's hostname are
+set in env files, never in Git. Intentional LAN and loopback-only listeners
+are recorded in `inventory.yaml`; the media stack preserves Jellyfin's LAN HTTP.
 
 Hosts appear under neutral aliases (`server-1`, ...). Application source lives
 in its own repositories; images are referenced through each stack's env file.
@@ -80,7 +81,7 @@ requiring it, or requires a stack it does not use. Current graph:
 
 | Stack | Requires |
 | --- | --- |
-| postgres, ai-gateway, caddy, komodo, home-automation, protonmail-bridge, countdown, metube, job-sentinel | - |
+| postgres, ai-gateway, caddy, komodo, home-automation, protonmail-bridge, countdown, metube, job-sentinel, media-extract | - |
 | quotes, forgejo, langfuse | postgres |
 | observability | langfuse |
 | jobsmith, condenseit, speakable | ai-gateway |

@@ -24,6 +24,13 @@ hosts:
 
 stacks:
   server-1:
+    media-extract:
+      services: [gluetun, qbittorrent, prowlarr, flaresolverr, sonarr, radarr, jellyfin, makemkv, handbrake]
+      urls: []
+      data: [/opt/media-extract, MEDIA_TORRENT_ROOT, MEDIA_RIP_ROOT]
+      backup: config + SQLite copies + auxiliary state; all media payload excluded
+      exposure: [loopback, lan]   # only Jellyfin HTTP on 8096 is LAN-published
+      hardware: optical reader (MEDIA_DVD_DEVICE, MEDIA_DVD_SG_DEVICE); rip profile
     postgres:
       services: [postgres, pgadmin, pg-deprecated]
       urls: [PGADMIN_DOMAIN]
@@ -134,6 +141,5 @@ stacks:
 
   # Running on server-1 but outside hosts/server-1 (development or separately owned).
   server-1-unmanaged:
-    media-extract: {path: ~/apps/media-extract, note: own compose project; config backed up, media excluded}
     t3code: {path: ~/apps/t3code, note: host process on 3773, routed by caddy (T3C_DOMAIN)}
     demos: {note: condenseit-pr1-demo, model-a/b-surface-select, jobsmith-*-demo containers}

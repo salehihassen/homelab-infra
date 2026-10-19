@@ -1,0 +1,348 @@
+services:
+  gluetun:
+    image: ${MEDIA_GLUETUN_IMAGE:?Set MEDIA_GLUETUN_IMAGE in media-extract/.env}
+    container_name: media-gluetun
+    restart: unless-stopped
+    cap_add:
+    - NET_ADMIN
+    devices:
+    - source: /dev/net/tun
+      target: /dev/net/tun
+      permissions: rwm
+    environment:
+      TZ: ${TZ:-Etc/UTC}
+      FIREWALL_INPUT_PORTS: '8080'
+    volumes:
+    - type: bind
+      source: /opt/media-extract/config/gluetun
+      target: /gluetun
+      read_only: false
+      bind:
+        create_host_path: false
+    ports:
+    - mode: ingress
+      host_ip: 127.0.0.1
+      target: 8080
+      published: '8080'
+      protocol: tcp
+    networks:
+    - media
+    healthcheck:
+      test:
+      - CMD
+      - /gluetun-entrypoint
+      - healthcheck
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    env_file:
+    - path: ${MEDIA_VPN_ENV_FILE:-/opt/media-extract/vpn.env}
+      format: raw
+  qbittorrent:
+    image: ${MEDIA_QBITTORRENT_IMAGE:?Set MEDIA_QBITTORRENT_IMAGE in media-extract/.env}
+    container_name: media-qbittorrent
+    restart: unless-stopped
+    network_mode: service:gluetun
+    depends_on:
+      gluetun:
+        condition: service_healthy
+    environment:
+      PUID: ${MEDIA_PUID:?Set MEDIA_PUID in media-extract/.env}
+      PGID: ${MEDIA_PGID:?Set MEDIA_PGID in media-extract/.env}
+      TZ: ${TZ:-America/New_York}
+      WEBUI_PORT: 8080
+      TORRENTING_PORT: '6881'
+    volumes:
+    - type: bind
+      source: /opt/media-extract/config/qbittorrent
+      target: /config
+      read_only: false
+      bind:
+        create_host_path: false
+    - type: bind
+      source: ${MEDIA_TORRENT_ROOT:?Set MEDIA_TORRENT_ROOT in media-extract/.env}
+      target: /data/torrent
+      read_only: false
+      bind:
+        create_host_path: false
+  prowlarr:
+    restart: unless-stopped
+    environment:
+      PUID: ${MEDIA_PUID:?Set MEDIA_PUID in media-extract/.env}
+      PGID: ${MEDIA_PGID:?Set MEDIA_PGID in media-extract/.env}
+      TZ: ${TZ:-America/New_York}
+    networks: &id001
+    - media
+    image: ${MEDIA_PROWLARR_IMAGE:?Set MEDIA_PROWLARR_IMAGE in media-extract/.env}
+    container_name: media-prowlarr
+    ports:
+    - mode: ingress
+      host_ip: 127.0.0.1
+      target: 9696
+      published: '9696'
+      protocol: tcp
+    volumes:
+    - type: bind
+      source: /opt/media-extract/config/prowlarr
+      target: /config
+      read_only: false
+      bind:
+        create_host_path: false
+  flaresolverr:
+    image: ${MEDIA_FLARESOLVERR_IMAGE:?Set MEDIA_FLARESOLVERR_IMAGE in media-extract/.env}
+    container_name: media-flaresolverr
+    restart: unless-stopped
+    environment:
+      LOG_LEVEL: info
+      TZ: ${TZ:-America/New_York}
+    networks:
+    - media
+    volumes:
+    - type: bind
+      source: /opt/media-extract/aux/flaresolverr-config
+      target: /config
+      read_only: false
+      bind:
+        create_host_path: false
+  sonarr:
+    restart: unless-stopped
+    environment:
+      PUID: ${MEDIA_PUID:?Set MEDIA_PUID in media-extract/.env}
+      PGID: ${MEDIA_PGID:?Set MEDIA_PGID in media-extract/.env}
+      TZ: ${TZ:-America/New_York}
+    networks: *id001
+    image: ${MEDIA_SONARR_IMAGE:?Set MEDIA_SONARR_IMAGE in media-extract/.env}
+    container_name: media-sonarr
+    ports:
+    - mode: ingress
+      host_ip: 127.0.0.1
+      target: 8989
+      published: '8989'
+      protocol: tcp
+    volumes:
+    - type: bind
+      source: /opt/media-extract/config/sonarr
+      target: /config
+      read_only: false
+      bind:
+        create_host_path: false
+    - type: bind
+      source: ${MEDIA_TORRENT_ROOT:?Set MEDIA_TORRENT_ROOT in media-extract/.env}
+      target: /data/torrent
+      read_only: true
+      bind:
+        create_host_path: false
+    - type: bind
+      source: /opt/media-extract/data/handbrake/output
+      target: /data/import/handbrake
+      read_only: true
+      bind:
+        create_host_path: false
+    - type: bind
+      source: ${MEDIA_RIP_ROOT:?Set MEDIA_RIP_ROOT in media-extract/.env}/output
+      target: /data/import/makemkv
+      read_only: true
+      bind:
+        create_host_path: false
+    - type: bind
+      source: /opt/media-extract/data/media/tv
+      target: /data/media/tv
+      read_only: false
+      bind:
+        create_host_path: false
+  radarr:
+    restart: unless-stopped
+    environment:
+      PUID: ${MEDIA_PUID:?Set MEDIA_PUID in media-extract/.env}
+      PGID: ${MEDIA_PGID:?Set MEDIA_PGID in media-extract/.env}
+      TZ: ${TZ:-America/New_York}
+    networks: *id001
+    image: ${MEDIA_RADARR_IMAGE:?Set MEDIA_RADARR_IMAGE in media-extract/.env}
+    container_name: media-radarr
+    ports:
+    - mode: ingress
+      host_ip: 127.0.0.1
+      target: 7878
+      published: '7878'
+      protocol: tcp
+    volumes:
+    - type: bind
+      source: /opt/media-extract/config/radarr
+      target: /config
+      read_only: false
+      bind:
+        create_host_path: false
+    - type: bind
+      source: ${MEDIA_TORRENT_ROOT:?Set MEDIA_TORRENT_ROOT in media-extract/.env}
+      target: /data/torrent
+      read_only: true
+      bind:
+        create_host_path: false
+    - type: bind
+      source: /opt/media-extract/data/handbrake/output
+      target: /data/import/handbrake
+      read_only: true
+      bind:
+        create_host_path: false
+    - type: bind
+      source: ${MEDIA_RIP_ROOT:?Set MEDIA_RIP_ROOT in media-extract/.env}/output
+      target: /data/import/makemkv
+      read_only: true
+      bind:
+        create_host_path: false
+    - type: bind
+      source: /opt/media-extract/data/media/movies
+      target: /data/media/movies
+      read_only: false
+      bind:
+        create_host_path: false
+  jellyfin:
+    restart: unless-stopped
+    environment:
+      PUID: ${MEDIA_PUID:?Set MEDIA_PUID in media-extract/.env}
+      PGID: ${MEDIA_PGID:?Set MEDIA_PGID in media-extract/.env}
+      TZ: ${TZ:-America/New_York}
+    networks: *id001
+    image: ${MEDIA_JELLYFIN_IMAGE:?Set MEDIA_JELLYFIN_IMAGE in media-extract/.env}
+    container_name: media-jellyfin
+    ports:
+    - mode: ingress
+      host_ip: 0.0.0.0
+      target: 8096
+      published: '8096'
+      protocol: tcp
+    volumes:
+    - type: bind
+      source: /opt/media-extract/data/jellyfin/cache
+      target: /cache
+      read_only: false
+      bind:
+        create_host_path: false
+    - type: bind
+      source: /opt/media-extract/config/jellyfin
+      target: /config
+      read_only: false
+      bind:
+        create_host_path: false
+    - type: bind
+      source: /opt/media-extract/data/media
+      target: /data/media
+      read_only: true
+      bind:
+        create_host_path: false
+  makemkv:
+    image: ${MEDIA_MAKEMKV_IMAGE:?Set MEDIA_MAKEMKV_IMAGE in media-extract/.env}
+    container_name: media-makemkv
+    profiles:
+    - rip
+    restart: unless-stopped
+    environment:
+      USER_ID: ${MEDIA_PUID:?Set MEDIA_PUID in media-extract/.env}
+      GROUP_ID: ${MEDIA_PGID:?Set MEDIA_PGID in media-extract/.env}
+      TZ: ${TZ:-America/New_York}
+      AUTO_DISC_RIPPER: '1'
+      AUTO_DISC_RIPPER_EJECT: '1'
+      AUTO_DISC_RIPPER_FORCE_UNIQUE_OUTPUT_DIR: '1'
+    ports:
+    - mode: ingress
+      host_ip: 127.0.0.1
+      target: 5800
+      published: '5800'
+      protocol: tcp
+    entrypoint:
+    - /bin/sh
+    - /opt/media-extract/makemkv-device-adapter.sh
+    command:
+    - /init
+    volumes:
+    - type: bind
+      source: /opt/media-extract/config/makemkv
+      target: /config
+      read_only: false
+      bind:
+        create_host_path: false
+    - type: bind
+      source: ${MEDIA_RIP_ROOT:?Set MEDIA_RIP_ROOT in media-extract/.env}/output
+      target: /output
+      read_only: false
+      bind:
+        create_host_path: false
+    - type: bind
+      source: ${MEDIA_RIP_ROOT:?Set MEDIA_RIP_ROOT in media-extract/.env}/storage
+      target: /storage
+      read_only: false
+      bind:
+        create_host_path: false
+    - type: bind
+      source: ./scripts/makemkv-device-adapter.sh
+      target: /opt/media-extract/makemkv-device-adapter.sh
+      read_only: true
+      bind:
+        create_host_path: false
+    devices:
+    - source: ${MEDIA_DVD_DEVICE:?Set MEDIA_DVD_DEVICE in media-extract/.env}
+      target: /dev/media-extract-sr
+      permissions: rwm
+    - source: ${MEDIA_DVD_SG_DEVICE:?Set MEDIA_DVD_SG_DEVICE in media-extract/.env}
+      target: /dev/media-extract-sg
+      permissions: rwm
+    networks:
+    - media
+  handbrake:
+    image: ${MEDIA_HANDBRAKE_IMAGE:?Set MEDIA_HANDBRAKE_IMAGE in media-extract/.env}
+    container_name: media-handbrake
+    profiles:
+    - rip
+    restart: unless-stopped
+    environment:
+      USER_ID: ${MEDIA_PUID:?Set MEDIA_PUID in media-extract/.env}
+      GROUP_ID: ${MEDIA_PGID:?Set MEDIA_PGID in media-extract/.env}
+      TZ: ${TZ:-America/New_York}
+    ports:
+    - mode: ingress
+      host_ip: 127.0.0.1
+      target: 5800
+      published: '5801'
+      protocol: tcp
+    volumes:
+    - type: bind
+      source: /opt/media-extract/config/handbrake
+      target: /config
+      read_only: false
+      bind:
+        create_host_path: false
+    - type: bind
+      source: /opt/media-extract/data/handbrake/output
+      target: /output
+      read_only: false
+      bind:
+        create_host_path: false
+    - type: bind
+      source: ${MEDIA_RIP_ROOT:?Set MEDIA_RIP_ROOT in media-extract/.env}/output
+      target: /storage
+      read_only: true
+      bind:
+        create_host_path: false
+    - type: bind
+      source: /opt/media-extract/aux/handbrake-trash
+      target: /trash
+      read_only: false
+      bind:
+        create_host_path: false
+    - type: bind
+      source: /opt/media-extract/aux/handbrake-watch
+      target: /watch
+      read_only: false
+      bind:
+        create_host_path: false
+    networks:
+    - media
+networks:
+  media:
+    name: media-extract
+    ipam:
+      config:
+      - subnet: ${MEDIA_SUBNET:?Set MEDIA_SUBNET in media-extract/.env}
+x-stack:
+  requires: []
