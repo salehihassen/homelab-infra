@@ -11,7 +11,7 @@ services:
       permissions: rwm
     environment:
       TZ: ${TZ:-Etc/UTC}
-      FIREWALL_INPUT_PORTS: '8080'
+      FIREWALL_INPUT_PORTS: '8000,8080'
     volumes:
     - type: bind
       source: /opt/media-extract/config/gluetun
@@ -24,6 +24,11 @@ services:
       host_ip: 127.0.0.1
       target: 8080
       published: '8080'
+      protocol: tcp
+    - mode: ingress
+      host_ip: 127.0.0.1
+      target: 8000
+      published: '18000'
       protocol: tcp
     networks:
     - media
@@ -93,6 +98,12 @@ services:
     image: ${MEDIA_FLARESOLVERR_IMAGE:?Set MEDIA_FLARESOLVERR_IMAGE in media-extract/.env}
     container_name: media-flaresolverr
     restart: unless-stopped
+    ports:
+    - mode: ingress
+      host_ip: 127.0.0.1
+      target: 8191
+      published: '18191'
+      protocol: tcp
     environment:
       LOG_LEVEL: info
       TZ: ${TZ:-America/New_York}

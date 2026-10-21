@@ -134,6 +134,10 @@ PY
   ci_routing_overrides=(--env CPA_DOMAIN=)
   ci_caddy validate
   ci_caddy adapt | python3 scripts/check-routing.py --absent-domain CPA_DOMAIN
+  # A partial media routing file must not break ingress for other stacks.
+  ci_routing_overrides=(--env MEDIA_JELLYFIN_DOMAIN=)
+  ci_caddy validate
+  ci_caddy adapt | python3 scripts/check-routing.py --absent-domain MEDIA_JELLYFIN_DOMAIN
 )
 
 validate_alloy() {

@@ -9,6 +9,19 @@ from pathlib import Path
 import sys
 
 
+MEDIA_UPSTREAMS = {
+    "MEDIA_JELLYFIN_DOMAIN": "127.0.0.1:8096",
+    "MEDIA_QBITTORRENT_DOMAIN": "127.0.0.1:8080",
+    "MEDIA_GLUETUN_DOMAIN": "127.0.0.1:18000",
+    "MEDIA_PROWLARR_DOMAIN": "127.0.0.1:9696",
+    "MEDIA_SONARR_DOMAIN": "127.0.0.1:8989",
+    "MEDIA_RADARR_DOMAIN": "127.0.0.1:7878",
+    "MEDIA_FLARESOLVERR_DOMAIN": "127.0.0.1:18191",
+    "MEDIA_MAKEMKV_DOMAIN": "127.0.0.1:5800",
+    "MEDIA_HANDBRAKE_DOMAIN": "127.0.0.1:5801",
+}
+
+
 def nodes(value):
     if isinstance(value, dict):
         yield value
@@ -137,6 +150,20 @@ if __name__ == "__main__":
         cpa_host = None if args.absent_domain == "CPA_DOMAIN" else examples["CPA_DOMAIN"]
         check(config, examples["LOKI_DOMAIN"], cpa_host, examples["CADDY_HOST_DOMAIN"],
               examples["OTEL_DOMAIN"])
+        for variable, upstream in MEDIA_UPSTREAMS.items():
+            if variable not in examples:
+                continue  # Other hosts need not run media.
+            routes = [node for node in nodes(config)
+                      if any(examples[variable] in match.get("host", [])
+                             for match in node.get("match", []))]
+            if args.absent_domain in MEDIA_UPSTREAMS:
+                require(not routes, "Incomplete media routing must omit all media sites")
+            else:
+                require(len(routes) == 1, f"Missing or duplicate media route: {variable}")
+                proxies = [node for node in nodes(routes[0]) if node.get("handler") == "reverse_proxy"]
+                require(len(proxies) == 1 and proxies[0].get("upstreams") == [{"dial": upstream}],
+                        f"Incorrect media upstream: {variable}")
+        print("Media HTTPS upstreams and optional routing verified.")
         if args.absent_domain:
             domain = examples[args.absent_domain]
             require(not any(domain in node.get("host", []) for node in nodes(config)),

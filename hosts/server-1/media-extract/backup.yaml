@@ -1,6 +1,7 @@
 # Payloads are deliberately not backed up; preserve config/identity and resume metadata.
 paths:
   - /opt/media-extract/compose.env
+  - /opt/media-extract/routing.env
   - /opt/media-extract/vpn.env
   - /opt/media-extract/config
   - /opt/media-extract/aux

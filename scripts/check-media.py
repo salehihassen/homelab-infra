@@ -20,9 +20,11 @@ MOUNTS = {
     'handbrake': {'/config': False, '/storage': True, '/output': False,
                   '/watch': False, '/trash': False},
 }
-PORTS = {'gluetun': (8080, 8080), 'sonarr': (8989, 8989), 'radarr': (7878, 7878),
-         'prowlarr': (9696, 9696), 'jellyfin': (8096, 8096),
-         'makemkv': (5800, 5800), 'handbrake': (5801, 5800)}
+PORTS = {'gluetun': [(8080, 8080), (18000, 8000)],
+         'flaresolverr': [(18191, 8191)],
+         'sonarr': [(8989, 8989)], 'radarr': [(7878, 7878)],
+         'prowlarr': [(9696, 9696)], 'jellyfin': [(8096, 8096)],
+         'makemkv': [(5800, 5800)], 'handbrake': [(5801, 5800)]}
 
 
 def check(doc):
@@ -53,10 +55,11 @@ def check(doc):
         if name not in PORTS:
             need(not ports, name + ': no published port')
         else:
-            published, target = PORTS[name]
-            need(len(ports) == 1 and ports[0].get('host_ip') == ('0.0.0.0' if name == 'jellyfin' else '127.0.0.1')
-                 and str(ports[0].get('published')) == str(published) and ports[0].get('target') == target
-                 and ports[0].get('protocol', 'tcp') == 'tcp', name + ': preserve listener boundary')
+            expected = {('0.0.0.0' if name == 'jellyfin' else '127.0.0.1', str(published), target, 'tcp')
+                        for published, target in PORTS[name]}
+            actual = {(p.get('host_ip'), str(p.get('published')), p.get('target'), p.get('protocol', 'tcp'))
+                      for p in ports}
+            need(len(ports) == len(expected) and actual == expected, name + ': preserve listener boundary')
         volumes = s.get('volumes', [])
         mounts[name] = {v['target']: v for v in volumes}
         need(len(volumes) == len(mounts[name]) and set(mounts[name]) == set(MOUNTS[name]), name + ': exact scoped mount targets')
@@ -77,7 +80,7 @@ def check(doc):
     need(g.get('cap_add') == ['NET_ADMIN'], 'Gluetun requires only NET_ADMIN')
     need(g.get('devices') == [{'source': '/dev/net/tun', 'target': '/dev/net/tun', 'permissions': 'rwm'}], 'Gluetun requires TUN device only')
     need(g.get('healthcheck', {}).get('test') == ['CMD', '/gluetun-entrypoint', 'healthcheck'], 'Gluetun health check must remain')
-    need(str(g.get('environment', {}).get('FIREWALL_INPUT_PORTS')) == '8080', 'VPN firewall admits only download WebUI')
+    need(str(g.get('environment', {}).get('FIREWALL_INPUT_PORTS')) == '8000,8080', 'VPN firewall admits only control API and download WebUI')
     m = services['makemkv']
     need(m.get('entrypoint') == ['/bin/sh', '/opt/media-extract/makemkv-device-adapter.sh'] and m.get('command') == ['/init'], 'MakeMKV adapter must hand off to /init')
     devices = m.get('devices', [])

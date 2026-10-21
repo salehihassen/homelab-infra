@@ -47,10 +47,13 @@ class MediaBoundaryTests(unittest.TestCase):
         for service in media.PORTS:
             if service == 'jellyfin':
                 continue
-            doc = copy.deepcopy(self.doc)
-            doc['services'][service]['ports'][0]['host_ip'] = '0.0.0.0'
-            self.assertTrue(media.check(doc))
-        self.doc['services']['flaresolverr']['ports'] = [{'target': 8191, 'published': '8191'}]
+            for port in range(len(media.PORTS[service])):
+                with self.subTest(service=service, port=port):
+                    doc = copy.deepcopy(self.doc)
+                    doc['services'][service]['ports'][port]['host_ip'] = '0.0.0.0'
+                    self.assertTrue(media.check(doc))
+        self.doc['services']['flaresolverr']['ports'].append(
+            {'host_ip': '127.0.0.1', 'target': 8192, 'published': '18192'})
         self.assertTrue(media.check(self.doc))
 
     def test_shared_source_and_library_identity(self):

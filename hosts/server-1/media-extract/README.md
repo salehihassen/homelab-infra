@@ -1,7 +1,7 @@
 # Media extraction and library
 
-Nine services integrated into the host's `opt` project; no cross-stack
-dependencies and no Caddy route. Images are required private settings: pin the
+Nine services integrated into the host's `opt` project, with private HTTPS
+routes through Caddy. Images are required private settings: pin the
 verified stable digest before deployment, checking required database migrations.
 Example tags are validation inputs,
 not an upgrade recommendation.
@@ -34,9 +34,48 @@ Validate with the real app user instead of recursively changing payload owners.
 qBittorrent uses `/data/torrent/complete` and `/data/torrent/incomplete`.
 Sonarr/Radarr use the same paths; no Remote Path Mappings. Their download client
 is `gluetun:8080`, not the host. Admin ports 8080, 8989, 7878, 9696, 5800 and
-5801 remain on loopback. Only Jellyfin HTTP 8096 is published to the LAN;
-FlareSolverr has no host port. VPN failure must leave qBittorrent without a
+5801 remain on loopback, as do Gluetun's control API on 18000 and FlareSolverr
+on 18191. Only Jellyfin HTTP 8096 is also published to the LAN.
+VPN failure must leave qBittorrent without a
 non-VPN route. Do not attach it to another network.
+
+## Private HTTPS
+
+Set all nine `MEDIA_*_DOMAIN` values in `/opt/media-extract/routing.env`, using
+`routing.env.example` as the template. `env-files.tsv` maps the ignored checkout
+symlink to that file; the root Compose include and Caddy load it using the same
+convention as other stacks. Create DNS records resolving each name to this
+host's Tailscale addresses. The existing wildcard certificate covers names
+inside `PRIVATE_ZONE`; no deployment domain is stored in Git.
+
+| Routing variable | Backend |
+| --- | --- |
+| `MEDIA_JELLYFIN_DOMAIN` | Jellyfin, loopback 8096 (LAN HTTP also retained) |
+| `MEDIA_QBITTORRENT_DOMAIN` | qBittorrent WebUI, loopback 8080 |
+| `MEDIA_GLUETUN_DOMAIN` | Gluetun control API, loopback 18000 |
+| `MEDIA_PROWLARR_DOMAIN` | Prowlarr, loopback 9696 |
+| `MEDIA_SONARR_DOMAIN` | Sonarr, loopback 8989 |
+| `MEDIA_RADARR_DOMAIN` | Radarr, loopback 7878 |
+| `MEDIA_FLARESOLVERR_DOMAIN` | FlareSolverr API/status, loopback 18191 |
+| `MEDIA_MAKEMKV_DOMAIN` | MakeMKV GUI, loopback 5800 |
+| `MEDIA_HANDBRAKE_DOMAIN` | HandBrake GUI, loopback 5801 |
+
+Caddy binds these routes only to the host's Tailscale addresses, strips
+client-supplied `Tailscale-*` headers, and forwards WebSockets for the desktop
+GUIs and Jellyfin. Arr login redirects are upgraded to HTTPS because those
+backends can generate HTTP URLs from their local proxy connection.
+Existing application logins still apply. Gluetun has no web
+dashboard: its root redirects to `/v1/vpn/status`. Configure native control API
+authentication through `HTTP_CONTROL_SERVER_AUTH_DEFAULT_ROLE` in the private
+`vpn.env`; never disable authentication to make the route work. FlareSolverr
+also provides an API rather than a dashboard. The optical services must already
+be running under the `rip` profile for their routes to respond.
+
+After changing routing values, recreate only Caddy to load its environment.
+Site-only edits can use the normal renderer/reload command in the runbook.
+If any media routing value is missing, the renderer skips this stack's site
+file while other stacks remain available. The routing file is backed up with
+the media configuration.
 
 ## Importing and playback
 

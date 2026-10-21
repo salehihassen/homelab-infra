@@ -2,6 +2,7 @@
 # Repo symlink (- when compose reads the file directly)	File on the host
 .env	/opt/.env
 media-extract/.env	/opt/media-extract/compose.env
+media-extract/routing.env	/opt/media-extract/routing.env
 -	/opt/media-extract/vpn.env
 observability/.env	/opt/observability/.env
 -	/opt/postgresql/postgres18.env

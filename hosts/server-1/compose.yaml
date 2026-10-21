@@ -40,6 +40,7 @@ include:
   - path: media-extract/compose.yaml
     env_file:
       - media-extract/${STACK_ENV_FILE:-.env}
+      - media-extract/${STACK_ROUTING_ENV_FILE:-routing.env}
   - path: home-automation/compose.yaml
     env_file:
       - home-automation/${STACK_ENV_FILE:-.env}

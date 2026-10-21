@@ -50,6 +50,8 @@ services:
         required: false
       - path: ../metube/${STACK_ROUTING_ENV_FILE:-routing.env}
         required: false
+      - path: ../media-extract/${STACK_ROUTING_ENV_FILE:-routing.env}
+        required: false
       - path: ../observability/${STACK_ROUTING_ENV_FILE:-routing.env}
         required: false
       - path: ../postgres/${STACK_ROUTING_ENV_FILE:-routing.env}
