@@ -12,11 +12,27 @@ https://{$POLICY_PROXY_DOMAIN} {
 https://{$CPA_DOMAIN} {
 	bind {$CADDY_BIND_ADDRESSES}
 
-	@management path /v0/management /v0/management/* /v8/management /v8/management/*
-	respond @management 403
+	# Explicit order preserves management denials before the catch-all handler.
+	route {
+		@management path /v0/management /v0/management/* /v8/management /v8/management/*
+		respond @management 403
 
-	reverse_proxy http://{$CPA_UPSTREAM} {
-		header_up -Tailscale-*
+		@model_list {
+			method GET HEAD
+			path /v1/models
+		}
+		handle @model_list {
+			# Changing only the path preserves the original query string.
+			rewrite * /v1/upstream-models
+			reverse_proxy http://{$POLICY_PROXY_UPSTREAM} {
+				header_up -Tailscale-*
+			}
+		}
+		handle {
+			reverse_proxy http://{$CPA_UPSTREAM} {
+				header_up -Tailscale-*
+			}
+		}
 	}
 }
 

@@ -27,3 +27,67 @@ does not serve the policy proxy.
 
 Provider OAuth callbacks still use SSH local forwards to the loopback ports
 1455, 54545 and 51121.
+
+## Shared model modalities
+
+Keep CPA on its stock image. Policy Proxy 0.5.0 (or a reviewed build containing
+`/v1/upstream-models`) reads `/config/modalities.json` through its existing config
+mount. Caddy sends only GET/HEAD requests for the public CPA `/v1/models` to that
+endpoint, preserving credentials and query strings. The Policy Proxy URL still
+serves its policy catalog at `/v1/models`. CPA's direct/internal listener keeps
+its stock schema; inference and callbacks continue to reach CPA directly.
+
+The generated file holds capabilities, not model availability or credentials.
+Use the refresher and deployment templates from the same Policy Proxy source
+revision (`deploy/README.md`); do not maintain a second copy here. Its inputs are
+the CPA config and policy catalog, and its output is the separate
+`/opt/cpa/config/ai-policy-proxy/modalities.json`. Refreshes must not rewrite
+either input. Unknown capabilities are exposed as `null`; source outages retain
+previous metadata. Runtime requests do not contact metadata sources.
+
+### Test before switching traffic
+
+Use a separate infra worktree: the running Caddy mounts this repository's site
+files, so editing its active checkout can affect the next reload. Validate the
+candidate with `bash scripts/validate-stack.sh compose`, then `caddy-build` and
+`caddy`. These use example environments and temporary containers.
+
+For a live smoke test, build the candidate Policy Proxy image and generate
+metadata into a temporary directory. Run a second Policy Proxy on an unused
+loopback port with copies of the catalog and metadata, a temporary HMAC secret
+and affinity database, and CPA's direct loopback upstream. Run a temporary Caddy
+using the candidate site's routes on unused loopback HTTP ports, with automatic
+HTTPS and its admin API disabled. Do not use production ports, databases or
+Compose project names. Send only catalog/health/denial requests; no inference is
+needed. Remove both temporary containers afterward.
+
+Check both model-list URLs, invalid-key rejection, HEAD, unchanged Codex
+`?client_version=` catalogs, management denials, and direct CPA routing for
+non-model paths and POST `/v1/models`. CPA inventory, order and existing fields
+must match the requesting credential's stock response. Record production
+container IDs/start times and config checksums before and after to confirm no
+production restart or config change occurred.
+
+### Activate after service approval
+
+1. Publish the reviewed Policy Proxy image and select its immutable digest in
+   the private `AI_POLICY_PROXY_IMAGE` setting. CPA's image stays unchanged.
+2. Install the refresher, source rules and dependencies from the reviewed service
+   revision. Generate the metadata file once and verify it is readable by the
+   Policy Proxy container user. Replace any older refresh unit with the service
+   repository's current template; leave the timer disabled until the first run
+   succeeds. The new refresher does not accept the old `--apply-policy` option.
+3. Recreate only Policy Proxy using the existing stack environment and Compose
+   project (`up -d --no-deps ai-policy-proxy`). Preserve its affinity volume and
+   secrets. Verify both `/v1/models` and `/v1/upstream-models` directly before
+   activating the Caddy change. This step briefly interrupts Policy Proxy clients.
+4. Apply the reviewed infra revision to the active checkout, validate Caddy with
+   the real environment, and gracefully reload it using the host runbook. Do not
+   recreate CPA or the whole stack. Verify both public model-list URLs, then
+   enable the service-owned refresh timer (every six hours).
+
+Policy Proxy's CPA upstream must stay the direct internal CPA address to avoid
+a routing loop. Public CPA model-list availability now also depends on Policy
+Proxy; ordinary CPA inference retains its existing route. Roll back the Caddy
+model-list route first, then restore the old Policy Proxy image and disable the
+refresh timer. Keep the existing affinity database and credentials.
