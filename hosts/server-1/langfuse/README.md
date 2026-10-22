@@ -17,6 +17,9 @@ Client setup is in [`docs/agent-telemetry.md`](../../../docs/agent-telemetry.md)
   `clickhouse`, `redis`, `minio`. ClickHouse, Redis and MinIO have no host ports
   and run as uid 1000 on their own logical volumes:
   `/opt/clickhouse/data/langfuse`, `/opt/redis/data/langfuse`, `/opt/minio/data/langfuse`.
+- **Worker health:** explicitly bind `HOSTNAME=0.0.0.0` so `/api/health` on
+  port 3030 is reachable from the Langfuse network. Docker's default hostname
+  can resolve to the Postgres interface instead, causing Alloy's probe to fail.
 - **ClickHouse** is tuned for a shared host (`clickhouse/config.xml`: small caches,
   no system log tables, stdout logging). Its only user, `langfuse`, is defined in
   `clickhouse/users.xml` with the password read from the environment.

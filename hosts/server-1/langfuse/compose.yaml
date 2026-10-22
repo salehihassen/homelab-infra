@@ -84,7 +84,11 @@ services:
     restart: unless-stopped
     depends_on: *langfuse-depends
     env_file: /opt/langfuse/langfuse.env
-    environment: *langfuse-env
+    environment:
+      <<: *langfuse-env
+      # Docker's hostname can resolve to only one of this service's networks.
+      # The health server must also be reachable from the observability stack.
+      HOSTNAME: 0.0.0.0
     networks: [langfuse, postgres_network]
     security_opt:
       - no-new-privileges:true
