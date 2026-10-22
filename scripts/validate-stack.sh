@@ -5,12 +5,11 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 repo_root="$PWD"
 host_dir="$repo_root/hosts/${INFRA_HOST:-server-1}"
 
-# Match CI: older Compose versions still load service env files even with
-# --no-env-resolution. Never load the deployment host's private env files.
-compose_version="$(docker compose version --short)"
+# Match CI without requiring a system-wide version change. Older Compose
+# versions can read private env files even with --no-env-resolution.
+compose_version="$(docker compose version --short 2>/dev/null || true)"
 if [[ "${compose_version#v}" != "5.5.1" ]]; then
-  echo "Docker Compose v5.5.1 is required to match CI (found $compose_version)." >&2
-  exit 1
+  exec bash "$repo_root/scripts/with-validation-compose.sh" bash "$repo_root/scripts/validate-stack.sh" "$@"
 fi
 
 # The host project with example settings only. `--env-file` replaces the host's
@@ -31,6 +30,12 @@ validate_compose() {
   host_compose --profile '*' config --quiet --no-env-resolution
   python3 scripts/check-stacks.py
   host_compose config --no-env-resolution --format json | python3 scripts/check-networks.py
+  host_compose --profile '*' config --no-env-resolution --format json | python3 scripts/check-media.py
+  if [[ -d "$host_dir/media-extract/scripts" ]]; then
+    while IFS= read -r -d '' script; do
+      sh -n "$script"
+    done < <(find "$host_dir/media-extract/scripts" -type f -name '*.sh' -print0)
+  fi
   python3 -m unittest discover -s scripts/tests
 }
 
@@ -58,7 +63,9 @@ JSON
       caddy run --config /etc/caddy/bind-probe.json &
       caddy_pid=$!
       trap '\''kill "$caddy_pid" 2>/dev/null || true; wait "$caddy_pid" || true'\'' EXIT
-      for attempt in 1 2 3 4 5 6 7 8 9 10; do
+      # Cold starts on a busy host can exceed one second; keep the real
+      # non-root bind assertion, with a bounded ten-second startup budget.
+      for attempt in $(seq 1 100); do
         if [ "$(wget -q -O - http://127.0.0.1:443/ 2>/dev/null)" = bind-probe ]; then
           echo "Non-root Caddy low-port listener verified."
           exit 0
@@ -126,6 +133,10 @@ PY
   ci_routing_overrides=(--env CPA_DOMAIN=)
   ci_caddy validate
   ci_caddy adapt | python3 scripts/check-routing.py --absent-domain CPA_DOMAIN
+  # A partial media routing file must not break ingress for other stacks.
+  ci_routing_overrides=(--env MEDIA_JELLYFIN_DOMAIN=)
+  ci_caddy validate
+  ci_caddy adapt | python3 scripts/check-routing.py --absent-domain MEDIA_JELLYFIN_DOMAIN
 )
 
 validate_alloy() {

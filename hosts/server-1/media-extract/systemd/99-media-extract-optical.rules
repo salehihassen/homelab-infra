@@ -1,0 +1,4 @@
+# Give USB optical-drive SCSI-generic nodes a stable, serial-based alias.
+# The normal kernel names (/dev/sg0, /dev/sg1, ...) remain available.
+SUBSYSTEM=="scsi_generic", KERNEL=="sg*", ATTRS{type}=="5", IMPORT{builtin}="usb_id"
+SUBSYSTEM=="scsi_generic", KERNEL=="sg*", ENV{ID_TYPE}=="cd", ENV{ID_SERIAL_SHORT}!="", SYMLINK+="makemkv/sg-%E{ID_SERIAL_SHORT}"

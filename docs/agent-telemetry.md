@@ -54,6 +54,14 @@ infers missing values for the exact service names above. Existing trace tags
 are preserved, and the matching harness tag is not appended twice. Unknown
 services without an explicit harness pass through without inferred tags.
 
+Condenseit follows upstream's trace-only instrumentation: `application=condenseit`,
+`workflow=digest`, and a unique session per digest. Filter Langfuse by tag
+`application:condenseit` and environment `production`. There is no dedicated
+Condenseit Grafana dashboard or application-metric freshness alert. Ordinary
+Docker logs remain available in Loki at `{container="condenseit"}`; these are
+separate from OTel log records. See [deployment and filtering](../hosts/server-1/condenseit/README.md)
+and the [trace-only rollout and acceptance checks](condenseit-trace-only.md).
+
 Do not infer `application`, `workflow` or `execution_mode` from the harness.
 A containerized application can launch a coding harness, or call the model
 gateway directly. Application tracing and explicit application identity need

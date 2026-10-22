@@ -127,9 +127,14 @@ Never commit contact-point secrets. This monitors a running control plane,
 not total host loss: use a separate host for independent availability checks.
 
 After changes, validate with `bash scripts/validate-stack.sh prometheus` and
-`bash scripts/validate-stack.sh alloy` using the CI-pinned Compose version.
+`bash scripts/validate-stack.sh alloy`; the script selects its isolated CI
+Compose automatically when the host's version differs.
 Rule regression fixtures in `prometheus-rules.test.yml` cover healthy, failing,
-missing-metric and recovered states. Apply only the affected containers;
+missing-metric and recovered states, including a trace-only client with no
+application metrics and a failing trace exporter. The Condenseit-specific
+dashboard and freshness rules are retired; its upstream instrumentation sends
+traces to Langfuse, while ordinary Docker logs remain in Loki.
+Apply only the affected containers;
 Grafana alert provisioning changes require its restart. A scoped recovery
 drill must restore the stopped service in a finally/trap handler, verify
 queued IDs downstream, queue drain, and alert firing/resolution. Do not fill

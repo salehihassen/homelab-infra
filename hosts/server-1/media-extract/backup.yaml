@@ -1,0 +1,16 @@
+# Payloads are deliberately not backed up; preserve config/identity and resume metadata.
+paths:
+  - /opt/media-extract/compose.env
+  - /opt/media-extract/routing.env
+  - /opt/media-extract/vpn.env
+  - /opt/media-extract/config
+  - /opt/media-extract/aux
+  - /opt/media-extract/hardware
+  - /etc/udev/rules.d/59-media-extract-optical.rules
+  - /etc/udev/rules.d/99-media-extract-optical.rules
+sqlite_scan:
+  - /opt/media-extract/config
+exclude:
+  /opt/media-extract/data: Re-downloadable library, rip staging, transcode output and cache; owner declined media backup.
+# Nonstandard torrent/rip roots must be covered/excluded in backup/host.local.yaml.
+# Hardware recovery copies are private; installed rules are included explicitly.

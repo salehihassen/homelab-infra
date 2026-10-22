@@ -13,6 +13,13 @@ secrets/
 /local/
 *.local.yaml
 
+# Media runtime state and private migration evidence are never source files.
+/hosts/server-1/media-extract/config/
+/hosts/server-1/media-extract/data/
+/hosts/server-1/media-extract/migration/
+/hosts/server-1/media-extract/evidence/
+/hosts/server-1/media-extract/backup/restic-password
+
 # Local tooling.
 __pycache__/
 *.pyc

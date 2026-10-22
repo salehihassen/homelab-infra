@@ -172,7 +172,9 @@ sudo bash hosts/server-1/backup/install.sh
 
 ## Rebuild a host from bare metal
 
-1. Install Ubuntu, Docker Engine + Compose v5.5.1, restic, rclone, Tailscale.
+1. Install Ubuntu, Docker Engine + Compose, restic, rclone, Tailscale.
+   Repository validation selects its own cached CI Compose when needed; there
+   is no requirement to downgrade the host's Compose plugin to the test pin.
    Log in to Tailscale; confirm `tailscale ip` matches the DNS records for
    the host's names (update them if not).
 2. Restore the rclone config and restic password from the password manager,

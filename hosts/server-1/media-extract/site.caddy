@@ -1,0 +1,70 @@
+https://{$MEDIA_JELLYFIN_DOMAIN} {
+	bind {$CADDY_BIND_ADDRESSES}
+	reverse_proxy http://127.0.0.1:8096 {
+		header_up -Tailscale-*
+	}
+}
+
+https://{$MEDIA_QBITTORRENT_DOMAIN} {
+	bind {$CADDY_BIND_ADDRESSES}
+	reverse_proxy http://127.0.0.1:8080 {
+		header_up -Tailscale-*
+	}
+}
+
+# Gluetun's native control API requires its own authentication; it has no GUI.
+https://{$MEDIA_GLUETUN_DOMAIN} {
+	bind {$CADDY_BIND_ADDRESSES}
+	@root path /
+	redir @root /v1/vpn/status temporary
+	reverse_proxy http://127.0.0.1:18000 {
+		header_up -Tailscale-*
+	}
+}
+
+https://{$MEDIA_PROWLARR_DOMAIN} {
+	bind {$CADDY_BIND_ADDRESSES}
+	reverse_proxy http://127.0.0.1:9696 {
+		header_up -Tailscale-*
+		# The upstream's forms-login redirect uses its HTTP connection scheme.
+		header_down Location ^http:// https://
+	}
+}
+
+https://{$MEDIA_SONARR_DOMAIN} {
+	bind {$CADDY_BIND_ADDRESSES}
+	reverse_proxy http://127.0.0.1:8989 {
+		header_up -Tailscale-*
+		header_down Location ^http:// https://
+	}
+}
+
+https://{$MEDIA_RADARR_DOMAIN} {
+	bind {$CADDY_BIND_ADDRESSES}
+	reverse_proxy http://127.0.0.1:7878 {
+		header_up -Tailscale-*
+		header_down Location ^http:// https://
+	}
+}
+
+# FlareSolverr is an API, with a status response at its root.
+https://{$MEDIA_FLARESOLVERR_DOMAIN} {
+	bind {$CADDY_BIND_ADDRESSES}
+	reverse_proxy http://127.0.0.1:18191 {
+		header_up -Tailscale-*
+	}
+}
+
+https://{$MEDIA_MAKEMKV_DOMAIN} {
+	bind {$CADDY_BIND_ADDRESSES}
+	reverse_proxy http://127.0.0.1:5800 {
+		header_up -Tailscale-*
+	}
+}
+
+https://{$MEDIA_HANDBRAKE_DOMAIN} {
+	bind {$CADDY_BIND_ADDRESSES}
+	reverse_proxy http://127.0.0.1:5801 {
+		header_up -Tailscale-*
+	}
+}

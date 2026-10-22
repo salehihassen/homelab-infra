@@ -1,9 +1,10 @@
 # Homelab infra
 
 Deployment source of truth for a small self-hosted fleet: Docker Compose,
-Caddy, DNS-01 certificates, and Tailscale. Every service is reachable only
-from the tailnet at `https://<name>.<PRIVATE_ZONE>`; the zone and each
-service's hostname are set in env files, never in Git.
+Caddy, DNS-01 certificates, and Tailscale. Routed services use tailnet HTTPS
+at `https://<name>.<PRIVATE_ZONE>`; the zone and each service's hostname are
+set in env files, never in Git. Intentional LAN and loopback-only listeners
+are recorded in `inventory.yaml`; the media stack preserves Jellyfin's LAN HTTP.
 
 Hosts appear under neutral aliases (`server-1`, ...). Application source lives
 in its own repositories; images are referenced through each stack's env file.
@@ -80,7 +81,7 @@ requiring it, or requires a stack it does not use. Current graph:
 
 | Stack | Requires |
 | --- | --- |
-| postgres, ai-gateway, caddy, komodo, home-automation, protonmail-bridge, countdown, metube, job-sentinel | - |
+| postgres, ai-gateway, caddy, komodo, home-automation, protonmail-bridge, countdown, metube, job-sentinel, media-extract | - |
 | quotes, forgejo, langfuse | postgres |
 | observability | langfuse |
 | jobsmith, condenseit, speakable | ai-gateway |
@@ -95,7 +96,13 @@ bash scripts/check-private.sh            # no real host names, domains or paths 
 python3 hosts/server-1/backup/infra-backup-declared.py check --live   # backup coverage (on the host)
 ```
 
-Requires Docker Compose **v5.5.1** (pinned in CI). The Caddy check enforces
+Validation uses Docker Compose **v5.5.1**, matching CI. If your installed version
+differs, `validate-stack.sh` automatically uses a checksum-verified copy cached
+under `~/.cache/homelab-infra/` for that command only (Linux x86_64). It never
+replaces the host's Compose plugin; ordinary `docker compose up` keeps using
+your installed version. The pin makes example-only rendering reproducible and
+avoids older versions reading private env files despite `--no-env-resolution`.
+The Caddy check enforces
 tailnet-only proxy listeners, Loki's authenticated push-only boundary, and the
 CPA management denial. Gitleaks runs in CI and in the Git hooks. Enable the
 hooks once per clone with `git config core.hooksPath .githooks`:
@@ -107,5 +114,5 @@ hooks once per clone with `git config core.hooksPath .githooks`:
   `validate-stack.sh` on each pushed tip.
 
 The hooks run `scripts/validate-snapshot.sh`, which validates exactly what is
-staged or pushed and, when the local Compose differs from the pin, uses a
-checksum-verified v5.5.1 cached under `~/.cache/homelab-infra/`.
+staged or pushed. It shares the automatic test-tool selection in
+`scripts/with-validation-compose.sh` with working-tree validation.
