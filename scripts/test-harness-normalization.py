@@ -39,6 +39,8 @@ def decode(attributes):
     def value(item):
         if "arrayValue" in item:
             return [value(x) for x in item["arrayValue"].get("values", [])]
+        if "intValue" in item:
+            return int(item["intValue"])
         return next(iter(item.values()))
     return {item["key"]: value(item["value"]) for item in attributes}
 
@@ -115,6 +117,21 @@ otelcol.exporter.otlphttp "capture" {{
         ("pi", {TAGS: "harness:pi"}, {}, "pi", ["harness:pi"]),
         ("pi", {HARNESS: ""}, {}, "", None),
         (None, {}, {}, None, None),
+        # Upstream Condenseit sends only traces. Keep its application identity,
+        # model/usage and content without inventing harness/execution metadata.
+        ("condenseit", {
+            "application": "condenseit", "workflow": "digest",
+            "langfuse.trace.metadata.application": "condenseit",
+            "langfuse.environment": "acceptance",
+            TAGS: ["application:condenseit"],
+            "gen_ai.request.model": "requested-model",
+            "gen_ai.response.model": "returned-model",
+            "langfuse.observation.model.name": "returned-model",
+            "gen_ai.usage.input_tokens": 200,
+            "gen_ai.usage.output_tokens": 40,
+            "langfuse.observation.usage_details": '{"input":140,"input_cached":60,"output":40,"total":240}',
+            "langfuse.observation.output": "test reply",
+        }, {"deployment.environment.name": "acceptance"}, None, ["application:condenseit"]),
     ]
     expected, resources = {}, []
     now = time.time_ns()
@@ -130,8 +147,12 @@ otelcol.exporter.otlphttp "capture" {{
                 marker = f"{host}-{index}-{depth}"
                 span_attrs = {"test.case": marker, "langfuse.session.id": f"test-{host}-{index}",
                               "application": "test-app", "workflow": "test-workflow",
-                              "execution_mode": "test-mode", "langfuse.observation.input": "test input",
+                              "langfuse.observation.input": "test input",
                               **attrs}
+                if service == "condenseit":
+                    span_attrs["langfuse.observation.type"] = "generation" if depth else "agent"
+                else:
+                    span_attrs["execution_mode"] = "test-mode"
                 span = {"traceId": trace_id, "spanId": span_id, "name": "tool normalization-test",
                         "startTimeUnixNano": str(now), "endTimeUnixNano": str(now + 1000000),
                         "attributes": [attribute(k, v) for k, v in span_attrs.items()]}
@@ -186,7 +207,7 @@ otelcol.exporter.otlphttp "capture" {{
                             assert actual["langfuse.user.id"] == resource["host.name"], marker
                             assert span["traceId"] == trace_id and span["spanId"] == span_id, marker
                             assert span.get("parentSpanId") == parent, marker
-                            assert not any(k.startswith("langfuse.trace.metadata.") and k != HARNESS
+                            assert not any(k.startswith("langfuse.trace.metadata.") and k != HARNESS and k not in original
                                            for k in actual), marker
                             seen.add(marker)
             logs = subprocess.check_output(["docker", "logs", name], stderr=subprocess.STDOUT, text=True)

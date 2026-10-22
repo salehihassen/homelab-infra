@@ -474,117 +474,169 @@
       ]
     },
     {
-      "name": "daily digest recent",
-      "interval": "1h",
+      "name": "trace-only client: no application metrics required",
+      "interval": "15s",
       "input_series": [
         {
-          "series": "condenseit_digest_last_success_seconds{service_name=\"condenseit\",deployment_environment_name=\"production\",host_name=\"source-host\"}",
-          "values": "3600+3600x30"
+          "series": "node_filesystem_size_bytes{stack=\"ai-observability\",mountpoint=\"/telemetry-disks/clickhouse\"}",
+          "values": "1000+0x160"
+        },
+        {
+          "series": "node_filesystem_size_bytes{stack=\"ai-observability\",mountpoint=\"/telemetry-disks/minio\"}",
+          "values": "1000+0x160"
+        },
+        {
+          "series": "node_filesystem_size_bytes{stack=\"ai-observability\",mountpoint=\"/telemetry-disks/redis\"}",
+          "values": "1000+0x160"
+        },
+        {
+          "series": "node_filesystem_size_bytes{stack=\"ai-observability\",mountpoint=\"/telemetry-disks/loki\"}",
+          "values": "1000+0x160"
+        },
+        {
+          "series": "node_filesystem_size_bytes{stack=\"ai-observability\",mountpoint=\"/telemetry-disks/prometheus\"}",
+          "values": "1000+0x160"
+        },
+        {
+          "series": "node_filesystem_size_bytes{stack=\"ai-observability\",mountpoint=\"/var/lib/alloy/data\"}",
+          "values": "1000+0x160"
+        },
+        {
+          "series": "probe_success{stack=\"ai-observability\",dependency=\"langfuse-web\"}",
+          "values": "1+0x160"
+        },
+        {
+          "series": "probe_success{stack=\"ai-observability\",dependency=\"langfuse-worker\"}",
+          "values": "1+0x160"
+        },
+        {
+          "series": "probe_success{stack=\"ai-observability\",dependency=\"clickhouse\"}",
+          "values": "1+0x160"
+        },
+        {
+          "series": "probe_success{stack=\"ai-observability\",dependency=\"minio\"}",
+          "values": "1+0x160"
+        },
+        {
+          "series": "probe_success{stack=\"ai-observability\",dependency=\"redis\"}",
+          "values": "1+0x160"
+        },
+        {
+          "series": "probe_success{stack=\"ai-observability\",dependency=\"loki\"}",
+          "values": "1+0x160"
+        },
+        {
+          "series": "probe_success{stack=\"ai-observability\",dependency=\"grafana\"}",
+          "values": "1+0x160"
+        },
+        {
+          "series": "up{job=\"alloy\",instance=\"alloy:12345\"}",
+          "values": "1+0x160"
         }
       ],
-      "alert_rule_test": [
+      "promql_expr_test": [
         {
-          "eval_time": "29h",
-          "alertname": "CondenseitDigestStale",
-          "exp_alerts": []
-        }
-      ]
-    },
-    {
-      "name": "digest stale after daily tolerance",
-      "interval": "1h",
-      "input_series": [
-        {
-          "series": "condenseit_digest_last_success_seconds{service_name=\"condenseit\",deployment_environment_name=\"production\",host_name=\"source-host\"}",
-          "values": "3600+0x30"
-        }
-      ],
-      "alert_rule_test": [
-        {
-          "eval_time": "29h",
-          "alertname": "CondenseitDigestStale",
-          "exp_alerts": [
+          "expr": "sum(ALERTS{alertstate=\"firing\",stack=\"ai-observability\"}) or vector(0)",
+          "eval_time": "30m",
+          "exp_samples": [
             {
-              "exp_labels": {
-                "host_name": "source-host",
-                "stack": "ai-observability",
-                "severity": "warning",
-                "application": "condenseit"
-              },
-              "exp_annotations": {
-                "summary": "Condenseit has not reported a successful digest for over 27 hours"
-              }
+              "labels": "{}",
+              "value": 0
             }
           ]
         }
       ]
     },
     {
-      "name": "restart zero retains recent success",
-      "interval": "1h",
+      "name": "trace-only client: trace exporter failure still alerts",
+      "interval": "15s",
       "input_series": [
         {
-          "series": "condenseit_digest_last_success_seconds{service_name=\"condenseit\",deployment_environment_name=\"production\",host_name=\"source-host\"}",
-          "values": "0 3600 0+0x10"
+          "series": "node_filesystem_size_bytes{stack=\"ai-observability\",mountpoint=\"/telemetry-disks/clickhouse\"}",
+          "values": "1000+0x160"
+        },
+        {
+          "series": "node_filesystem_size_bytes{stack=\"ai-observability\",mountpoint=\"/telemetry-disks/minio\"}",
+          "values": "1000+0x160"
+        },
+        {
+          "series": "node_filesystem_size_bytes{stack=\"ai-observability\",mountpoint=\"/telemetry-disks/redis\"}",
+          "values": "1000+0x160"
+        },
+        {
+          "series": "node_filesystem_size_bytes{stack=\"ai-observability\",mountpoint=\"/telemetry-disks/loki\"}",
+          "values": "1000+0x160"
+        },
+        {
+          "series": "node_filesystem_size_bytes{stack=\"ai-observability\",mountpoint=\"/telemetry-disks/prometheus\"}",
+          "values": "1000+0x160"
+        },
+        {
+          "series": "node_filesystem_size_bytes{stack=\"ai-observability\",mountpoint=\"/var/lib/alloy/data\"}",
+          "values": "1000+0x160"
+        },
+        {
+          "series": "probe_success{stack=\"ai-observability\",dependency=\"langfuse-web\"}",
+          "values": "1+0x160"
+        },
+        {
+          "series": "probe_success{stack=\"ai-observability\",dependency=\"langfuse-worker\"}",
+          "values": "1+0x160"
+        },
+        {
+          "series": "probe_success{stack=\"ai-observability\",dependency=\"clickhouse\"}",
+          "values": "1+0x160"
+        },
+        {
+          "series": "probe_success{stack=\"ai-observability\",dependency=\"minio\"}",
+          "values": "1+0x160"
+        },
+        {
+          "series": "probe_success{stack=\"ai-observability\",dependency=\"redis\"}",
+          "values": "1+0x160"
+        },
+        {
+          "series": "probe_success{stack=\"ai-observability\",dependency=\"loki\"}",
+          "values": "1+0x160"
+        },
+        {
+          "series": "probe_success{stack=\"ai-observability\",dependency=\"grafana\"}",
+          "values": "1+0x160"
+        },
+        {
+          "series": "up{job=\"alloy\",instance=\"alloy:12345\"}",
+          "values": "1+0x160"
+        },
+        {
+          "series": "otelcol_exporter_send_failed_spans_total{job=\"alloy\",exporter=\"langfuse\"}",
+          "values": "0+1x160"
         }
       ],
-      "alert_rule_test": [
+      "promql_expr_test": [
         {
-          "eval_time": "6h",
-          "alertname": "CondenseitDigestStale",
-          "exp_alerts": []
-        }
-      ]
-    },
-    {
-      "name": "missing app telemetry",
-      "interval": "1m",
-      "input_series": [],
-      "alert_rule_test": [
-        {
-          "eval_time": "16m",
-          "alertname": "CondenseitTelemetryMissing",
-          "exp_alerts": [
+          "expr": "sum(ALERTS{alertstate=\"firing\",stack=\"ai-observability\"}) or vector(0)",
+          "eval_time": "30m",
+          "exp_samples": [
             {
-              "exp_labels": {
-                "service_name": "condenseit",
-                "deployment_environment_name": "production",
-                "stack": "ai-observability",
-                "severity": "warning",
-                "application": "condenseit"
-              },
-              "exp_annotations": {
-                "summary": "Condenseit freshness telemetry is missing"
-              }
+              "labels": "{}",
+              "value": 1
             }
           ]
         }
-      ]
-    },
-    {
-      "name": "acceptance fixture cannot satisfy production freshness",
-      "interval": "1m",
-      "input_series": [
-        {
-          "series": "condenseit_digest_last_success_seconds{service_name=\"condenseit\",deployment_environment_name=\"acceptance\"}",
-          "values": "3600+0x20"
-        }
       ],
       "alert_rule_test": [
         {
-          "eval_time": "16m",
-          "alertname": "CondenseitTelemetryMissing",
+          "eval_time": "30m",
+          "alertname": "TelemetryExportFailure",
           "exp_alerts": [
             {
               "exp_labels": {
-                "service_name": "condenseit",
-                "deployment_environment_name": "production",
+                "alertname": "TelemetryExportFailure",
                 "stack": "ai-observability",
-                "severity": "warning",
-                "application": "condenseit"
+                "severity": "critical"
               },
               "exp_annotations": {
-                "summary": "Condenseit freshness telemetry is missing"
+                "summary": "Telemetry export or enqueue failure occurred in the last five minutes"
               }
             }
           ]

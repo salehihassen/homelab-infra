@@ -21,9 +21,9 @@ rewriting history and force-pushing.
    bash scripts/validate-stack.sh           # full suite; or `compose`, `caddy`, `alloy`, `loki`, `private`
    python3 hosts/server-1/backup/infra-backup-declared.py check --live   # on the host, after stack changes
    ```
-   `validate-stack.sh` requires the Docker Compose version pinned in CI. If the
-   host's version differs, run the individual checks and say so; do not edit
-   the pin.
+   `validate-stack.sh` automatically selects the Docker Compose version pinned
+   in CI, using a checksum-verified cached binary when the host differs. Do not
+   downgrade the host plugin or edit the pin to run validation.
 4. If any check fails, fix the content. Do not weaken patterns, rules or
    allowlists to make it pass.
 

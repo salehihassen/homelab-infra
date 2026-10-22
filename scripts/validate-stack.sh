@@ -5,12 +5,11 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 repo_root="$PWD"
 host_dir="$repo_root/hosts/${INFRA_HOST:-server-1}"
 
-# Match CI: older Compose versions still load service env files even with
-# --no-env-resolution. Never load the deployment host's private env files.
-compose_version="$(docker compose version --short)"
+# Match CI without requiring a system-wide version change. Older Compose
+# versions can read private env files even with --no-env-resolution.
+compose_version="$(docker compose version --short 2>/dev/null || true)"
 if [[ "${compose_version#v}" != "5.5.1" ]]; then
-  echo "Docker Compose v5.5.1 is required to match CI (found $compose_version)." >&2
-  exit 1
+  exec bash "$repo_root/scripts/with-validation-compose.sh" bash "$repo_root/scripts/validate-stack.sh" "$@"
 fi
 
 # The host project with example settings only. `--env-file` replaces the host's
@@ -175,6 +174,10 @@ validate_loki() {
     "$(service_image loki)" -verify-config=true -config.file=/etc/loki/config.yaml
 }
 
+validate_grafana() {
+  python3 scripts/test-dashboard-retirement.py --image "$(service_image grafana)"
+}
+
 validate_private() {
   bash scripts/check-private.sh
 }
@@ -186,6 +189,7 @@ case "${1:-all}" in
   alloy) validate_alloy ;;
   prometheus) validate_prometheus ;;
   loki) validate_loki ;;
+  grafana) validate_grafana ;;
   private) validate_private ;;
   all)
     validate_compose
@@ -193,8 +197,9 @@ case "${1:-all}" in
     validate_caddy
     validate_alloy
     validate_prometheus
+    validate_grafana
     validate_loki
     validate_private
     ;;
-  *) echo "Usage: bash scripts/validate-stack.sh [all|compose|caddy-build|caddy|alloy|prometheus|loki|private]" >&2; exit 2 ;;
+  *) echo "Usage: bash scripts/validate-stack.sh [all|compose|caddy-build|caddy|alloy|prometheus|grafana|loki|private]" >&2; exit 2 ;;
 esac

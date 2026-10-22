@@ -147,8 +147,9 @@ Do not restore an example over existing credentials. The original preserved
 tree is a point-in-time rollback source, not a synchronized replica. Stop the
 new writers before rollback and decide how to retain any newer changes.
 
-Run `./scripts/ci-validate.sh` and the full root suite using its pinned Compose
-version. `scripts/check-media.py` checks VPN, listeners, mount access, optical
+Run `./scripts/ci-validate.sh` and the full root suite; validation selects a
+cached CI Compose without changing the host plugin. `scripts/check-media.py`
+checks VPN, listeners, mount access, optical
 handoff and fail-closed binds; mutation tests guard against regressions. Live
 validation must also check app identities/counts, actual read/write denial,
 VPN egress, and representative Jellyfin file access. No disc rip is required.

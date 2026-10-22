@@ -81,23 +81,3 @@ groups:
           severity: critical
         annotations:
           summary: One or more of the seven dependency probes is missing
-      - alert: CondenseitDigestStale
-        # Historical maximum survives application restarts (the gauge resets
-        # to zero). Dry runs never advance last_success. Allow daily jitter.
-        expr: time() - max by (host_name) (max_over_time(condenseit_digest_last_success_seconds{service_name="condenseit",deployment_environment_name="production"}[48h])) > 27 * 3600
-        for: 30m
-        labels:
-          stack: ai-observability
-          severity: warning
-          application: condenseit
-        annotations:
-          summary: Condenseit has not reported a successful digest for over 27 hours
-      - alert: CondenseitTelemetryMissing
-        expr: absent_over_time(condenseit_digest_last_success_seconds{service_name="condenseit",deployment_environment_name="production"}[30m])
-        for: 15m
-        labels:
-          stack: ai-observability
-          severity: warning
-          application: condenseit
-        annotations:
-          summary: Condenseit freshness telemetry is missing

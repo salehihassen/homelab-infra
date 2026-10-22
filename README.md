@@ -90,13 +90,19 @@ requiring it, or requires a stack it does not use. Current graph:
 ## Validation
 
 ```bash
-bash scripts/validate-stack.sh           # compose + deps, Caddy, Alloy, Prometheus rules/tests, Loki, private identifiers
+bash scripts/validate-stack.sh           # compose + deps, Caddy, Alloy, Prometheus rules/tests, Grafana retirement, Loki, private identifiers
 bash scripts/validate-stack.sh compose   # fast: Compose config + stack dependency check
 bash scripts/check-private.sh            # no real host names, domains or paths in tracked files
 python3 hosts/server-1/backup/infra-backup-declared.py check --live   # backup coverage (on the host)
 ```
 
-Requires Docker Compose **v5.5.1** (pinned in CI). The Caddy check enforces
+Validation uses Docker Compose **v5.5.1**, matching CI. If your installed version
+differs, `validate-stack.sh` automatically uses a checksum-verified copy cached
+under `~/.cache/homelab-infra/` for that command only (Linux x86_64). It never
+replaces the host's Compose plugin; ordinary `docker compose up` keeps using
+your installed version. The pin makes example-only rendering reproducible and
+avoids older versions reading private env files despite `--no-env-resolution`.
+The Caddy check enforces
 tailnet-only proxy listeners, Loki's authenticated push-only boundary, and the
 CPA management denial. Gitleaks runs in CI and in the Git hooks. Enable the
 hooks once per clone with `git config core.hooksPath .githooks`:
@@ -108,5 +114,5 @@ hooks once per clone with `git config core.hooksPath .githooks`:
   `validate-stack.sh` on each pushed tip.
 
 The hooks run `scripts/validate-snapshot.sh`, which validates exactly what is
-staged or pushed and, when the local Compose differs from the pin, uses a
-checksum-verified v5.5.1 cached under `~/.cache/homelab-infra/`.
+staged or pushed. It shares the automatic test-tool selection in
+`scripts/with-validation-compose.sh` with working-tree validation.
