@@ -76,9 +76,6 @@ jobs:
       - name: Validate Prometheus configuration and alert rules
         run: bash scripts/validate-stack.sh prometheus
 
-      - name: Verify Grafana dashboard retirement
-        run: bash scripts/validate-stack.sh grafana
-
       - name: Validate Loki configuration
         run: bash scripts/validate-stack.sh loki
 

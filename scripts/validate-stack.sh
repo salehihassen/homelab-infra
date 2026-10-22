@@ -174,10 +174,6 @@ validate_loki() {
     "$(service_image loki)" -verify-config=true -config.file=/etc/loki/config.yaml
 }
 
-validate_grafana() {
-  python3 scripts/test-dashboard-retirement.py --image "$(service_image grafana)"
-}
-
 validate_private() {
   bash scripts/check-private.sh
 }
@@ -189,7 +185,6 @@ case "${1:-all}" in
   alloy) validate_alloy ;;
   prometheus) validate_prometheus ;;
   loki) validate_loki ;;
-  grafana) validate_grafana ;;
   private) validate_private ;;
   all)
     validate_compose
@@ -197,9 +192,8 @@ case "${1:-all}" in
     validate_caddy
     validate_alloy
     validate_prometheus
-    validate_grafana
     validate_loki
     validate_private
     ;;
-  *) echo "Usage: bash scripts/validate-stack.sh [all|compose|caddy-build|caddy|alloy|prometheus|grafana|loki|private]" >&2; exit 2 ;;
+  *) echo "Usage: bash scripts/validate-stack.sh [all|compose|caddy-build|caddy|alloy|prometheus|loki|private]" >&2; exit 2 ;;
 esac

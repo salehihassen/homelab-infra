@@ -133,11 +133,8 @@ Rule regression fixtures in `prometheus-rules.test.yml` cover healthy, failing,
 missing-metric and recovered states, including a trace-only client with no
 application metrics and a failing trace exporter. The Condenseit-specific
 dashboard and freshness rules are retired; its upstream instrumentation sends
-traces to Langfuse, while ordinary Docker logs remain in Loki. See the
-[trace-only rollout and test guide](../../../docs/condenseit-trace-only.md).
-`bash scripts/validate-stack.sh grafana` tests dashboard retirement against an
-isolated instance of the pinned Grafana image, retaining the other dashboards
-and the provider's `disableDeletion: true` policy. Apply only the affected containers;
+traces to Langfuse, while ordinary Docker logs remain in Loki.
+Apply only the affected containers;
 Grafana alert provisioning changes require its restart. A scoped recovery
 drill must restore the stopped service in a finally/trap handler, verify
 queued IDs downstream, queue drain, and alert firing/resolution. Do not fill

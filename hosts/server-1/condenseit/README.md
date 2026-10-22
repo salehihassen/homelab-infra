@@ -104,8 +104,6 @@ file and recreate only Condenseit. Keep the shared collector/store infrastructur
 for other clients. The existing backup declaration covers this runtime directory,
 including telemetry settings and writer credentials.
 
-Follow the [trace-only rollout and test guide](../../../docs/condenseit-trace-only.md)
-for image verification, retirement of the old live dashboard, acceptance checks
-and rollback. The application repository's `docs/telemetry.md` describes the
+The application repository's `docs/telemetry.md` describes the
 upstream contract; [fleet agent telemetry](../../../docs/agent-telemetry.md)
 describes the shared collector and stores.

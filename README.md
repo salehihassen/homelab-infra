@@ -90,7 +90,7 @@ requiring it, or requires a stack it does not use. Current graph:
 ## Validation
 
 ```bash
-bash scripts/validate-stack.sh           # compose + deps, Caddy, Alloy, Prometheus rules/tests, Grafana retirement, Loki, private identifiers
+bash scripts/validate-stack.sh           # compose + deps, Caddy, Alloy, Prometheus rules/tests, Loki, private identifiers
 bash scripts/validate-stack.sh compose   # fast: Compose config + stack dependency check
 bash scripts/check-private.sh            # no real host names, domains or paths in tracked files
 python3 hosts/server-1/backup/infra-backup-declared.py check --live   # backup coverage (on the host)
