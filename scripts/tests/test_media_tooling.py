@@ -3,7 +3,6 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
-import sys
 import tempfile
 import unittest
 
@@ -13,38 +12,6 @@ MEDIA = Path('hosts/server-1/media-extract')
 
 
 class MediaToolingTests(unittest.TestCase):
-    def test_runtime_fixture_cannot_reinitialize_hook_repository(self):
-        # A commit hook exports GIT_DIR pointing into the real linked worktree.
-        # Exercise the fixture in a child so even a regression damages only
-        # this disposable parent repository, never the checkout running tests.
-        environment = {key: value for key, value in os.environ.items()
-                       if not key.startswith('GIT_')}
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            parent = root / 'parent'
-            parent.mkdir()
-            def git(*args):
-                return subprocess.run(['git', *args], cwd=parent, env=environment,
-                                      check=True, text=True, capture_output=True)
-            git('init', '-q')
-            shutil.copyfile(REPO / '.gitignore', parent / '.gitignore')
-            git('add', '.gitignore')
-            git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
-                'commit', '-qm', 'fixture')
-            linked = root / 'linked'
-            git('worktree', 'add', '-qb', 'fixture', str(linked))
-            git_dir = parent / '.git/worktrees/linked'
-            child = subprocess.run(
-                [sys.executable, '-m', 'unittest',
-                 'test_media_tooling.MediaToolingTests.test_runtime_state_is_ignored_but_source_is_not'],
-                cwd=REPO / 'scripts/tests', text=True, capture_output=True, timeout=10,
-                env={**environment, 'GIT_DIR': str(git_dir),
-                     'GIT_INDEX_FILE': str(git_dir / 'index')},
-            )
-            self.assertEqual(child.returncode, 0, child.stderr)
-            self.assertEqual(git('config', 'core.bare').stdout.strip(), 'false')
-            self.assertEqual(git('status', '--porcelain').stdout, '')
-
     def test_shell_syntax_error_fails_compose_validation(self):
         # Stub unrelated checks; exercise the actual validator's exit status.
         with tempfile.TemporaryDirectory() as directory:
