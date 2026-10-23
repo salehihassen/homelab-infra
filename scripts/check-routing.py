@@ -6,6 +6,7 @@ import ipaddress
 import json
 import os
 from pathlib import Path
+from string import Template
 import sys
 
 
@@ -83,7 +84,44 @@ def check_push_door(sites, host, name, allowed):
             f"Missing {name} denial response")
 
 
-def check(config, loki_host, cpa_host, host_domain, otel_host):
+def check_cpa_catalog(site, cpa_upstream, policy_upstream):
+    """Assert denial order and the exact model-list-only enrichment branch."""
+    outer = site.get("handle", [])
+    require(len(outer) == 1 and outer[0].get("handler") == "subroute",
+            "Unexpected CPA site structure")
+    wrapper = outer[0].get("routes", [])
+    require(len(wrapper) == 1 and not wrapper[0].get("match"),
+            "CPA routing must have one unconditional ordered route")
+    inner = wrapper[0].get("handle", [])
+    require(len(inner) == 1 and inner[0].get("handler") == "subroute",
+            "CPA ordered route is missing")
+    routes = inner[0].get("routes", [])
+    require(len(routes) == 3, "CPA must have denial, model list, then direct fallback")
+    deny, models, fallback = routes
+    require(deny.get("match") == [{"path": [
+        "/v0/management", "/v0/management/*", "/v8/management", "/v8/management/*"
+    ]}], "CPA v0 and v8 management denial must precede all proxies")
+    require(deny.get("handle") == [{"handler": "static_response", "status_code": 403}],
+            "CPA management paths must return 403")
+    require(models.get("match") == [{"method": ["GET", "HEAD"], "path": ["/v1/models"]}],
+            "Only GET/HEAD CPA model lists may go through Policy Proxy")
+    require(not fallback.get("match") and models.get("group") and
+            models.get("group") == fallback.get("group"),
+            "CPA model-list and direct fallback handlers must be mutually exclusive")
+    rewrites = [node for node in nodes(models) if node.get("handler") == "rewrite"]
+    require(rewrites == [{"handler": "rewrite", "uri": "/v1/upstream-models"}],
+            "CPA model-list rewrite must preserve query strings and use the raw catalog view")
+    for route, upstream in [(models, policy_upstream), (fallback, cpa_upstream)]:
+        proxies = [node for node in nodes(route) if node.get("handler") == "reverse_proxy"]
+        require(len(proxies) == 1 and proxies[0].get("upstreams") == [{"dial": upstream}],
+                "Incorrect CPA model-list or inference upstream")
+        require(proxies[0].get("headers", {}).get("request") == {"delete": ["Tailscale-*"]},
+                "CPA proxy must retain credentials while stripping Tailscale headers")
+    require(not any(node.get("handler") == "rewrite" for node in nodes(fallback)),
+            "CPA inference fallback must not rewrite requests")
+
+
+def check(config, loki_host, cpa_host, host_domain, otel_host, cpa_upstream=None, policy_upstream=None):
     sites = {}
     wildcard_redirects = 0
     for server in config.get("apps", {}).get("http", {}).get("servers", {}).values():
@@ -120,18 +158,10 @@ def check(config, loki_host, cpa_host, host_domain, otel_host):
 
     if cpa_host is not None:
         require(cpa_host in sites, "Missing direct CPA route")
-        inner = sites[cpa_host].get("handle", [])
-        require(len(inner) == 1 and inner[0].get("handler") == "subroute",
-                "Unexpected CPA route structure; review management protection")
-        routes = inner[0].get("routes", [])
-        require(routes and {p for m in routes[0].get("match", []) for p in m.get("path", [])}
-                == {"/v0/management", "/v0/management/*", "/v8/management", "/v8/management/*"},
-                "CPA v0 and v8 management denial must precede proxy")
-        require(routes[0].get("handle") == [{"handler": "static_response", "status_code": 403}],
-                "CPA management paths must return 403")
+        check_cpa_catalog(sites[cpa_host], cpa_upstream, policy_upstream)
     print("Host identity, Caddy proxy listeners, and Loki/OTLP path/auth boundaries verified.")
     if cpa_host is not None:
-        print("CPA management denial verified.")
+        print("CPA management denial, model-list scope, and direct inference route verified.")
     if wildcard_redirects:
         print(f"Observed {wildcard_redirects} non-tailnet redirect server(s); review redirect exposure separately.")
 
@@ -149,7 +179,8 @@ if __name__ == "__main__":
         config = json.load(sys.stdin)
         cpa_host = None if args.absent_domain == "CPA_DOMAIN" else examples["CPA_DOMAIN"]
         check(config, examples["LOKI_DOMAIN"], cpa_host, examples["CADDY_HOST_DOMAIN"],
-              examples["OTEL_DOMAIN"])
+              examples["OTEL_DOMAIN"], Template(examples["CPA_UPSTREAM"]).substitute(examples),
+              Template(examples["POLICY_PROXY_UPSTREAM"]).substitute(examples))
         for variable, upstream in MEDIA_UPSTREAMS.items():
             if variable not in examples:
                 continue  # Other hosts need not run media.

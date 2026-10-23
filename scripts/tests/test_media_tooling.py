@@ -42,22 +42,28 @@ class MediaToolingTests(unittest.TestCase):
 
     def test_runtime_state_is_ignored_but_source_is_not(self):
         # Snapshot validation has no .git; use a disposable repository.
+        # Hook Git variables must not redirect init/check-ignore to the caller.
+        environment = {key: value for key, value in os.environ.items()
+                       if not key.startswith('GIT_')}
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            subprocess.run(['git', 'init', '-q', str(root)], check=True)
+            subprocess.run(['git', 'init', '-q', str(root)], cwd=root,
+                           env=environment, check=True)
             shutil.copyfile(REPO / '.gitignore', root / '.gitignore')
             for name in ['.env', 'config/private', 'data/private', 'migration/evidence.json',
                          'evidence/report.json', 'backup/restic.env', 'backup/restic-password']:
                 with self.subTest(ignored=name):
                     result = subprocess.run(
-                        ['git', 'check-ignore', '-q', '--no-index', str(MEDIA / name)], cwd=root,
+                        ['git', 'check-ignore', '-q', '--no-index', str(MEDIA / name)],
+                        cwd=root, env=environment,
                     )
                     self.assertEqual(result.returncode, 0)
             for name in ['.env.example', 'vpn.env.example', 'backup.yaml', 'compose.yaml',
                          'scripts/ci-validate.sh', 'systemd/99-media-extract-optical.rules']:
                 with self.subTest(source=name):
                     result = subprocess.run(
-                        ['git', 'check-ignore', '-q', '--no-index', str(MEDIA / name)], cwd=root,
+                        ['git', 'check-ignore', '-q', '--no-index', str(MEDIA / name)],
+                        cwd=root, env=environment,
                     )
                     self.assertEqual(result.returncode, 1)
 

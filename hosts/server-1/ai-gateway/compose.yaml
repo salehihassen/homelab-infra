@@ -120,10 +120,8 @@ services:
       start_period: 10s
 
   ai-policy-proxy:
-    # Published by .github/workflows/publish-image.yml on the v0.4.0 tag.
-    # Digest-pinned so the release is unambiguous even when a stale local tag
-    # of the same name exists. To upgrade: push a new vX.Y.Z tag, then set the
-    # tag and digest here from `docker manifest inspect`.
+    # Use the reviewed 0.5.0 source (or later) for shared model modalities.
+    # Keep the selected release/build digest-pinned in the private env.
     image: ${AI_POLICY_PROXY_IMAGE:?Set AI_POLICY_PROXY_IMAGE in ai-gateway/.env}
     container_name: ai-policy-proxy
     restart: unless-stopped
@@ -131,6 +129,7 @@ services:
     environment:
       CPA_UPSTREAM: http://cli-proxy-api:8317
       CATALOG_PATH: /config/catalog.json
+      MODALITIES_PATH: /config/modalities.json
       AFFINITY_DB_PATH: /data/affinity.sqlite
       HMAC_SECRET_PATH: /run/secrets/policy_hmac_key
       LISTEN_HOST: 0.0.0.0
