@@ -1,6 +1,6 @@
 # Email Assist (EMAIL_ASSIST_DOMAIN): private read-only inbox triage; image
-# published to GHCR from its own repository (EMAIL_ASSIST_IMAGE). Reads mail through the Proton Mail Bridge
-# IMAP socket relay and the Zoho business mailbox over IMAPS, stores state in
+# published to GHCR from its own repository (EMAIL_ASSIST_IMAGE). Reads each mail provider read-only:
+# Proton through the Bridge IMAP socket relay and Zoho (US) over IMAPS, stores state in
 # its own Postgres database, and classifies through the AI gateway.
 x-stack:
   requires:
@@ -23,15 +23,23 @@ services:
       AI_BASE_URL: http://ai-policy-proxy:18443/v1
       AI_MODEL: ai-policy/internal
       PUBLIC_ORIGIN: https://${EMAIL_ASSIST_DOMAIN:?Set EMAIL_ASSIST_DOMAIN in email-assist/routing.env}
-      # Web login name (password: secrets/web-password) and the mailbox address,
-      # used when state/imap-username is absent.
+      # Web login name (password: secrets/web-password).
       WEB_USERNAME: ${EMAIL_ASSIST_WEB_USERNAME:?Set EMAIL_ASSIST_WEB_USERNAME in email-assist/.env}
-      IMAP_USERNAME: ${EMAIL_ASSIST_IMAP_USERNAME:?Set EMAIL_ASSIST_IMAP_USERNAME in email-assist/.env}
-      # Business tab: Zoho Mail (US). Password: secrets/business-imap-password
-      # or entered in the UI.
-      BUSINESS_IMAP_HOST: imappro.zoho.com
-      BUSINESS_IMAP_USERNAME: ${EMAIL_ASSIST_BUSINESS_IMAP_USERNAME:-}
-      BUSINESS_MAIL_URL: https://mail.zoho.com/
+      # Mail providers; more can be added in the UI. Passwords: secrets/<name>-imap-password
+      # (e.g. secrets/zoho-imap-password) or the UI.
+      MAIL_PROVIDERS: proton,zoho
+      MAIL_PROTON_LABEL: Personal
+      MAIL_PROTON_TYPE: bridge
+      MAIL_PROTON_USERNAME: ${EMAIL_ASSIST_IMAP_USERNAME:-}
+      MAIL_PROTON_WEBMAIL: https://mail.proton.me/
+      MAIL_ZOHO_LABEL: Business
+      MAIL_ZOHO_HOST: imappro.zoho.com
+      MAIL_ZOHO_USERNAME: ${EMAIL_ASSIST_BUSINESS_IMAP_USERNAME:-}
+      MAIL_ZOHO_WEBMAIL: https://mail.zoho.com/
+      MAIL_ZOHO_FOCUS: >-
+        Prioritize clients, prospects, partners, invoices and payments, contracts, deadlines,
+        blocked work, and actionable issues. Rank SaaS notifications, vendor marketing,
+        cold sales pitches, and automated reports low.
       TZ: ${TZ:?Set TZ in /opt/.env}
     volumes:
       - /opt/email-assist/secrets:/run/secrets:ro
