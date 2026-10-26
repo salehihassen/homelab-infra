@@ -175,6 +175,9 @@ def plan(infra, host, stage):
         "sqlite_scan": sorted(set(merged(declarations, "sqlite_scan"))),
         "offline": sorted(set(merged(declarations, "offline"))),
         "views": sorted(set(merged(declarations, "views"))),
+        # Only explicit path exclusions, not live DB files replaced by exports
+        # or restic globs. Native exporters use these to respect experiments.
+        "excluded_paths": sorted({p for doc in declarations.values() for p in doc.get("exclude", {})}),
         # Docker's containerd image store can assign RepoDigests to local
         # builds too. Compose's build declarations identify those reliably.
         "local_image_names": sorted({service["image"] for service in json.loads(

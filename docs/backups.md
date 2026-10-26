@@ -29,6 +29,13 @@ of uploading a partial snapshot when:
 - a declared path or SQLite database does not exist,
 - an `offline` path is in use by a running container.
 
+Native dumps of additional PostgreSQL containers can be disabled with the
+`infra.backup=disabled` container label only when all persistent bind/volume
+mounts are beneath explicit `exclude` paths. Unlabelled containers, partial
+exclusions, restic glob patterns, and live files replaced by consistent exports
+do not disable database dumps. This lets experimental stacks remain inactive
+without changing retained stacks' coverage.
+
 ## Declaration format
 
 ```yaml

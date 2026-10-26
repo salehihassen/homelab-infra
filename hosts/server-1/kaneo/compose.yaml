@@ -1,0 +1,65 @@
+# Bundled UI/API, with a dedicated database while this service is experimental.
+x-stack:
+  requires: []
+
+services:
+  kaneo-postgres:
+    image: ${KANEO_POSTGRES_IMAGE:?Set KANEO_POSTGRES_IMAGE in kaneo/.env}
+    container_name: kaneo-postgres
+    # Exporter requires this opt-out AND fully excluded persistent mounts.
+    labels:
+      infra.backup: disabled
+    restart: unless-stopped
+    env_file: /opt/kaneo/postgres.env
+    volumes:
+      - /opt/kaneo/postgres:/var/lib/postgresql/data
+    networks: [kaneo]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 128
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      options: {max-size: 10m, max-file: '3'}
+
+  kaneo:
+    image: ${KANEO_IMAGE:?Set KANEO_IMAGE in kaneo/.env}
+    container_name: kaneo
+    restart: unless-stopped
+    init: true
+    env_file: /opt/kaneo/app.env
+    ports: ["127.0.0.1:8911:5173"]
+    depends_on:
+      kaneo-postgres: {condition: service_healthy}
+    networks: [kaneo]
+    user: "1001:0"
+    read_only: true
+    volumes:
+      - /opt/kaneo/data:/app/apps/api/data
+    tmpfs:
+      - /var/lib/kaneo:rw,nosuid,size=256m,uid=1001,gid=0
+      - /tmp:rw,noexec,nosuid,size=64m,uid=1001,gid=0
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 1g
+    cpus: 2.0
+    pids_limit: 128
+    healthcheck:
+      test: [CMD, wget, -Y, 'off', --quiet, --spider, 'http://127.0.0.1:5173/api/health']
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
+    logging:
+      options: {max-size: 10m, max-file: '3'}
+
+networks:
+  kaneo:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: ${KANEO_SUBNET:?Set KANEO_SUBNET in kaneo/.env}

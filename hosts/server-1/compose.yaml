@@ -50,6 +50,10 @@ include:
       - protonmail-bridge/${STACK_ENV_FILE:-.env}
       - protonmail-bridge/${STACK_ROUTING_ENV_FILE:-routing.env}
   # Apps.
+  - path: kaneo/compose.yaml
+    env_file:
+      - kaneo/${STACK_ENV_FILE:-.env}
+      - kaneo/${STACK_ROUTING_ENV_FILE:-routing.env}
   - path: quotes/compose.yaml
     env_file:
       - quotes/${STACK_ENV_FILE:-.env}

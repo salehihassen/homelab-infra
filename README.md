@@ -81,7 +81,7 @@ requiring it, or requires a stack it does not use. Current graph:
 
 | Stack | Requires |
 | --- | --- |
-| postgres, ai-gateway, caddy, komodo, home-automation, protonmail-bridge, countdown, metube, job-sentinel, media-extract | - |
+| postgres, ai-gateway, caddy, komodo, home-automation, protonmail-bridge, countdown, metube, job-sentinel, media-extract, kaneo | - |
 | quotes, forgejo, langfuse | postgres |
 | observability | langfuse |
 | jobsmith, condenseit, speakable | ai-gateway |

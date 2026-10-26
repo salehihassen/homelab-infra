@@ -42,6 +42,8 @@ services:
         required: false
       - path: ../job-sentinel/${STACK_ROUTING_ENV_FILE:-routing.env}
         required: false
+      - path: ../kaneo/${STACK_ROUTING_ENV_FILE:-routing.env}
+        required: false
       - path: ../langfuse/${STACK_ROUTING_ENV_FILE:-routing.env}
         required: false
       - path: ../jobsmith/${STACK_ROUTING_ENV_FILE:-routing.env}

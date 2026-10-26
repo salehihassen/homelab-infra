@@ -1,6 +1,10 @@
 # Runtime env files: they live only on the host and in its restic backups.
 # Repo symlink (- when compose reads the file directly)	File on the host
 .env	/opt/.env
+kaneo/.env	/opt/kaneo/compose.env
+kaneo/routing.env	/opt/kaneo/routing.env
+-	/opt/kaneo/app.env
+-	/opt/kaneo/postgres.env
 media-extract/.env	/opt/media-extract/compose.env
 media-extract/routing.env	/opt/media-extract/routing.env
 -	/opt/media-extract/vpn.env

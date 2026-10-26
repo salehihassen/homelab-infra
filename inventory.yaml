@@ -24,6 +24,12 @@ hosts:
 
 stacks:
   server-1:
+    kaneo:
+      services: [kaneo, kaneo-postgres]
+      urls: [KANEO_DOMAIN]
+      data: [/opt/kaneo]
+      backup: none (experimental; inactive recovery plan)
+      exposure: [tailnet, loopback]
     media-extract:
       services: [gluetun, qbittorrent, prowlarr, flaresolverr, sonarr, radarr, jellyfin, makemkv, handbrake]
       urls: []

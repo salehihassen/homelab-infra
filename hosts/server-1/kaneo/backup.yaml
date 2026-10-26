@@ -1,0 +1,3 @@
+# Experimental: planning only. No native database export or runtime capture.
+exclude:
+  /opt/kaneo: experimental service; enable database-safe backups if retained

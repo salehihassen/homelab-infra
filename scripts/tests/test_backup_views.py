@@ -11,6 +11,19 @@ spec.loader.exec_module(extra)
 
 
 class BackupViewTests(unittest.TestCase):
+    def test_explicit_exclusions_skip_only_fully_excluded_database_mounts(self):
+        database = {"Config": {"Labels": {"infra.backup": "disabled"}},
+                    "Mounts": [{"Type": "bind", "Source": "/opt/experiment/postgres"}]}
+        self.assertTrue(extra.mounts_excluded(database, ["/opt/experiment"]))
+        unmarked = {"Mounts": database["Mounts"]}
+        self.assertFalse(extra.mounts_excluded(unmarked, ["/opt/experiment"]))
+        self.assertFalse(extra.mounts_excluded(database, []))
+        self.assertFalse(extra.mounts_excluded(database, ["/opt/experiment/postgres/cache"]))
+        self.assertFalse(extra.mounts_excluded(database, ["/opt/experiment-other"]))
+        database["Mounts"].append({"Type": "volume", "Source": "/var/lib/docker/volumes/retained/_data"})
+        self.assertFalse(extra.mounts_excluded(database, ["/opt/experiment"]))
+        self.assertFalse(extra.mounts_excluded({"Mounts": []}, ["/opt/experiment"]))
+
     def test_locally_built_image_with_containerd_digest_is_archived(self):
         self.assertTrue(extra.needs_image_archive(
             'local/bridge:1', {'RepoDigests': ['local/bridge@sha256:abc']}, ['local/bridge:1']))
