@@ -1,4 +1,4 @@
-# Bundled UI/API, with a dedicated database while this service is experimental.
+# Bundled UI/API, with a dedicated database and native PostgreSQL backups.
 x-stack:
   requires: []
 
@@ -6,9 +6,6 @@ services:
   kaneo-postgres:
     image: ${KANEO_POSTGRES_IMAGE:?Set KANEO_POSTGRES_IMAGE in kaneo/.env}
     container_name: kaneo-postgres
-    # Exporter requires this opt-out AND fully excluded persistent mounts.
-    labels:
-      infra.backup: disabled
     restart: unless-stopped
     env_file: /opt/kaneo/postgres.env
     volumes:

@@ -28,7 +28,7 @@ stacks:
       services: [kaneo, kaneo-postgres]
       urls: [KANEO_DOMAIN]
       data: [/opt/kaneo]
-      backup: none (experimental; inactive recovery plan)
+      backup: runtime config and app files + native dedicated PostgreSQL export
       exposure: [tailnet, loopback]
     media-extract:
       services: [gluetun, qbittorrent, prowlarr, flaresolverr, sonarr, radarr, jellyfin, makemkv, handbrake]

@@ -11,6 +11,16 @@ spec.loader.exec_module(extra)
 
 
 class BackupViewTests(unittest.TestCase):
+    def test_postgres_discovery_handles_tagged_and_digest_pinned_images(self):
+        for image in ('postgres:16-alpine', 'postgres@sha256:abc',
+                      'postgres:16-alpine@sha256:abc', 'docker.io/library/postgres@sha256:abc',
+                      'pgvector/pgvector@sha256:abc', 'ghcr.io/ferretdb/postgres-documentdb:17'):
+            with self.subTest(image=image):
+                self.assertTrue(extra.is_postgres_image(image))
+        for image in ('postgres-exporter:latest', 'unrelated/postgres:16', 'redis@sha256:abc'):
+            with self.subTest(image=image):
+                self.assertFalse(extra.is_postgres_image(image))
+
     def test_explicit_exclusions_skip_only_fully_excluded_database_mounts(self):
         database = {"Config": {"Labels": {"infra.backup": "disabled"}},
                     "Mounts": [{"Type": "bind", "Source": "/opt/experiment/postgres"}]}

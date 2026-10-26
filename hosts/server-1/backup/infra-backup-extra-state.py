@@ -30,6 +30,12 @@ def in_use(path, current, views=()):
 def needs_image_archive(image_name, image_info, built_images):
     return image_name in built_images or not image_info.get('RepoDigests')
 
+def is_postgres_image(image_name):
+    repositories = ('postgres', 'docker.io/library/postgres', 'pgvector/pgvector',
+                    'ghcr.io/ferretdb/postgres-documentdb')
+    return any(image_name == repo or image_name.startswith((repo + ':', repo + '@'))
+               for repo in repositories)
+
 def mounts_excluded(container, excluded_paths):
     """Require an explicit opt-out and full mount exclusion for native exports."""
     if (container.get('Config', {}).get('Labels') or {}).get('infra.backup') != 'disabled':
@@ -52,7 +58,7 @@ def main(stage):
     native = []
     for container in running:
         name = container['Name'].lstrip('/')
-        if name == 'postgres' or (container['Config'].get('Labels') or {}).get('infra.recovery-drill') == 'true' or not container['Config']['Image'].startswith(('postgres:', 'pgvector/pgvector:', 'ghcr.io/ferretdb/postgres-documentdb:')):
+        if name == 'postgres' or (container['Config'].get('Labels') or {}).get('infra.recovery-drill') == 'true' or not is_postgres_image(container['Config']['Image']):
             continue
         if mounts_excluded(container, plan.get('excluded_paths', [])):
             print(f'Skipping native PostgreSQL export for explicitly excluded mounts: {name}')

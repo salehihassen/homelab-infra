@@ -35,6 +35,7 @@ mounts are beneath explicit `exclude` paths. Unlabelled containers, partial
 exclusions, restic glob patterns, and live files replaced by consistent exports
 do not disable database dumps. This lets experimental stacks remain inactive
 without changing retained stacks' coverage.
+Image discovery accepts both tagged and digest-pinned PostgreSQL references.
 
 ## Declaration format
 

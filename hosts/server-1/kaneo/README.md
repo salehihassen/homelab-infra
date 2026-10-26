@@ -1,9 +1,9 @@
-# Kaneo (experimental)
+# Kaneo
 
 [Kaneo](https://github.com/usekaneo/kaneo) provides project and task management.
 The bundled web/API image is pinned to release 2.47.1 through `KANEO_IMAGE`;
 the runtime env file can further pin image digests. A dedicated PostgreSQL 16
-container keeps experimental data separate from the retained shared cluster.
+container keeps its data separate from the shared cluster.
 There are no cross-stack dependencies.
 
 Caddy serves `KANEO_DOMAIN` over private tailnet HTTPS and proxies the same
@@ -31,12 +31,16 @@ Inspect `docker compose ps kaneo kaneo-postgres` and
 `curl --fail http://127.0.0.1:8911/api/health`. Both containers have health checks,
 automatic restart, bounded logs and resource limits. Alloy discovers their logs.
 
-Runtime backups are disabled through the explicit exclusion in `backup.yaml`;
-the native exporter requires both the `infra.backup=disabled` container label
-and fully excluded database mounts. Source and shared
-routing remain covered by the existing repository backup. The inactive plan at
-`/opt/tmp/kaneo-backup-plan.json` describes future recovery. If retained, back up
-the runtime env files and application data, use native `pg_dump`/`pg_dumpall`,
-and exclude the live PostgreSQL directory. Restore matching config/data and
-import into a fresh cluster before starting the application. Never copy a live
-PostgreSQL data directory as a backup.
+Nightly backups include `/opt/kaneo`: all four env files, application data,
+runtime README and the active recovery plan at `/opt/kaneo/backup-plan.json`.
+The live PostgreSQL directory is excluded; the native exporter captures the
+dedicated cluster as `database-containers/kaneo-postgres.sql` beneath the
+snapshot's staging directory. Source and shared routing retain their existing
+repository backup coverage. No Silo/S3 object store is currently configured.
+Restore matching config/data and import SQL into a fresh cluster with a unique
+temporary bootstrap administrator before starting the application. Never copy
+a live PostgreSQL directory as a backup. Include object storage and its keys
+in coordinated capture if uploads are configured later.
+
+See [MIGRATION.md](MIGRATION.md) for the exact recovery set, moving to another
+host with downtime, and the Caddy/Tailscale Serve routing choices.
