@@ -82,6 +82,7 @@ directory, which is part of every snapshot:
   database-containers/<name>.sql     # other running Postgres containers (demos)
   archived-state/offline-state.tar   # `offline` paths
   images/local-images.tar           # running locally built stack images
+  images/compose.restore.json        # service -> exact saved image ID; disables pulls
   inventory/                         # containers, mounts, packages, disks
 ```
 
@@ -113,6 +114,15 @@ Local images are saved together so shared layers are stored once, with image
 IDs and archive hashes in `inventory/extra-state-manifest.json`.
 Compose build declarations identify local images even when Docker's
 containerd image store reports registry-style digests for them.
+This includes sidecars sharing a locally built image and running older tags.
+Capture uses running image IDs, never the current targets of mutable tags.
+A missing running image fails capture with the affected container's name;
+recreate that service from its reviewed Compose image before retrying. Do not
+substitute a different image under the old tag or skip its recovery artifact.
+After loading the archive, use `images/compose.restore.json` as the last Compose
+file and start with `--no-build --pull never`. It selects the saved IDs even if
+tags have moved or two services used different images under the same tag.
+Keep this override for recovery until deliberately deploying new images.
 SQLite exports retain the live database's numeric owner and permissions;
 those values are also recorded in `inventory/sqlite-manifest.json`. Restore
 that metadata rather than guessing the owner from the containing directory.
@@ -137,8 +147,8 @@ Select one snapshot ID, restore to a private scratch directory with
 and archive hashes against their manifests. Overlay the consistent SQLite
 and quiesced copies with their saved ownership before starting applications.
 Import native PostgreSQL dumps into fresh clusters, load the saved image
-archive, then start recovered applications with private mounts and an internal
-Docker network. Publish no ports and attach no production Docker socket,
+archive and apply its recovery image override, then start recovered applications
+with private mounts and an internal Docker network. Publish no ports and attach no production Docker socket,
 hardware, or live data. Verify database integrity, application startup, and
 representative read/write actions; a successful upload alone proves none of
 those. A full restore needs roughly the snapshot's size in free scratch space
@@ -150,3 +160,14 @@ imports, Forgejo clone/push and `git fsck`, Komodo's native restore, image
 archive loading, SOPS decryption, and HTTP probes of the restored applications.
 It ran in isolated containers on the host, not on a rebuilt one. Media, Loki log
 history and caches are excluded by design.
+
+A representative drill on 2026-10-29 validated the repaired image capture and
+newer services from one freshly uploaded snapshot. All three required local
+image IDs were present in the archive and loaded successfully. Seven restored
+SQLite exports passed full integrity and numeric ownership/mode checks.
+Email link helper passed settings decryption, authenticated settings reads and
+encrypted writes using its recovered key. Career Ops passed startup, pipeline
+reads and profile API writes after recreating its documented dependency links.
+Kaneo passed native SQL import into an empty cluster, application startup and
+database reads/writes. Containers had no outbound network access or published
+ports; the drill did not test external integrations or a rebuilt host.

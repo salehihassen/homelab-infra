@@ -163,6 +163,10 @@ def check(infra, host, live):
 def plan(infra, host, stage):
     host_dir, declarations = check(infra, host, live=True)
     stage = Path(stage)
+    services = json.loads(subprocess.check_output(
+        ["docker", "compose", "--profile", "*", "config", "--format", "json"],
+        cwd=host_dir, text=True))["services"]
+    built_images = {service["image"] for service in services.values() if service.get("build")}
     quiesced_copies = [p for doc in declarations.values() for p in (doc.get("quiesce") or {}).get("copy", [])]
     excludes = [p for doc in declarations.values() for p in doc.get("exclude", {})]
     # Live files replaced by staged consistent copies.
@@ -180,10 +184,11 @@ def plan(infra, host, stage):
         "excluded_paths": sorted({p for doc in declarations.values() for p in doc.get("exclude", {})}),
         # Docker's containerd image store can assign RepoDigests to local
         # builds too. Compose's build declarations identify those reliably.
-        "local_image_names": sorted({service["image"] for service in json.loads(
-            subprocess.check_output(["docker", "compose", "--profile", "*", "config", "--format", "json"],
-                                    cwd=host_dir, text=True))["services"].values()
-                                     if service.get("build")}),
+        "local_image_names": sorted(built_images),
+        # Include sidecars sharing a built image, even when a running container
+        # still references an older tag than today's Compose configuration.
+        "local_image_services": sorted(name for name, service in services.items()
+                                       if service["image"] in built_images),
         "postgres": {name: doc["postgres"] for name, doc in declarations.items() if doc.get("postgres")},
         "quiesce": {name: doc["quiesce"] for name, doc in declarations.items() if doc.get("quiesce")},
     }

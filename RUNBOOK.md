@@ -200,14 +200,40 @@ sudo bash hosts/server-1/backup/install.sh
    (`read:packages` scope only) from the password manager:
    ```bash
    docker login ghcr.io -u <github user>   # paste the token at the prompt
-   cd hosts/server-1 && docker compose pull --ignore-buildable
+   cd hosts/server-1
+   docker image load --input /restore/var/lib/infra-backup/staging/images/local-images.tar
    ```
-   Pulling every image now surfaces an expired token or a missing image
-   before any service is stopped or started. Komodo needs the same token as
+   Pull registry images before starting any service. Exclude services listed in
+   the recovery image override: their exact images came from the archive, and
+   sidecars sharing a local build may have no `build` key of their own.
+   `pull --ignore-buildable` alone still tries to pull those sidecars. For a
+   snapshot with `images/compose.restore.json`, select registry services with:
+   ```bash
+   set -euo pipefail
+   registry_services=$(docker compose --profile '*' config --format json |
+     python3 -c 'import json, sys
+   config = json.load(sys.stdin)
+   saved = json.load(open(sys.argv[1]))["services"]
+   print("\n".join(name for name in config["services"] if name not in saved))' \
+       /restore/var/lib/infra-backup/staging/images/compose.restore.json)
+   if [[ -n "$registry_services" ]]; then
+     mapfile -t registry_service_list <<< "$registry_services"
+     docker compose pull "${registry_service_list[@]}"
+   fi
+   ```
+   For older snapshots, use `inventory/extra-state-manifest.json` to identify
+   archived local images and explicitly pull only the remaining services.
+   This surfaces an expired token or a missing registry image before application
+   startup. Komodo needs the same token as
    a registry account (Settings -> Providers) to deploy private images.
 5. Before starting application writers, restore staged state from
    `/restore/var/lib/infra-backup/staging/`:
-   - Load `images/local-images.tar` with `docker image load --input`.
+   - The local image archive was loaded above. For snapshots containing
+     `images/compose.restore.json`, pass it as the last
+     `-f` file when starting Compose and use `--no-build --pull never`. This
+     selects the exact saved image IDs without depending on current tags:
+     `docker compose -f compose.yaml -f /restore/var/lib/infra-backup/staging/images/compose.restore.json up -d --no-build --pull never`.
+     Keep the override in use until intentionally updating the recovered apps.
    - Shared Postgres: see `hosts/server-1/postgres/README.md`. Use a unique
      temporary bootstrap administrator in an empty cluster, disable init
      scripts during import, restore globals with `ON_ERROR_STOP`, then each
@@ -234,7 +260,8 @@ sudo bash hosts/server-1/backup/install.sh
    reinstalled; dependency/build directories are intentionally excluded.
    Restore their user units and consistent SQLite exports before starting
    them. Re-enroll Tailscale rather than copying another host's identity.
-7. `docker compose up -d` for everything else, then `docker compose ps` and
+7. Start everything else with the recovery image override and flags above
+   (older snapshots without that file use `docker compose up -d`), then `docker compose ps` and
    check each `https://<name>.PRIVATE_ZONE`.
 8. Re-enable timers: `sudo systemctl enable --now infra-backup.timer infra-backup-maintenance.timer`;
    `systemctl --user enable --now` the `*-export.timer` units.

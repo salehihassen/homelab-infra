@@ -30,6 +30,54 @@ def in_use(path, current, views=()):
 def needs_image_archive(image_name, image_info, built_images):
     return image_name in built_images or not image_info.get('RepoDigests')
 
+def collect_local_images(running, plan):
+    images = []
+    for container in running:
+        labels = container['Config'].get('Labels') or {}
+        if labels.get('com.docker.compose.project') != 'opt':
+            continue
+        name = container['Name'].lstrip('/')
+        service = labels.get('com.docker.compose.service', '')
+        try:
+            info = json.loads(command(['docker', 'image', 'inspect', container['Image']]))[0]
+        except subprocess.CalledProcessError as error:
+            raise RuntimeError(
+                f'{name}: running image {container["Image"]} is missing; refusing an incomplete '
+                'snapshot. Recreate this service using its reviewed Compose image before retrying; '
+                'a tag may now identify a different image.') from error
+        if (service in plan.get('local_image_services', []) or
+                needs_image_archive(container['Config']['Image'], info, plan['local_image_names'])):
+            if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]*', service):
+                raise RuntimeError(f'{name}: missing or invalid Compose service for image recovery')
+            images.append({'container': name, 'service': service,
+                           'image': container['Config']['Image'], 'image_id': container['Image']})
+    return images
+
+def save_local_images(stage, images):
+    if not images:
+        return None
+    services = {}
+    for image in images:
+        service = image['service']
+        recovery = {'image': image['image_id'], 'pull_policy': 'never'}
+        if service in services and services[service] != recovery:
+            raise RuntimeError(f'{service}: multiple running images; finish the deployment before backup')
+        services[service] = recovery
+    destination = stage / 'images' / 'local-images.tar'
+    destination.parent.mkdir(mode=0o700, exist_ok=True)
+    # Tags can move between discovery and save. IDs preserve the actual running
+    # binaries; a Compose override restores them without retagging other images.
+    subprocess.run(['docker', 'image', 'save', '--output', str(destination),
+                    *sorted({image['image_id'] for image in images})], check=True, timeout=1800)
+    with destination.open('rb') as source:
+        digest = hashlib.file_digest(source, 'sha256').hexdigest()
+    override = destination.parent / 'compose.restore.json'
+    override.write_text(json.dumps({'services': services}, indent=2) + '\n')
+    return {'backup': str(destination), 'sha256': digest,
+            'bytes': destination.stat().st_size, 'images': images,
+            'compose_override': str(override),
+            'compose_override_sha256': hashlib.sha256(override.read_bytes()).hexdigest()}
+
 def is_postgres_image(image_name):
     repositories = ('postgres', 'docker.io/library/postgres', 'pgvector/pgvector',
                     'ghcr.io/ferretdb/postgres-documentdb')
@@ -55,6 +103,8 @@ def main(stage):
     plan = json.loads((stage / 'plan.json').read_text())
     views = plan.get('views', [])
     running = containers()
+    # Fail before native exports/cold archives when a running image is missing.
+    local_images = collect_local_images(running, plan)
     native = []
     for container in running:
         name = container['Name'].lstrip('/')
@@ -151,29 +201,13 @@ def main(stage):
 
     # Preserve locally built running stack images; restoring must not depend on
     # future package indexes or on a source tree rebuilding identical binaries.
-    local_images = []
-    for container in running:
-        if (container['Config'].get('Labels') or {}).get('com.docker.compose.project') != 'opt':
-            continue
-        info = json.loads(command(['docker', 'image', 'inspect', container['Image']]))[0]
-        if needs_image_archive(container['Config']['Image'], info, plan['local_image_names']):
-            local_images.append({'container': container['Name'].lstrip('/'),
-                                 'image': container['Config']['Image'], 'image_id': container['Image']})
     image_archive = None
-    local_archive = None
-    if local_images:
-        destination = stage / 'images' / 'local-images.tar'
-        destination.parent.mkdir(mode=0o700, exist_ok=True)
-        subprocess.run(['docker', 'image', 'save', '--output', str(destination),
-                        *sorted({x['image'] for x in local_images})], check=True, timeout=1800)
-        with destination.open('rb') as source:
-            digest = hashlib.file_digest(source, 'sha256').hexdigest()
-        local_archive = {'backup': str(destination), 'sha256': digest,
-                         'bytes': destination.stat().st_size, 'images': local_images}
+    local_archive = save_local_images(stage, local_images)
+    if local_archive:
         bridge = next((x for x in local_images if x['container'] == 'protonmail-bridge'), None)
         if bridge:
-            image_archive = {'image_id': bridge['image_id'], 'backup': str(destination),
-                             'sha256': digest, 'bytes': destination.stat().st_size}
+            image_archive = {'image_id': bridge['image_id'], 'backup': local_archive['backup'],
+                             'sha256': local_archive['sha256'], 'bytes': local_archive['bytes']}
 
     manifest = {'extra_postgresql': native, 'volumes': volumes,
                 'offline_archive': archive, 'protonmail_image': image_archive,
