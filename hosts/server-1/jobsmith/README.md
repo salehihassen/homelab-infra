@@ -7,9 +7,12 @@ automatic pairing, tailoring, and assisted form filling.
 Read the [Chromium extension security audit](EXTENSION_SECURITY_AUDIT.md) before
 installing the current extension build.
 
-The manual-entry rollout uses application revision `43df941`. **Add job
-manually** in Inbox and Pipeline accepts recruiter messages and referrals
-without a posting URL; entries can start in Inbox, Shortlisted, or Applied.
+The deployed application revision is `545b4d2`. **Add job manually** in Inbox
+and Pipeline accepts recruiter messages and referrals without a posting URL;
+entries can start in Inbox, Shortlisted, or Applied. Applications silent for
+`pipeline.ghost_after_days` (default 21) are marked Ghosted and move to the
+board's Rejected / Turned Down / Ghosted section; anything that ever reached
+screening or later is never auto-ghosted.
 The deployed tag and digest are set through this repository's `.env` symlink
 to `/opt/jobsmith/compose.env`, rather than a tracked image reference.
 
