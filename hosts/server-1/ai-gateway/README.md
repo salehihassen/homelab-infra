@@ -7,7 +7,7 @@ does not serve the policy proxy.
 - **Provides:** internal network `cpa_policy_model` (`opt_cpa_policy_model`,
   no internet egress) and service `ai-policy-proxy`. Apps join the network and
   call `http://ai-policy-proxy:18443/v1` with their own client key.
-- **Consumers:** jobsmith, condenseit, speakable, email-assist. Caddy routes to
+- **Consumers:** jobsmith, career-ops, condenseit, speakable, email-assist. Caddy routes to
   the gateway but has no startup dependency on it. Jobsmith demos also join
   `opt_cpa_policy_model` by name, so keep the name stable.
 - **Networks:** fixed subnets and addresses come from `CPA_*` and

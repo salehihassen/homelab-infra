@@ -99,6 +99,12 @@ stacks:
       data: [/opt/jobsmith]
       backup: files + SQLite copy
       exposure: [tailnet, loopback]
+    career-ops:
+      services: [career-ops, career-ops-worker]
+      urls: [CAREER_OPS_DOMAIN]
+      data: [/opt/career-ops]
+      backup: workspace + config + Codex credentials/session SQLite copies; image dependencies excluded
+      exposure: [tailnet, loopback]
     condenseit:
       services: [condenseit]
       urls: [NEWS_DOMAIN]

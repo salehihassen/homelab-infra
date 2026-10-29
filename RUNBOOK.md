@@ -246,6 +246,9 @@ sudo bash hosts/server-1/backup/install.sh
      the writer.
    - Forgejo: copy `quiesced/opt/forgejo/data` with numeric owners and permissions
      preserved alongside its database from this same snapshot.
+   - Career Ops: recreate its three excluded dependency/build symlinks as
+     described in `hosts/server-1/career-ops/README.md`. They point into the
+     saved image; do not rebuild dependencies or overwrite restored user files.
    - Komodo: initialize its pinned DocumentDB/FerretDB services, then run the
      Core image with `km` as its entrypoint to import before Core's normal
      startup creates default resources. Supply a private CLI config with

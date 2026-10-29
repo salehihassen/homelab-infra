@@ -1,0 +1,89 @@
+x-stack:
+  requires: [ai-gateway]   # actual provider network and readiness dependency
+
+x-career-ops: &runtime
+  image: ${CAREER_OPS_IMAGE:?Set CAREER_OPS_IMAGE in career-ops/.env}
+  build:
+    context: .
+    args:
+      CAREER_OPS_REV: ${CAREER_OPS_REV:?Set CAREER_OPS_REV in career-ops/.env}
+      CODEX_VERSION: ${CAREER_OPS_CODEX_VERSION:?Set CAREER_OPS_CODEX_VERSION in career-ops/.env}
+  restart: unless-stopped
+  init: true
+  user: '1000:1000'
+  working_dir: /workspace
+  environment:
+    TZ: ${TZ:?Set TZ in /opt/.env}
+    CAREER_OPS_WEB_ALLOWED_HOSTS: ${CAREER_OPS_DOMAIN:?Set CAREER_OPS_DOMAIN in career-ops/routing.env}
+  env_file:
+    - path: /opt/career-ops/telemetry.env
+      required: false
+  volumes:
+    - /opt/career-ops/workspace:/workspace
+    - /opt/career-ops/home:/home/node
+  networks: [career_ops, cpa_policy_model]
+  secrets:
+    - source: career_ops_cpa_key
+      target: career_ops_cpa_key
+  read_only: true
+  tmpfs:
+    - /tmp:rw,nosuid,size=512m,uid=1000,gid=1000
+  cap_drop: [ALL]
+  # Permit Codex to create its inner sandbox without granting host capabilities.
+  # Load the dedicated AppArmor profile first; see README installation steps.
+  security_opt:
+    - no-new-privileges:true
+    - apparmor=career-ops-sandbox
+    - seccomp=/opt/career-ops/security/seccomp.json
+  shm_size: 1gb
+  pids_limit: 512
+  mem_limit: 3g
+  cpus: 2.0
+  stop_grace_period: 30s
+  logging:
+    options: {max-size: 10m, max-file: '3'}
+
+services:
+  career-ops:
+    <<: *runtime
+    depends_on:
+      ai-policy-proxy:
+        condition: service_healthy
+    ports: ['127.0.0.1:8890:3000']
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+  career-ops-worker:
+    <<: *runtime
+    command: [/usr/local/libexec/career-ops/scheduler.sh]
+    # Upstream locks test owner PIDs with kill(pid, 0). Separate PID namespaces
+    # can mistake another container's live lock for an abandoned one. Share
+    # only this app's namespace; never the host namespace.
+    pid: service:career-ops
+    depends_on:
+      career-ops:
+        condition: service_healthy
+        restart: true
+    # A scan can take 25 minutes with up to three attempts. The heartbeat is
+    # refreshed before/after each invocation, rather than during a stuck job.
+    healthcheck:
+      test: [CMD, node, -e, "const fs=require('fs');process.exit(Date.now()-fs.statSync('/tmp/scheduler-heartbeat').mtimeMs<4620000?0:1)"]
+      interval: 60s
+      timeout: 5s
+      retries: 2
+      start_period: 30s
+
+networks:
+  career_ops:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: ${CAREER_OPS_SUBNET:?Set CAREER_OPS_SUBNET in career-ops/.env}
+
+secrets:
+  career_ops_cpa_key:
+    file: /opt/career-ops/secrets/cpa-client-key

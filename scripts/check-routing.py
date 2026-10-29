@@ -121,6 +121,29 @@ def check_cpa_catalog(site, cpa_upstream, policy_upstream):
             "CPA inference fallback must not rewrite requests")
 
 
+def check_career_ops_navigation(site):
+    """Only explicit page clicks may fall back from Fetch Metadata to Origin."""
+    expected_match = {
+        "method": ["GET", "HEAD"],
+        "header": {
+            "Sec-Fetch-Dest": ["document"],
+            "Sec-Fetch-Mode": ["navigate"],
+            "Sec-Fetch-User": ["?1"],
+        },
+        "header_regexp": {"Sec-Fetch-Site": {
+            "name": "navigation_site", "pattern": "^(same-site|cross-site)$",
+        }},
+        "not": [{"path": ["/api", "/api/*"]}],
+    }
+    modifiers = [node for node in nodes(site)
+                 if node.get("handler") == "headers" and node.get("request")]
+    require(len(modifiers) == 1 and modifiers[0]["request"] == {"delete": ["Sec-Fetch-Site"]},
+            "Career Ops must preserve Origin and limit Fetch Metadata modification")
+    routes = [node for node in nodes(site) if modifiers[0] in node.get("handle", [])]
+    require(len(routes) == 1 and routes[0].get("match") == [expected_match],
+            "Career Ops navigation exception must exclude API, fetch, iframe and POST requests")
+
+
 def check(config, loki_host, cpa_host, host_domain, otel_host, cpa_upstream=None, policy_upstream=None):
     sites = {}
     wildcard_redirects = 0
@@ -194,6 +217,21 @@ if __name__ == "__main__":
                 proxies = [node for node in nodes(routes[0]) if node.get("handler") == "reverse_proxy"]
                 require(len(proxies) == 1 and proxies[0].get("upstreams") == [{"dial": upstream}],
                         f"Incorrect media upstream: {variable}")
+        if "CAREER_OPS_DOMAIN" in examples:
+            domain = examples["CAREER_OPS_DOMAIN"]
+            routes = [node for node in nodes(config)
+                      if any(domain in match.get("host", []) for match in node.get("match", []))]
+            if args.absent_domain == "CAREER_OPS_DOMAIN":
+                require(not routes, "Missing Career Ops routing must omit its site")
+            else:
+                require(len(routes) == 1, "Missing or duplicate Career Ops route")
+                proxies = [node for node in nodes(routes[0]) if node.get("handler") == "reverse_proxy"]
+                require(len(proxies) == 1 and proxies[0].get("upstreams") == [{"dial": "127.0.0.1:8890"}],
+                        "Incorrect Career Ops upstream")
+                require(proxies[0].get("headers", {}).get("request", {}).get("delete") == ["Tailscale-*"],
+                        "Career Ops must strip inbound Tailscale identity headers")
+                check_career_ops_navigation(routes[0])
+            print("Career Ops HTTPS upstream and identity-header boundary verified.")
         print("Media HTTPS upstreams and optional routing verified.")
         if args.absent_domain:
             domain = examples[args.absent_domain]

@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+# Install as a symlink so updates continue to use the maintained wrapper.
+stack_dir="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
+compose=(docker compose --project-directory "$stack_dir/.." -f "$stack_dir/../compose.yaml")
+command="${1:-help}"
+if (( $# )); then shift; fi
+interactive=(-T)
+if [[ -t 0 && -t 1 ]]; then interactive=(); fi
+case "$command" in
+  doctor) args=(node doctor.mjs) ;;
+  scan) args=(node scan.mjs) ;;
+  verify) args=(node verify-pipeline.mjs) ;;
+  pdf) args=(node generate-pdf.mjs) ;;
+  shell) args=(bash) ;;
+  codex) args=(codex) ;;
+  scheduled) args=(node web/scripts/scheduled-jobs-runner.mjs) ;;
+  exec) args=() ;;
+  help|-h|--help)
+    echo 'Usage: career-ops {doctor|scan|verify|pdf|shell|codex|scheduled|exec} [arguments...]'
+    exit 0 ;;
+  *) echo "Unknown command: $command (see career-ops help)" >&2; exit 2 ;;
+esac
+exec "${compose[@]}" exec "${interactive[@]}" --workdir /workspace career-ops "${args[@]}" "$@"

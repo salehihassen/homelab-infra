@@ -1,0 +1,22 @@
+https://{$CAREER_OPS_DOMAIN} {
+	bind {$CADDY_BIND_ADDRESSES}
+
+	# The upstream guard also covers pages and rejects links from sibling sites.
+	# Treat only user-activated document GET/HEADs like direct navigation. Keep
+	# Origin intact so its fallback still rejects a foreign Origin. API, fetch,
+	# iframe and state-changing requests retain the original Fetch Metadata.
+	@clicked_document {
+		method GET HEAD
+		header_regexp navigation_site Sec-Fetch-Site ^(same-site|cross-site)$
+		header Sec-Fetch-Mode navigate
+		header Sec-Fetch-Dest document
+		header Sec-Fetch-User ?1
+		not path /api /api/*
+	}
+	request_header @clicked_document -Sec-Fetch-Site
+
+	reverse_proxy http://127.0.0.1:8890 {
+		header_up -Tailscale-*
+		flush_interval -1
+	}
+}

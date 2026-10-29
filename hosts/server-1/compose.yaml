@@ -66,6 +66,10 @@ include:
     env_file:
       - jobsmith/${STACK_ENV_FILE:-.env}
       - jobsmith/${STACK_ROUTING_ENV_FILE:-routing.env}
+  - path: career-ops/compose.yaml
+    env_file:
+      - career-ops/${STACK_ENV_FILE:-.env}
+      - career-ops/${STACK_ROUTING_ENV_FILE:-routing.env}
   - path: condenseit/compose.yaml
     env_file:
       - condenseit/${STACK_ENV_FILE:-.env}

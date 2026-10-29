@@ -51,3 +51,6 @@ email-assist/.env	/opt/email-assist/compose.env
 email-assist/routing.env	/opt/email-assist/routing.env
 protonmail-bridge/.env	/opt/protonmail-bridge/compose.env
 protonmail-bridge/routing.env	/opt/protonmail-bridge/routing.env
+career-ops/.env	/opt/career-ops/compose.env
+career-ops/routing.env	/opt/career-ops/routing.env
+-	/opt/career-ops/telemetry.env

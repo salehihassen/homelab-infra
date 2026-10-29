@@ -30,6 +30,8 @@ services:
     env_file:
       - path: ../ai-gateway/${STACK_ROUTING_ENV_FILE:-routing.env}
         required: false
+      - path: ../career-ops/${STACK_ROUTING_ENV_FILE:-routing.env}
+        required: false
       - path: ../condenseit/${STACK_ROUTING_ENV_FILE:-routing.env}
         required: false
       - path: ../countdown/${STACK_ROUTING_ENV_FILE:-routing.env}

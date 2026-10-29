@@ -1,0 +1,14 @@
+# Full persistent checkout: user templates/customizations may live beside code.
+# Keep its small source tree for recovery rather than risk excluding user files.
+paths:
+  - /opt/career-ops
+exclude:
+  /opt/career-ops/workspace/node_modules: image-provided core dependencies
+  /opt/career-ops/workspace/web/node_modules: image-provided Web UI dependencies
+  /opt/career-ops/workspace/web/.next: production Web UI rebuilt in the pinned image
+  /opt/career-ops/home/.cache: disposable browser and tool caches
+  /opt/career-ops/home/.npm: downloaded npm packages and installer logs
+  /opt/career-ops/workspace/.career-ops-web/logo-cache: regenerable company logos
+# Codex may create SQLite session/index databases; export these consistently.
+sqlite_scan:
+  - /opt/career-ops/home/.codex

@@ -1,0 +1,25 @@
+# Install to /opt/career-ops/home/.codex/config.toml; merge any native [otel]
+# settings rather than replacing them. No OAuth login or auth.json is needed.
+model_provider = "cpa"
+# Select an advertised gateway model; the policy alias is a portable default.
+# For a fixed model, use its exact provider-prefixed ID from /v1/models.
+model = "ai-policy/internal"
+model_reasoning_effort = "high"
+
+[model_providers.cpa]
+name = "Existing CLIProxyAPI gateway"
+base_url = "http://ai-policy-proxy:18443/v1"
+wire_api = "responses"
+# CPA returns Codex-native metadata only when client_version is present.
+model_catalog_url = "http://cli-proxy-api:8317/v1/models?client_version=0.164.0"
+# HTTP SSE is supported by the policy proxy; WebSocket transport is not.
+request_max_retries = 1
+stream_max_retries = 1
+
+# Codex reads the dedicated Compose secret through a subprocess pipe. This also
+# works for docker compose exec, which cannot inherit entrypoint-only exports.
+[model_providers.cpa.auth]
+command = "/bin/cat"
+args = ["/run/secrets/career_ops_cpa_key"]
+timeout_ms = 5000
+refresh_interval_ms = 0
