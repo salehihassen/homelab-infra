@@ -119,6 +119,12 @@ stacks:
       data: [/opt/speakable]
       backup: config + secrets (stateless)
       exposure: [tailnet, loopback]
+    email-link-helper:
+      services: [email-link-helper, email-link-helper-imap-socket]
+      urls: [EMAIL_LINK_HELPER_DOMAIN]
+      data: [/opt/email-link-helper]
+      backup: config + secrets + encrypted SQLite online copy; relay socket excluded
+      exposure: [tailnet, loopback]
     email-assist:
       services: [email-assist, email-assist-imap-socket]
       urls: [EMAIL_ASSIST_DOMAIN]

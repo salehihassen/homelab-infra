@@ -38,6 +38,8 @@ services:
         required: false
       - path: ../email-assist/${STACK_ROUTING_ENV_FILE:-routing.env}
         required: false
+      - path: ../email-link-helper/${STACK_ROUTING_ENV_FILE:-routing.env}
+        required: false
       - path: ../forgejo/${STACK_ROUTING_ENV_FILE:-routing.env}
         required: false
       - path: ../home-automation/${STACK_ROUTING_ENV_FILE:-routing.env}

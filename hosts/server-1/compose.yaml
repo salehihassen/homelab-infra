@@ -82,6 +82,10 @@ include:
     env_file:
       - email-assist/${STACK_ENV_FILE:-.env}
       - email-assist/${STACK_ROUTING_ENV_FILE:-routing.env}
+  - path: email-link-helper/compose.yaml
+    env_file:
+      - email-link-helper/${STACK_ENV_FILE:-.env}
+      - email-link-helper/${STACK_ROUTING_ENV_FILE:-routing.env}
   - path: job-sentinel/compose.yaml
     env_file:
       - job-sentinel/${STACK_ENV_FILE:-.env}

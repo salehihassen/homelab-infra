@@ -133,6 +133,13 @@ PY
   ci_routing_overrides=(--env CPA_DOMAIN=)
   ci_caddy validate
   ci_caddy adapt | python3 scripts/check-routing.py --absent-domain CPA_DOMAIN
+  # Career Ops is optional and must not break ingress when its routing is absent.
+  ci_routing_overrides=(--env CAREER_OPS_DOMAIN=)
+  ci_caddy validate
+  ci_caddy adapt | python3 scripts/check-routing.py --absent-domain CAREER_OPS_DOMAIN
+  ci_routing_overrides=(--env EMAIL_LINK_HELPER_DOMAIN=)
+  ci_caddy validate
+  ci_caddy adapt | python3 scripts/check-routing.py --absent-domain EMAIL_LINK_HELPER_DOMAIN
   # A partial media routing file must not break ingress for other stacks.
   ci_routing_overrides=(--env MEDIA_JELLYFIN_DOMAIN=)
   ci_caddy validate

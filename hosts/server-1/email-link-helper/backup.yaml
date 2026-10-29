@@ -1,0 +1,9 @@
+# Retain configuration, credentials, encryption key and encrypted settings/device
+# state together. The shared runner exports SQLite online and excludes the live
+# database and its journals. Discard pending links and web sessions on restore.
+paths:
+  - /opt/email-link-helper
+sqlite:
+  - /opt/email-link-helper/state/helper.db
+exclude:
+  /opt/email-link-helper/run: private IMAP socket; recreated by the relay

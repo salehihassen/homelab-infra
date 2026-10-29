@@ -233,6 +233,22 @@ if __name__ == "__main__":
                 check_career_ops_navigation(routes[0])
             print("Career Ops HTTPS upstream and identity-header boundary verified.")
         print("Media HTTPS upstreams and optional routing verified.")
+        if "EMAIL_LINK_HELPER_DOMAIN" in examples:
+            domain = examples["EMAIL_LINK_HELPER_DOMAIN"]
+            routes = [node for node in nodes(config)
+                      if any(domain in match.get("host", []) for match in node.get("match", []))]
+            if args.absent_domain == "EMAIL_LINK_HELPER_DOMAIN":
+                require(not routes, "Missing helper routing must omit its site")
+            else:
+                require(len(routes) == 1, "Missing or duplicate email helper route")
+                proxies = [node for node in nodes(routes[0]) if node.get("handler") == "reverse_proxy"]
+                require(len(proxies) == 1 and proxies[0].get("upstreams") == [{"dial": "127.0.0.1:8904"}],
+                        "Incorrect email helper upstream")
+                require(proxies[0].get("headers", {}).get("request", {}).get("delete") == ["Tailscale-*"],
+                        "Email helper must strip inbound Tailscale identity headers")
+                require(any(node.get("max_size") == 64000 for node in nodes(routes[0])),
+                        "Email helper must limit request body size")
+            print("Email link helper HTTPS upstream and request boundary verified.")
         if args.absent_domain:
             domain = examples[args.absent_domain]
             require(not any(domain in node.get("host", []) for node in nodes(config)),

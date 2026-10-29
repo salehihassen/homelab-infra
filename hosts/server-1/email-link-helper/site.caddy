@@ -1,0 +1,10 @@
+# App session login for settings; separate revocable bearer tokens for extensions.
+https://{$EMAIL_LINK_HELPER_DOMAIN} {
+	bind {$CADDY_BIND_ADDRESSES}
+	request_body {
+		max_size 64KB
+	}
+	reverse_proxy http://127.0.0.1:8904 {
+		header_up -Tailscale-*
+	}
+}

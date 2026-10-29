@@ -49,6 +49,9 @@ quotes/.env	/opt/quotes/compose.env
 quotes/routing.env	/opt/quotes/routing.env
 email-assist/.env	/opt/email-assist/compose.env
 email-assist/routing.env	/opt/email-assist/routing.env
+email-link-helper/.env	/opt/email-link-helper/compose.env
+email-link-helper/routing.env	/opt/email-link-helper/routing.env
+-	/opt/email-link-helper/app.env
 protonmail-bridge/.env	/opt/protonmail-bridge/compose.env
 protonmail-bridge/routing.env	/opt/protonmail-bridge/routing.env
 career-ops/.env	/opt/career-ops/compose.env

@@ -1,0 +1,73 @@
+x-stack:
+  requires: [protonmail-bridge]
+
+services:
+  email-link-helper:
+    image: ${EMAIL_LINK_HELPER_IMAGE:?Set EMAIL_LINK_HELPER_IMAGE in email-link-helper/.env}
+    build:
+      context: ${EMAIL_LINK_HELPER_BUILD_CONTEXT:-../../../../services/email-link-helper}
+    container_name: email-link-helper
+    restart: unless-stopped
+    init: true
+    user: '1000:1000'
+    ports:
+      - 127.0.0.1:8904:8000
+    environment:
+      PUBLIC_ORIGIN: https://${EMAIL_LINK_HELPER_DOMAIN:?Set EMAIL_LINK_HELPER_DOMAIN in email-link-helper/routing.env}
+      TZ: ${TZ:?Set TZ in /opt/.env}
+    env_file:
+      - path: /opt/email-link-helper/app.env
+        required: false
+    volumes:
+      - /opt/email-link-helper/secrets:/run/secrets:ro
+      - /opt/email-link-helper/state:/state
+      - /opt/email-link-helper/run:/mail:ro
+    networks: [email_link_helper]
+    depends_on:
+      email-link-helper-imap-socket:
+        condition: service_started
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m,uid=1000,gid=1000
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 64
+    mem_limit: 256m
+    cpus: 0.5
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging:
+      options: {max-size: 10m, max-file: '3'}
+
+  email-link-helper-imap-socket:
+    image: ${EMAIL_LINK_HELPER_IMAGE:?Set EMAIL_LINK_HELPER_IMAGE in email-link-helper/.env}
+    container_name: email-link-helper-imap-socket
+    command: [python, relay.py]
+    restart: unless-stopped
+    init: true
+    user: '1000:1000'
+    network_mode: host
+    volumes:
+      - /opt/email-link-helper/run:/mail
+    depends_on:
+      protonmail-bridge:
+        condition: service_started
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 32
+    mem_limit: 64m
+    cpus: 0.25
+    logging:
+      options: {max-size: 10m, max-file: '3'}
+
+networks:
+  email_link_helper:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: ${EMAIL_LINK_HELPER_SUBNET:?Set EMAIL_LINK_HELPER_SUBNET in email-link-helper/.env}
