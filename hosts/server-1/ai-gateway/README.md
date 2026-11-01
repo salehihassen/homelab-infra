@@ -30,8 +30,8 @@ Provider OAuth callbacks still use SSH local forwards to the loopback ports
 
 ## Shared model modalities
 
-Keep CPA on its stock image. Policy Proxy 0.5.0 (or a reviewed build containing
-`/v1/upstream-models`) reads `/config/modalities.json` through its existing config
+Keep CPA on its stock image. Policy Proxy 0.5.1 or later reads
+`/config/modalities.json` through its existing config
 mount. Caddy sends only GET/HEAD requests for the public CPA `/v1/models` to that
 endpoint, preserving credentials and query strings. The Policy Proxy URL still
 serves its policy catalog at `/v1/models`. CPA's direct/internal listener keeps
