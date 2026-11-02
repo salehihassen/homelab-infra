@@ -1,0 +1,7 @@
+paths:
+- /opt/observability
+exclude:
+  /opt/observability/data: disposable Alloy cursor state; bounded log replay is allowed
+  /var/log/journal: host logs are shipped to the central store, not recovery state
+  /run/log/journal: volatile host journal
+  /etc/machine-id: host identity is provisioned independently

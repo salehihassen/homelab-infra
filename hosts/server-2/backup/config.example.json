@@ -1,0 +1,10 @@
+{
+  "infra_dir": "/path/to/homelab-infra",
+  "host": "server-2",
+  "state_dir": "/opt/infra-backup-state",
+  "tool_image": "python@sha256:2d44738ebf4ce5f63b9d9ea871e9c7cfdc0426f7b0c97cac915fd88ded1d86bb",
+  "restic_binary": "/opt/infra-backup/restic",
+  "repository_file": "/opt/infra-backup/secrets/repository",
+  "password_file": "/opt/infra-backup/secrets/restic-password",
+  "ca_file": "/opt/infra-backup/secrets/receiver-ca.crt"
+}

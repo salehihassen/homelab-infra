@@ -1,0 +1,46 @@
+x-stack:
+  requires: []
+services:
+  personal-network:
+    image: ${PERSONAL_NETWORK_IMAGE:?Set PERSONAL_NETWORK_IMAGE in personal-network/.env}
+    container_name: personal-network
+    restart: unless-stopped
+    init: true
+    ports:
+    - target: 80
+      published: '3100'
+      host_ip: ${PERSONAL_NETWORK_BIND_ADDRESS:-127.0.0.1}
+      protocol: tcp
+    - target: 80
+      published: '3100'
+      host_ip: ${PERSONAL_NETWORK_BIND_ADDRESS_V6:-::1}
+      protocol: tcp
+    networks:
+    - personal_network
+    mem_limit: ${PERSONAL_NETWORK_MEMORY_LIMIT:-128m}
+    cpus: 2.0
+    pids_limit: 512
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    healthcheck:
+      test:
+      - CMD
+      - wget
+      - -q
+      - --spider
+      - http://127.0.0.1/
+      interval: 30s
+      timeout: 10s
+      start_period: 120s
+      retries: 5
+networks:
+  personal_network:
+    driver: bridge
+    ipam:
+      config:
+      - subnet: ${PERSONAL_NETWORK_SUBNET:?Set PERSONAL_NETWORK_SUBNET}

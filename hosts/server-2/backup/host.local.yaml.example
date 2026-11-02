@@ -1,0 +1,6 @@
+# Copy to host.local.yaml (ignored) and supply actual bind/source paths.
+paths:
+  - /path/to/homelab-infra
+  - /path/to/active/application/data
+sqlite:
+  - /path/to/active/application/data/database.sqlite

@@ -1,0 +1,4 @@
+paths:
+- /opt/caddy
+volumes:
+- caddy_data

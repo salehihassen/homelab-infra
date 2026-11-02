@@ -1,0 +1,9 @@
+paths:
+- /opt/nextcloud-aio
+volumes:
+- nextcloud_aio_mastercontainer
+- nextcloud_aio_apache
+- nextcloud_aio_nextcloud
+- nextcloud_aio_database
+- nextcloud_aio_database_dump
+- nextcloud_aio_redis

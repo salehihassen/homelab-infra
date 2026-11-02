@@ -1,0 +1,37 @@
+# Run on the private backup destination, not on the application host.
+name: server-2-backup-receiver
+services:
+  receiver:
+    image: ${REST_SERVER_IMAGE:?Set REST_SERVER_IMAGE}
+    container_name: server-2-backup-receiver
+    user: "1000:1000"
+    entrypoint: /usr/bin/rest-server
+    command:
+      - --path=/data
+      - --listen=:8000
+      - --tls
+      - --tls-cert=/secrets/tls.crt
+      - --tls-key=/secrets/tls.key
+      - --htpasswd-file=/secrets/htpasswd
+      - --private-repos
+      - --append-only
+    restart: unless-stopped
+    ports: ["${RECEIVER_BIND_ADDRESS:?Set private receiver bind address}:18005:8000"]
+    volumes:
+      - type: bind
+        source: ${RECEIVER_DATA_DIR:?Set RECEIVER_DATA_DIR}
+        target: /data
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${RECEIVER_SECRETS_DIR:?Set RECEIVER_SECRETS_DIR}
+        target: /secrets
+        read_only: true
+        bind: {create_host_path: false}
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 128m
+    cpus: 1.0
+    logging:
+      driver: json-file
+      options: {max-size: 10m, max-file: "3"}

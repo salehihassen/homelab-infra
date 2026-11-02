@@ -1,9 +1,22 @@
 # Backups
 
-Each host makes one encrypted, deduplicated restic snapshot per night
+Server-1 makes one encrypted, deduplicated restic snapshot per night
 (`infra-backup.timer`, 03:15–03:45) to Backblaze B2 through rclone.
 `infra-backup-maintenance.timer` prunes weekly (14 daily, 8 weekly, 12 monthly)
 and checks the repository.
+
+Server-2 uses a separate [backup runner](../hosts/server-2/backup/README.md):
+nightly per-stack snapshots go to an authenticated, encrypted, append-only
+private receiver, then a gateway copies them into a distinct offsite repository.
+Its user timer runs at 02:15 plus jitter; the gateway copy runs at 04:15 plus
+jitter. Both destinations retain fourteen daily, eight weekly and twelve monthly
+snapshots. The application host holds no offsite cloud account credentials.
+Nextcloud AIO keeps ownership of its children; coordinated captures include
+native PostgreSQL exports and matching files. Server-2's explicit `volumes`
+declarations are interpreted by its own runner, not the server-1 declaration
+checker. See its [playbook](../hosts/server-2/PLAYBOOK.md) for restoration and
+acceptance. The remaining command examples and declaration format on this page
+describe server-1.
 
 What gets backed up is declared next to the thing being backed up:
 

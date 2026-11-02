@@ -12,6 +12,10 @@ if [[ "${compose_version#v}" != "5.5.1" ]]; then
   exec bash "$repo_root/scripts/with-validation-compose.sh" bash "$repo_root/scripts/validate-stack.sh" "$@"
 fi
 
+if [[ "${INFRA_HOST:-server-1}" == server-2 ]]; then
+  exec bash "$repo_root/scripts/validate-server-2.sh" "$@"
+fi
+
 # The host project with example settings only. `--env-file` replaces the host's
 # .env symlink; each include selects its stack-local examples.
 host_compose() {
@@ -37,6 +41,9 @@ validate_compose() {
     done < <(find "$host_dir/media-extract/scripts" -type f -name '*.sh' -print0)
   fi
   python3 -m unittest discover -s scripts/tests
+  if [[ -f "$repo_root/hosts/server-2/compose.yaml" ]]; then
+    INFRA_HOST=server-2 bash "$repo_root/scripts/validate-stack.sh" compose
+  fi
 }
 
 build_caddy() {

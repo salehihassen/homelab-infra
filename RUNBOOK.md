@@ -3,6 +3,9 @@
 Commands assume the repository checkout as the working directory unless they
 `cd` first. Real host names, domains, repository locations and the restic
 repository for this deployment are in the untracked `local/site.md`.
+The commands below primarily describe server-1. Use the
+[server-2 playbook](hosts/server-2/PLAYBOOK.md) for its public ingress,
+AIO controller, existing data binds and separate backup pipeline.
 
 ## Where things are
 
@@ -131,8 +134,11 @@ Network subnet changes require recreation of the affected networks.
    `hosts/<host>/caddy/compose.yaml`, and include the routing env file in that
    stack's root include. With a wildcard DNS record and the wildcard
    certificate, no DNS or certificate change is needed.
-4. `bash scripts/validate-stack.sh`, `python3 hosts/<host>/backup/infra-backup-declared.py check --live`,
-   `bash scripts/env-files.sh check`, commit, `docker compose up -d <service>`.
+4. Run the host's validation and live backup checker: server-1 uses
+   `infra-backup-declared.py check --live`; server-2 uses
+   `INFRA_HOST=server-2 bash scripts/validate-stack.sh all` and
+   `python3 hosts/server-2/backup/infra-backup.py check`.
+   Check env links, commit, then apply `docker compose up -d <service>`.
 
 ## Komodo
 
@@ -156,6 +162,11 @@ When the Git remote exists:
 Change Komodo's own services from the CLI, never from the Komodo UI.
 
 ## Backups
+
+Server-2 has a separate [operations playbook](hosts/server-2/PLAYBOOK.md),
+including its user units, append-only receiver, gateway mirror and Nextcloud
+AIO restore procedure. The installation and bare-metal examples below apply
+to server-1; do not install its runner over server-2's backup service.
 
 The runner, its scripts and systemd units are in `hosts/<host>/backup/`; the
 format of the declarations is in `docs/backups.md`. To install or update:

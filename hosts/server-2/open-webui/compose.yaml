@@ -1,0 +1,54 @@
+x-stack:
+  requires: []
+services:
+  open-webui:
+    image: ${OPENWEBUI_IMAGE:?Set OPENWEBUI_IMAGE in open-webui/.env}
+    container_name: open-webui
+    restart: unless-stopped
+    init: true
+    ports:
+    - target: 8080
+      published: '3009'
+      host_ip: ${OPENWEBUI_BIND_ADDRESS:-127.0.0.1}
+      protocol: tcp
+    - target: 8080
+      published: '3009'
+      host_ip: ${OPENWEBUI_BIND_ADDRESS_V6:-::1}
+      protocol: tcp
+    networks:
+    - open_webui
+    mem_limit: ${OPENWEBUI_MEMORY_LIMIT:-1536m}
+    cpus: 2.0
+    pids_limit: 512
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    healthcheck:
+      test:
+      - CMD
+      - python
+      - -c
+      - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health',timeout=5)
+      interval: 30s
+      timeout: 10s
+      start_period: 120s
+      retries: 5
+    env_file:
+    - path: /opt/open-webui/app.env
+      format: raw
+    volumes:
+    - type: bind
+      source: ${OPENWEBUI_DATA_DIR:?Set OPENWEBUI_DATA_DIR}
+      target: /app/backend/data
+      bind:
+        create_host_path: false
+networks:
+  open_webui:
+    driver: bridge
+    ipam:
+      config:
+      - subnet: ${OPENWEBUI_SUBNET:?Set OPENWEBUI_SUBNET}

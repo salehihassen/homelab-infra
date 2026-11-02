@@ -1,0 +1,12 @@
+[Unit]
+Description=Declared application backups for server-2
+
+[Service]
+Type=oneshot
+EnvironmentFile=/opt/infra-backup/backup.env
+ExecStart=/usr/bin/python3 ${INFRA_DIR}/hosts/server-2/backup/infra-backup.py backup
+TimeoutStartSec=3h
+TimeoutStopSec=5min
+KillMode=mixed
+UMask=0077
+Nice=10

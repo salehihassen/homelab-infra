@@ -1,0 +1,59 @@
+x-stack:
+  requires: []
+services:
+  nextcloud-aio-mastercontainer:
+    image: ${NEXTCLOUD_AIO_IMAGE:?Set NEXTCLOUD_AIO_IMAGE}
+    container_name: nextcloud-aio-mastercontainer
+    restart: unless-stopped
+    env_file:
+    - path: /opt/nextcloud-aio/app.env
+      format: raw
+    ports:
+    - target: 8080
+      published: '8080'
+      host_ip: ${NEXTCLOUD_AIO_BIND_ADDRESS:-127.0.0.1}
+      protocol: tcp
+    - target: 8080
+      published: '8080'
+      host_ip: ${NEXTCLOUD_AIO_BIND_ADDRESS_V6:-::1}
+      protocol: tcp
+    volumes:
+    - type: volume
+      source: nextcloud_aio_mastercontainer
+      target: /mnt/docker-aio-config
+    - type: bind
+      source: /var/run/docker.sock
+      target: /var/run/docker.sock
+      read_only: true
+      bind:
+        create_host_path: false
+    networks:
+    - nextcloud_aio_controller
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 256
+    security_opt:
+    - no-new-privileges:true
+    healthcheck:
+      test:
+      - CMD
+      - /healthcheck.sh
+      interval: 30s
+      timeout: 10s
+      start_period: 120s
+      retries: 5
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+volumes:
+  nextcloud_aio_mastercontainer:
+    external: true
+    name: nextcloud_aio_mastercontainer
+networks:
+  nextcloud_aio_controller:
+    driver: bridge
+    ipam:
+      config:
+      - subnet: ${NEXTCLOUD_AIO_SUBNET:?Set NEXTCLOUD_AIO_SUBNET}

@@ -79,6 +79,11 @@ jobs:
       - name: Validate Loki configuration
         run: bash scripts/validate-stack.sh loki
 
+      - name: Validate public-host routing and remote logging
+        env:
+          INFRA_HOST: server-2
+        run: bash scripts/validate-stack.sh all
+
       # The patterns are a repository secret so the list itself stays private;
       # without it the check is skipped.
       - name: Check for private identifiers
