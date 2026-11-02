@@ -1,0 +1,329 @@
+#!/usr/bin/env python3
+"""Deterministic failure alerts for the backup jobs. Python 3.10+, stdlib only.
+
+No LLM, no success or recovery posts. Each job has one incident state; at most
+one message per job per ALERT_REPEAT_HOURS until a success clears it.
+
+  record-result UNIT  ExecStopPost hook (runs as root inside the backup unit):
+                      stores the time of a successful run. Never fails the job.
+  on-failure UNIT     OnFailure= handler (infra-backup-alert@UNIT.service).
+  check               Timer: alert when a job's last success is too old, and
+                      retry a failure alert whose delivery failed.
+  test-message        Send one labelled [TEST] message. Touches no state.
+
+Configuration (environment, usually /etc/infra-backup/alert.env):
+  ALERT_TRANSPORT     ping-me (default) or dry-run
+  PING_ME_HELPER      path to the Ping Me skill's scripts/ping_me.py
+  ALERT_JOBS          unit=max-age list, e.g. "a.service=36h,b.service=8d"
+  ALERT_REPEAT_HOURS  reminder interval for an unresolved job (default 24)
+  ALERT_STATE_DIR     alert state (default /var/lib/infra-backup-alert)
+  BACKUP_STATUS_DIR   success markers (default /var/lib/infra-backup-status)
+Test hooks: ALERT_SYSTEMCTL (systemctl command), ALERT_NOW (epoch seconds),
+ALERT_DRY_RUN_LOG (file receiving dry-run messages as JSON lines).
+"""
+
+import contextlib
+import fcntl
+import json
+import os
+from pathlib import Path
+import re
+import shlex
+import socket
+import subprocess
+import sys
+import tempfile
+import time
+
+DEFAULT_JOBS = "infra-backup.service=36h,infra-backup-maintenance.service=8d"
+SCOPE = "Owner-configured automatic backup/maintenance failure alerts (infra-backup-alert)"
+MAX_SEND_ATTEMPTS = 3
+UNIT_RE = re.compile(r"[A-Za-z0-9@_.:-]{1,200}\.service")
+
+
+class AlertError(Exception):
+    pass
+
+
+def log(message):
+    print(message, file=sys.stderr, flush=True)
+
+
+def now():
+    return int(os.environ.get("ALERT_NOW") or time.time())
+
+
+def env_path(name, default):
+    return Path(os.environ.get(name) or default)
+
+
+def unit_name(value):
+    if not UNIT_RE.fullmatch(value) or ".." in value or "/" in value:
+        raise AlertError(f"Invalid unit name: {value!r}")
+    return value
+
+
+def parse_duration(text):
+    match = re.fullmatch(r"\s*(\d+)\s*([mhd])\s*", text)
+    if not match:
+        raise AlertError(f"Invalid duration {text!r}; use e.g. 90m, 36h or 8d.")
+    return int(match.group(1)) * {"m": 60, "h": 3600, "d": 86400}[match.group(2)]
+
+
+def jobs():
+    result = {}
+    for item in (os.environ.get("ALERT_JOBS") or DEFAULT_JOBS).split(","):
+        if item.strip():
+            unit, _, age = item.partition("=")
+            result[unit_name(unit.strip())] = parse_duration(age)
+    return result
+
+
+def human(seconds):
+    seconds = max(0, int(seconds))
+    if seconds >= 2 * 86400:
+        return f"{seconds / 86400:.1f}d"
+    if seconds >= 3600:
+        return f"{seconds / 3600:.1f}h"
+    return f"{seconds // 60}m"
+
+
+def stamp(epoch):
+    return time.strftime("%Y-%m-%d %H:%M %Z", time.localtime(epoch)) if epoch else "unknown"
+
+
+# --- systemd -----------------------------------------------------------------
+
+def show(unit, *props):
+    command = shlex.split(os.environ.get("ALERT_SYSTEMCTL") or "systemctl")
+    try:
+        output = subprocess.run(command + ["show", "--timestamp=unix", unit, "-p", ",".join(props)],
+                                capture_output=True, text=True, timeout=30, check=True).stdout
+    except (OSError, subprocess.SubprocessError):
+        return {}
+    values = dict(line.split("=", 1) for line in output.splitlines() if "=" in line)
+    return values
+
+
+def epoch_of(value):
+    match = re.fullmatch(r"@(\d+)", value or "")
+    return int(match.group(1)) if match and int(match.group(1)) > 0 else None
+
+
+def last_success(unit):
+    """Newest known success: the durable marker or this boot's systemd record."""
+    candidates = []
+    marker = env_path("BACKUP_STATUS_DIR", "/var/lib/infra-backup-status") / f"{unit}.success"
+    with contextlib.suppress(OSError, ValueError):
+        candidates.append(int(json.loads(marker.read_text())["finished_at"]))
+    props = show(unit, "Result", "ExecMainStatus", "ExecMainExitTimestamp", "ActiveState")
+    if props.get("Result") == "success" and props.get("ExecMainStatus") == "0" \
+            and props.get("ActiveState") != "failed":
+        exited = epoch_of(props.get("ExecMainExitTimestamp"))
+        if exited:
+            candidates.append(exited)
+    return max(candidates) if candidates else None
+
+
+# --- state -------------------------------------------------------------------
+
+@contextlib.contextmanager
+def locked_state():
+    directory = env_path("ALERT_STATE_DIR", "/var/lib/infra-backup-alert")
+    directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+    with open(directory / "state.lock", "a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        path = directory / "state.json"
+        try:
+            state = json.loads(path.read_text())
+            if not isinstance(state.get("jobs"), dict):
+                raise ValueError
+        except FileNotFoundError:
+            state = {"version": 1, "jobs": {}}
+        except (OSError, ValueError):
+            log(f"Unreadable {path}; starting with empty state (one duplicate alert is possible).")
+            state = {"version": 1, "jobs": {}}
+        yield state
+        atomic_write(path, json.dumps(state, indent=2, sort_keys=True) + "\n", 0o600)
+
+
+def atomic_write(path, text, mode):
+    fd, temporary = tempfile.mkstemp(prefix=".tmp-", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w") as handle:
+            handle.write(text)
+        os.chmod(temporary, mode)
+        os.replace(temporary, path)
+    finally:
+        with contextlib.suppress(FileNotFoundError):
+            os.unlink(temporary)
+
+
+def job_state(state, unit, current):
+    job = state["jobs"].setdefault(unit, {})
+    job.setdefault("first_seen", current)
+    return job
+
+
+def suppressed(job, current, success):
+    """True while an alert for this job was sent recently and nothing has succeeded since."""
+    last = job.get("last_alert")
+    if not last or (success and success >= last):
+        return False
+    return current - last < float(os.environ.get("ALERT_REPEAT_HOURS") or 24) * 3600
+
+
+# --- transport ---------------------------------------------------------------
+
+def send(kind, unit, title, message, current):
+    slug = re.sub(r"[^A-Za-z0-9]+", "-", unit).strip("-")[:30]
+    request_id = f"infra-alert-{kind}-{slug}-{current}-{os.getpid()}"[:64]
+    transport = os.environ.get("ALERT_TRANSPORT") or "ping-me"
+    helper = os.environ.get("PING_ME_HELPER")
+    if transport not in ("ping-me", "dry-run"):
+        raise AlertError(f"Unknown ALERT_TRANSPORT {transport!r}.")
+    if transport == "dry-run":
+        record = {"kind": kind, "unit": unit, "title": title, "message": message, "request_id": request_id}
+        dry_log = os.environ.get("ALERT_DRY_RUN_LOG")
+        if dry_log:
+            with open(dry_log, "a") as handle:
+                handle.write(json.dumps(record) + "\n")
+        else:
+            print(json.dumps(record))
+        if not helper:
+            return True
+    if not helper or not Path(helper).is_file():
+        log("PING_ME_HELPER is unset or missing; alert not delivered.")
+        return False
+    command = [sys.executable, helper, "send", "--mode", "notify", "--authorized-scope", SCOPE,
+               "--title", title, "--message", message, "--request-id", request_id]
+    if transport == "dry-run":
+        command.append("--dry-run")  # The helper validates format; no credentials or network.
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, timeout=90)
+    except (OSError, subprocess.SubprocessError) as exc:
+        log(f"Ping Me helper did not complete ({type(exc).__name__}); request {request_id}.")
+        return False
+    # The helper's output never contains the token; error text is safe to log.
+    log(f"ping-me exit {result.returncode}: {(result.stdout or result.stderr).strip()[:500]}")
+    return result.returncode == 0
+
+
+def deliver(job, kind, unit, title, message, current):
+    job["pending"] = {"kind": kind, "title": title, "message": message, "created": current,
+                      "attempts": 0}
+    return retry(job, unit, current)
+
+
+def retry(job, unit, current):
+    pending = job["pending"]
+    pending["attempts"] += 1
+    if send(pending["kind"], unit, pending["title"], pending["message"], current):
+        job.update(last_alert=current, last_alert_kind=pending["kind"], repeats=0)
+        job.pop("pending", None)
+        return True
+    if pending["attempts"] >= MAX_SEND_ATTEMPTS:
+        log(f"Giving up on {pending['kind']} alert for {unit} after {pending['attempts']} attempts.")
+        job.pop("pending", None)
+    return False
+
+
+# --- commands ----------------------------------------------------------------
+
+def record_result(unit):
+    if os.environ.get("SERVICE_RESULT") != "success" or os.environ.get("EXIT_STATUS", "0") != "0":
+        return 0
+    directory = env_path("BACKUP_STATUS_DIR", "/var/lib/infra-backup-status")
+    directory.mkdir(parents=True, exist_ok=True, mode=0o755)
+    atomic_write(directory / f"{unit}.success",
+                 json.dumps({"unit": unit, "finished_at": now()}) + "\n", 0o644)
+    return 0
+
+
+def on_failure(unit):
+    current = now()
+    host = socket.gethostname()
+    props = show(unit, "Result", "ExecMainCode", "ExecMainStatus", "ExecMainExitTimestamp")
+    success = last_success(unit)
+    with locked_state() as state:
+        job = job_state(state, unit, current)
+        if suppressed(job, current, success):
+            job["repeats"] = job.get("repeats", 0) + 1
+            log(f"{unit} failed again; alert suppressed (sent {stamp(job['last_alert'])}).")
+            return 0
+        failed_at = epoch_of(props.get("ExecMainExitTimestamp")) or current
+        repeats = job.get("repeats", 0) if job.get("last_alert") and not (success and success >= job["last_alert"]) else 0
+        lines = [f"{unit} failed on {host} at {stamp(failed_at)} "
+                 f"(result {props.get('Result') or 'unknown'}, exit status {props.get('ExecMainStatus') or '?'})."]
+        if repeats:
+            lines.append(f"Still failing: {repeats} more failure(s) since the previous alert.")
+        lines.append(f"Last success: {stamp(success)}" + (f" ({human(current - success)} ago)." if success else "."))
+        lines.append(f"Inspect: journalctl -u {unit} -n 100 --no-pager")
+        lines.append(f"No repeat for this job within {os.environ.get('ALERT_REPEAT_HOURS') or 24}h unless it succeeds first.")
+        ok = deliver(job, "failure", unit, f"Backup job failed: {unit}", "\n".join(lines), current)
+    return 0 if ok else 1
+
+
+def check():
+    current = now()
+    host = socket.gethostname()
+    status = 0
+    with locked_state() as state:
+        for unit, max_age in jobs().items():
+            success = last_success(unit)
+            job = job_state(state, unit, current)
+            pending = job.get("pending")
+            if pending:
+                if success and success >= pending["created"]:
+                    job.pop("pending")  # Resolved before delivery: stay silent.
+                else:
+                    status |= 0 if retry(job, unit, current) else 1
+                    continue
+            baseline = success or job["first_seen"]
+            if current - baseline <= max_age or suppressed(job, current, success):
+                continue
+            timer = unit.removesuffix(".service") + ".timer"
+            props = show(timer, "ActiveState", "UnitFileState", "NextElapseUSecRealtime")
+            since = (f"Last success: {stamp(success)}." if success else
+                     f"No success recorded since monitoring started {stamp(job['first_seen'])}.")
+            message = "\n".join([
+                f"No successful {unit} run on {host} for {human(current - baseline)} (limit {human(max_age)}).",
+                since,
+                f"{timer}: {props.get('ActiveState') or 'unknown'}/{props.get('UnitFileState') or 'unknown'}, "
+                f"next {stamp(epoch_of(props.get('NextElapseUSecRealtime')))}.",
+                f"Inspect: systemctl list-timers {timer} --no-pager; journalctl -u {unit} -n 100 --no-pager",
+            ])
+            status |= 0 if deliver(job, "stale", unit, f"Backup job overdue: {unit}", message, current) else 1
+    return status
+
+
+def test_message():
+    host = socket.gethostname()
+    ok = send("test", "path-check", f"[TEST] {host} backup-alert path check, ignore",
+              "Manual delivery test of the backup failure-alert path. No backup has failed.", now())
+    return 0 if ok else 1
+
+
+def main(argv):
+    try:
+        if len(argv) == 2 and argv[0] == "record-result":
+            try:
+                return record_result(unit_name(argv[1]))
+            except Exception as exc:  # Never let bookkeeping affect the backup job.
+                log(f"record-result failed: {type(exc).__name__}: {exc}")
+                return 0
+        if len(argv) == 2 and argv[0] == "on-failure":
+            return on_failure(unit_name(argv[1]))
+        if argv == ["check"]:
+            return check()
+        if argv == ["test-message"]:
+            return test_message()
+        log(__doc__)
+        return 2
+    except AlertError as exc:
+        log(str(exc))
+        return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

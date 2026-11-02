@@ -138,6 +138,43 @@ Edit the scripts or units in `hosts/<host>/backup/`, then
 of each replaced file, reloads systemd when a unit changed, enables the
 timers, and finishes with a coverage check).
 
+## Failure alerts
+
+`hosts/<host>/backup/alerts/` sends a Discord message through the owner's
+existing Ping Me bot when a backup or maintenance run fails, or when one has
+not succeeded for too long. It is deterministic Python (standard library, no
+LLM) and posts only problems: no success, recovery or heartbeat messages.
+
+- **Failure:** a drop-in adds `OnFailure=infra-backup-alert@%n.service` to each
+  job. The message names the unit, result, exit status, last success and the
+  `journalctl` command to run. It never includes log content.
+- **Overdue:** `infra-backup-alert-check.timer` runs hourly and alerts when the
+  last success is older than 36 hours (backup) or 8 days (maintenance), which
+  also covers a disabled timer or a run that never finishes. On a fresh
+  install the limit counts from the first check, so installing never alerts.
+- **Last success** comes from a marker in `/var/lib/infra-backup-status/`,
+  written by the same drop-in's `ExecStopPost=-...record-result`. The leading
+  `-` means this bookkeeping can never change a job's result. systemd's record
+  of the current boot is used as well.
+- **Duplicates:** each job has one incident. After an alert, further failure
+  or overdue alerts for that job are suppressed for 24 hours unless a run
+  succeeds first; a success silently clears it. A failed delivery is retried by
+  the hourly check, at most three attempts in total.
+
+The notifier runs as the account that owns the Ping Me configuration, so the
+bot token stays in that account's private config and is never copied. Install,
+optionally with `--test-message`, and roll back with:
+
+```bash
+sudo bash hosts/<host>/backup/alerts/install.sh --user <user> --helper /home/<user>/<path>/Personal-Ping-Me/scripts/ping_me.py
+sudo bash hosts/<host>/backup/alerts/install.sh --uninstall
+```
+
+`--dry-run` shows the changes without making them. Tests run without root:
+`python3 -m unittest scripts.tests.test_backup_alerts`. This only covers
+failures the host can still report. A whole-host outage needs a checker on another
+machine (not built yet).
+
 ## Restoring
 
 See RUNBOOK.md, "Restore a service".
