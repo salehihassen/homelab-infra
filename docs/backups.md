@@ -158,8 +158,9 @@ LLM) and posts only problems: no success, recovery or heartbeat messages.
   of the current boot is used as well.
 - **Duplicates:** each job has one incident. After an alert, further failure
   or overdue alerts for that job are suppressed for 24 hours unless a run
-  succeeds first; a success silently clears it. A failed delivery is retried by
-  the hourly check, at most three attempts in total.
+  succeeds first; a success silently clears it. Failed deliveries share three
+  attempts across hourly checks and failure hooks. Exhausting that budget starts
+  the same repeat cooldown as delivery; a success clears it immediately.
 
 The notifier runs as the account that owns the Ping Me configuration, so the
 bot token stays in that account's private config and is never copied. Install,

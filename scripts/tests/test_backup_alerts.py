@@ -262,6 +262,40 @@ class BackupAlertTests(unittest.TestCase):
             self.h.run('check', now=T0 + hours * H, transport='ping-me', helper=helper, helper_exit=2)
         self.assertEqual(len(self.h.helper_calls()), 3)
 
+    def test_overdue_delivery_budget_is_not_reset_by_hourly_checks(self):
+        helper = Path(self.tmp.name, 'fake_helper.py')
+        self.h.succeed(BACKUP, T0 - 40 * H)
+        self.h.succeed(MAINT, T0)
+        for hours in range(26):
+            self.h.run('check', now=T0 + hours * H, transport='ping-me',
+                       helper=helper, helper_exit=2)
+        self.assertEqual(len(self.h.helper_calls()), 3)
+        # A new reminder window can retry after the configured cooldown.
+        for hours in (26, 27, 28, 29):
+            self.h.run('check', now=T0 + hours * H, transport='ping-me',
+                       helper=helper, helper_exit=2)
+        self.assertEqual(len(self.h.helper_calls()), 6)
+
+    def test_repeated_failure_hooks_share_the_pending_delivery_budget(self):
+        helper = Path(self.tmp.name, 'fake_helper.py')
+        for seconds in (0, 60, 120, 180):
+            self.h.run('on-failure', BACKUP, now=T0 + seconds, transport='ping-me',
+                       helper=helper, helper_exit=2)
+        self.assertEqual(len(self.h.helper_calls()), 3)
+        self.h.succeed(BACKUP, T0 + 200)
+        self.h.run('on-failure', BACKUP, now=T0 + 240, transport='ping-me', helper=helper)
+        self.assertEqual(len(self.h.helper_calls()), 4)
+
+    def test_success_before_delivery_gives_the_next_failure_a_fresh_budget(self):
+        helper = Path(self.tmp.name, 'fake_helper.py')
+        self.h.run('on-failure', BACKUP, now=T0, transport='ping-me',
+                   helper=helper, helper_exit=2)
+        self.h.succeed(BACKUP, T0 + 10)
+        for seconds in (20, 30, 40, 50):
+            self.h.run('on-failure', BACKUP, now=T0 + seconds, transport='ping-me',
+                       helper=helper, helper_exit=2)
+        self.assertEqual(len(self.h.helper_calls()), 4)
+
     def test_missing_helper_is_reported_not_crashing(self):
         self.h.unit(BACKUP, Result='exit-code', ExecMainStatus='1')
         result = self.h.run('on-failure', BACKUP, now=T0, transport='ping-me', helper='/nonexistent/ping_me.py')

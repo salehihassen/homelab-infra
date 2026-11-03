@@ -166,7 +166,7 @@ def job_state(state, unit, current):
 
 
 def suppressed(job, current, success):
-    """True while an alert for this job was sent recently and nothing has succeeded since."""
+    """True during the cooldown after delivery or an exhausted delivery budget."""
     last = job.get("last_alert")
     if not last or (success and success >= last):
         return False
@@ -210,8 +210,8 @@ def send(kind, unit, title, message, current):
 
 
 def deliver(job, kind, unit, title, message, current):
-    job["pending"] = {"kind": kind, "title": title, "message": message, "created": current,
-                      "attempts": 0}
+    job.setdefault("pending", {"kind": kind, "title": title, "message": message,
+                               "created": current, "attempts": 0})
     return retry(job, unit, current)
 
 
@@ -224,6 +224,7 @@ def retry(job, unit, current):
         return True
     if pending["attempts"] >= MAX_SEND_ATTEMPTS:
         log(f"Giving up on {pending['kind']} alert for {unit} after {pending['attempts']} attempts.")
+        job.update(last_alert=current, last_alert_kind=pending["kind"], repeats=0)
         job.pop("pending", None)
     return False
 
@@ -247,9 +248,11 @@ def on_failure(unit):
     success = last_success(unit)
     with locked_state() as state:
         job = job_state(state, unit, current)
+        if job.get("pending") and success and success >= job["pending"]["created"]:
+            job.pop("pending")  # A new failure after recovery starts a fresh incident.
         if suppressed(job, current, success):
             job["repeats"] = job.get("repeats", 0) + 1
-            log(f"{unit} failed again; alert suppressed (sent {stamp(job['last_alert'])}).")
+            log(f"{unit} failed again; alert suppressed (last attempt {stamp(job['last_alert'])}).")
             return 0
         failed_at = epoch_of(props.get("ExecMainExitTimestamp")) or current
         repeats = job.get("repeats", 0) if job.get("last_alert") and not (success and success >= job["last_alert"]) else 0
