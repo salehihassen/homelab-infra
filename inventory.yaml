@@ -3,6 +3,9 @@
 # maps them to real machines. scripts/check-stacks.py keeps each host's stack
 # list in sync with hosts/<host>/compose.yaml.
 #
+# Both managed hosts use shared direct-to-B2 backups: nightly capture and weekly
+# maintenance, retaining 7 daily, 5 weekly and 2 monthly snapshots.
+#
 # exposure:
 #   tailnet  - HTTPS through Caddy on the host's Tailscale addresses only
 #   loopback - no direct network listener; reached only through Caddy or the host
@@ -20,7 +23,7 @@ hosts:
     repo_path: hosts/server-2
     data_root: /opt (runtime settings); existing data binds remain private inputs
     caddy: true
-    backup: scheduled encrypted restic to a private receiver; separate offsite mirror
+    backup: nightly restic directly to a dedicated Backblaze B2 bucket (shared tooling)
   server-3:
     role: NAS (Immich, Jellyfin, Kiwix)
     status: not yet managed from this repo
