@@ -183,7 +183,10 @@ Retain old NAS/offsite repositories and recovery material after the transition.
 
 ## Failure alerts
 
-`hosts/<host>/backup/alerts/` sends a Discord message through the owner's
+The optional notifier below is specific to server-1. Server-2 reports failures
+through the shared service status, journal and central logs.
+
+`hosts/server-1/backup/alerts/` sends a Discord message through the owner's
 existing Ping Me bot when a backup or maintenance run fails, or when one has
 not succeeded for too long. It is deterministic Python (standard library, no
 LLM) and posts only problems: no success, recovery or heartbeat messages.
@@ -210,8 +213,8 @@ bot token stays in that account's private config and is never copied. Install,
 optionally with `--test-message`, and roll back with:
 
 ```bash
-sudo bash hosts/<host>/backup/alerts/install.sh --user <user> --helper /home/<user>/<path>/Personal-Ping-Me/scripts/ping_me.py
-sudo bash hosts/<host>/backup/alerts/install.sh --uninstall
+sudo bash hosts/server-1/backup/alerts/install.sh --user <user> --helper /home/<user>/<path>/Personal-Ping-Me/scripts/ping_me.py
+sudo bash hosts/server-1/backup/alerts/install.sh --uninstall
 ```
 
 `--dry-run` shows the changes without making them. Tests run without root:
