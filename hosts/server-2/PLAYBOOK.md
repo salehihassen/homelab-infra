@@ -122,7 +122,7 @@ retains control of its own children's logging configuration.
 
 ## Backups and recovery
 
-Both hosts use the [shared backup playbook](../../../docs/backups.md) for
+Both hosts use the [shared backup playbook](../../docs/backups.md) for
 schedules, capture, maintenance, status and isolated restore acceptance.
 Server-2 uses `/opt/infra-backup/backup.env` and lingering user systemd units;
 its Docker helper supplies root file access without interactive sudo. Only

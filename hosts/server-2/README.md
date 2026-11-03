@@ -9,7 +9,7 @@ Runtime settings and credentials live in `/opt/<stack>`; `.env` and
 `routing.env` are ignored links listed in `env-files.tsv`. Existing data remains
 at paths selected through private interpolation settings. External volume names
 are explicit and must already exist; missing binds fail rather than silently
-creating empty directories. The active services are in [inventory.yaml](../../../inventory.yaml).
+creating empty directories. The active services are in [inventory.yaml](../../inventory.yaml).
 
 Public HTTPS is intentional on this host. Public routing is validated separately
 from server-1's tailnet-only rules; server-1 protections remain enforced.

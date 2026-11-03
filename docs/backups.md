@@ -6,8 +6,8 @@ repository through rclone. Each host has a separate bucket-restricted applicatio
 key and repository password. Never put either host's credentials in Git.
 
 The shared timers run nightly at 03:15 plus up to 30 minutes jitter, and weekly
-on Sunday at 05:15 plus up to one hour jitter. Maintenance retains fourteen daily,
-eight weekly and twelve monthly snapshots, checks metadata and reads a ten-percent
+on Sunday at 05:15 plus up to one hour jitter. Maintenance retains seven daily,
+five weekly and two monthly snapshots, checks metadata and reads a ten-percent
 data sample. Each host's repository, host tag and recovery password remain distinct.
 
 Server-1 runs system units as root. Server-2 runs user units; `backup/run.py`
