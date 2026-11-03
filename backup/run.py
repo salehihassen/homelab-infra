@@ -8,6 +8,7 @@ from pathlib import Path
 import signal
 import subprocess
 import tempfile
+import uuid
 
 import yaml
 
@@ -67,7 +68,7 @@ def main():
             plan = json.loads((Path(tmp) / 'plan.json').read_text())
             paths += [Path(p) for p in plan['sources'] + plan['offline']]
             paths += [Path(p) for q in plan['quiesce'].values() for p in q.get('copy', [])]
-    name = 'infra-backup-tool'
+    name = 'infra-backup-tool-' + uuid.uuid4().hex
     command = ['docker', 'run', '--rm', '--init', '--name', name, '--read-only',
                '--memory', '768m', '--cpus', '1.5', '--tmpfs', '/tmp:rw,size=128m']
     mounts = {p: (str(p), True) for p in paths}
