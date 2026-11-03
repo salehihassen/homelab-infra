@@ -98,7 +98,7 @@ bash scripts/validate-stack.sh           # compose + deps, Caddy, Alloy, Prometh
 bash scripts/validate-stack.sh compose   # fast: Compose config + stack dependency check
 bash scripts/check-private.sh            # no real host names, domains or paths in tracked files
 INFRA_HOST=server-2 bash scripts/validate-stack.sh all  # independent host contracts
-python3 hosts/server-1/backup/infra-backup-declared.py check --live   # backup coverage (on the host)
+python3 backup/infra-backup-declared.py --host server-1 check --live   # backup coverage (on the host)
 ```
 
 Validation uses Docker Compose **v5.5.1**, matching CI. If your installed version

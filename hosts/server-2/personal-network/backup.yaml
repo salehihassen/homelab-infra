@@ -1,2 +1,4 @@
 paths:
 - /opt/personal-network
+save_images:
+- personal-network

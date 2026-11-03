@@ -137,7 +137,7 @@ Network subnet changes require recreation of the affected networks.
 4. Run the host's validation and live backup checker: server-1 uses
    `infra-backup-declared.py check --live`; server-2 uses
    `INFRA_HOST=server-2 bash scripts/validate-stack.sh all` and
-   `python3 hosts/server-2/backup/infra-backup.py check`.
+   `python3 backup/run.py --settings /opt/infra-backup/backup.env check`.
    Check env links, commit, then apply `docker compose up -d <service>`.
 
 ## Komodo
@@ -163,12 +163,13 @@ Change Komodo's own services from the CLI, never from the Komodo UI.
 
 ## Backups
 
-Server-2 has a separate [operations playbook](hosts/server-2/PLAYBOOK.md),
-including its user units, append-only receiver, gateway mirror and Nextcloud
-AIO restore procedure. The installation and bare-metal examples below apply
-to server-1; do not install its runner over server-2's backup service.
+Both hosts use the [shared backup playbook](docs/backups.md) and tooling in
+`backup/`. The same nightly capture, weekly maintenance, retention and restore
+workflow applies to both. Server-2 uses user units with a Docker helper and a
+dedicated B2 bucket; server-1 uses root system units. Installation below is for
+system units; the shared playbook gives the user-unit installation steps.
 
-The runner, its scripts and systemd units are in `hosts/<host>/backup/`; the
+Host settings and service units are in `hosts/<host>/backup/`; the
 format of the declarations is in `docs/backups.md`. To install or update:
 
 ```bash

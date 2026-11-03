@@ -1,6 +1,6 @@
-# Host-level recovery configuration. Personal data/source paths are private.
 paths:
-  - /opt/server-2
-  - /opt/infra-backup
+- /opt/server-2
+- /opt/infra-backup
 exclude:
-  /opt/infra-backup-state: temporary native exports and cache; exports are captured explicitly
+  /opt/infra-backup-state: temporary exports and cache; consistent exports are captured
+    explicitly

@@ -14,10 +14,13 @@ stage = Path(sys.argv[1])
 # Declared in hosts/<host>/*/backup.yaml and host.yaml; see infra-backup-declared.py.
 plan = json.loads((stage / 'plan.json').read_text())
 sources = {Path(p): None for p in plan['sqlite']}
+copies = [p for q in plan.get('quiesce', {}).values() for p in q.get('copy', [])]
+def captured(p):
+    return stage / 'quiesced' / p.relative_to('/') if any(p.is_relative_to(Path(c)) for c in copies) else p
 roots = [Path(p) for p in plan['sqlite_scan']]
 for root in roots:
-    if root.exists():
-        for base, dirs, files in os.walk(root):
+    if captured(root).exists():
+        for base, dirs, files in os.walk(captured(root)):
             dirs[:] = [d for d in dirs if d not in {'.git', 'node_modules', 'Cache', '.cache', '__pycache__'}]
             for name in files:
                 if name.endswith(('.db', '.sqlite', '.sqlite3')):
@@ -26,15 +29,17 @@ for root in roots:
                         raise RuntimeError(f'Refusing SQLite symlink: {p}')
                     with p.open('rb') as f:
                         if f.read(16) == b'SQLite format 3\x00':
-                            sources.setdefault(p, None)
+                            sources.setdefault(Path('/') / p.relative_to(stage / 'quiesced') if p.is_relative_to(stage / 'quiesced') else p, None)
 
 manifest = []
 excludes = []
 for source in sorted(sources):
+    original = source
+    source = captured(source)
     if not source.is_file():
         # A declared database that vanished is a failure, not a quiet skip.
         raise RuntimeError(f'Declared SQLite database is missing: {source}')
-    destination = stage / 'database-files' / str(source).lstrip('/')
+    destination = stage / 'database-files' / str(original).lstrip('/')
     destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     print(f'Online SQLite export: {source}', flush=True)
     deadline = time.monotonic() + 120
@@ -56,7 +61,7 @@ for source in sorted(sources):
     info = source.stat()
     shutil.copystat(source, destination)
     os.chown(destination, info.st_uid, info.st_gid)
-    manifest.append({'source': str(source), 'backup': str(destination), 'status': 'ok',
+    manifest.append({'source': str(original), 'backup': str(destination), 'status': 'ok',
                      'size': destination.stat().st_size, 'sha256': digest, 'quick_check': 'ok',
                      'uid': info.st_uid, 'gid': info.st_gid, 'mode': info.st_mode & 0o7777})
 (stage / 'inventory/sqlite-manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')

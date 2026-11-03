@@ -1,10 +1,10 @@
 [Unit]
-Description=Declared application backups for server-2
+Description=Encrypted host backup with shared Restic tooling
 
 [Service]
 Type=oneshot
 EnvironmentFile=/opt/infra-backup/backup.env
-ExecStart=/usr/bin/python3 ${INFRA_DIR}/hosts/server-2/backup/infra-backup.py backup
+ExecStart=/usr/bin/python3 ${INFRA_DIR}/backup/run.py --settings /opt/infra-backup/backup.env backup
 TimeoutStartSec=3h
 TimeoutStopSec=5min
 KillMode=mixed

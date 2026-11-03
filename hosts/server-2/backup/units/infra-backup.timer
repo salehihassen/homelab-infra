@@ -1,10 +1,1 @@
-[Unit]
-Description=Nightly declared application backups for server-2
-
-[Timer]
-OnCalendar=*-*-* 02:15:00
-RandomizedDelaySec=10m
-Persistent=true
-
-[Install]
-WantedBy=timers.target
+../../../../backup/units/infra-backup.timer

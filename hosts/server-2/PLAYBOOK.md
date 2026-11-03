@@ -33,7 +33,7 @@ bash scripts/env-files.sh link server-2
 bash scripts/env-files.sh check server-2
 INFRA_HOST=server-2 bash scripts/validate-stack.sh all
 bash scripts/check-private.sh
-python3 hosts/server-2/backup/infra-backup.py check
+python3 backup/run.py --settings /opt/infra-backup/backup.env check
 ```
 
 Validation uses CI's checksum-verified Compose version without replacing the
@@ -120,83 +120,14 @@ must exist after reboot. Log access and Docker socket access are trusted admin
 capabilities. Bound Docker log rotation applies to managed containers; AIO
 retains control of its own children's logging configuration.
 
-## Ongoing backups
+## Backups and recovery
 
-The host timer is a lingering user service, scheduled nightly at 02:15 local
-time plus jitter. The private receiver accepts encrypted append-only snapshots.
-A separate gateway copies snapshots offsite daily at 04:15 plus jitter. Local
-and offsite weekly retention keep fourteen daily, eight weekly and twelve
-monthly snapshots grouped by stack. See [backup/README.md](backup/README.md).
-
-After preparing the private configuration, install the host units from the
-repository root. Run and verify a manual capture and restore before enabling
-the timer:
-
-```bash
-mkdir -p "$HOME/.config/systemd/user"
-cp hosts/server-2/backup/units/infra-backup.service hosts/server-2/backup/units/infra-backup.timer "$HOME/.config/systemd/user/"
-systemctl --user daemon-reload
-systemctl --user start infra-backup.service
-# After checking capture, cleanup and isolated recovery:
-systemctl --user enable --now infra-backup.timer
-```
-
-The gateway uses the same installation pattern for the four
-`server-2-backup-mirror*` unit files. Configure its private `mirror.env`, run
-`server-2-backup-mirror.service` manually, and verify the offsite receipt before
-enabling both mirror timers. Receiver retention runs locally from a user cron
-entry invoking `receiver-maintenance.py`; preserve unrelated cron entries.
-User timers require a working lingering user manager to survive logout and
-reboot. Check `loginctl show-user "$USER" -p Linger` before relying on them.
-
-```bash
-systemctl --user start infra-backup.service
-systemctl --user show infra-backup.service -p Result -p ExecMainStatus
-systemctl --user list-timers infra-backup.timer
-journalctl --user -u infra-backup.service -n 50 --no-pager
-python3 hosts/server-2/backup/infra-backup.py check
-```
-
-Check `/opt/infra-backup-state/status.json`, destination maintenance receipts,
-and the gateway mirror status. A running timer does not prove an uploaded or
-recoverable snapshot. Investigate failed or stale captures before retrying;
-originally running writers must be back up and Nextcloud out of maintenance.
-The native exports are explicit snapshot inputs even though other temporary
-state/cache is excluded. New active binds or AIO volumes fail coverage until
-declared. Never weaken exclusions or skip durable state to make a check pass.
-
-Repository passwords, receiver authentication, issuer key and offsite recovery
-material must be escrowed outside the application host. The application host
-has no cloud account key. TLS certificates are private runtime files; renew
-the receiver leaf before expiry, preserve the trusted CA, restart the receiver
-and verify a client connection without bypassing TLS verification.
-
-## Restore and acceptance
-
-Select the right host/stack snapshot and restore to private scratch storage on
-a different machine. Use exact images and recovered runtime inputs, no production
-mounts, no public ports and no Docker socket. Block external network egress;
-allow only an internal database/app network when needed. Verify source manifests,
-numeric owners/modes and representative application data before accepting recovery.
-
-SQLite: replace the live DB with its native `database-files` export and remove
-matching WAL/SHM/journal files before startup. Preserve its recorded owner/mode
-and matching encryption keys. n8n credential decryption is a useful key-recovery
-check; do not display or retain plaintext exports.
-
-Nextcloud: restore the coordinated files, Redis RDB and native PG archive.
-Bootstrap a fresh PG cluster with a unique temporary admin, import full globals
-with `ON_ERROR_STOP`, apply database ownership/grants, then restore the custom
-archive preserving owners and ACLs. Its `oc_*` application role differs from
-the bootstrap role. Skip AIO-only initialization hooks during this native SQL
-recovery. Preserve the original config, secrets, user-data path and volume names.
-Disable captured maintenance mode only on the restored copy after verification.
-Check table counts, recovered users, original database-password authentication,
-and file create/read/delete through the app before returning management to AIO.
-
-Test other apps' health, existing records and keys. Caddy configuration validation
-does not test browser sign-in or external provider calls; record such limits.
-Delete temporary test copies after retaining recovery evidence.
+Both hosts use the [shared backup playbook](../../../docs/backups.md) for
+schedules, capture, maintenance, status and isolated restore acceptance.
+Server-2 uses `/opt/infra-backup/backup.env` and lingering user systemd units;
+its Docker helper supplies root file access without interactive sudo. Only
+Nextcloud's coordinated capture adapter is application-specific. AIO retains
+ownership of its children.
 
 ## Rollback
 

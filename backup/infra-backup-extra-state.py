@@ -34,7 +34,7 @@ def collect_local_images(running, plan):
     images = []
     for container in running:
         labels = container['Config'].get('Labels') or {}
-        if labels.get('com.docker.compose.project') != 'opt':
+        if labels.get('com.docker.compose.project') != plan.get('project', 'opt'):
             continue
         name = container['Name'].lstrip('/')
         service = labels.get('com.docker.compose.service', '')
@@ -138,11 +138,11 @@ def main(stage):
         name, path = volume['Name'], Path(volume['Mountpoint'])
         assert re.fullmatch(r'[A-Za-z0-9_.-]+', name)
         attached = in_use(path, running, views)
-        if not attached:
+        if not attached and os.environ.get('BACKUP_ARCHIVE_DETACHED', '1') == '1':
             archive_sources.append(path)
         volumes.append({'name': name, 'driver': volume['Driver'], 'source': str(path),
                         'running_containers': attached,
-                        'method': 'cold_archive' if not attached else
+                        'method': ('cold_archive' if os.environ.get('BACKUP_ARCHIVE_DETACHED', '1') == '1' else 'inactive_not_archived') if not attached else
                             ('native_postgresql' if any(overlaps(path, m['source']) for x in native for m in x['mounts'])
                              else 'active_not_archived')})
 

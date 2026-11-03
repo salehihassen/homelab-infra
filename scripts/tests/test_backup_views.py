@@ -5,7 +5,7 @@ import unittest
 
 REPO = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location(
-    "extra_state", REPO / "hosts/server-1/backup/infra-backup-extra-state.py")
+    "extra_state", REPO / "backup/infra-backup-extra-state.py")
 extra = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(extra)
 

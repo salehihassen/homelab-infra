@@ -1,2 +1,10 @@
 paths:
 - /opt/flowise
+quiesce:
+  services:
+  - flowise
+  method: stop
+  copy:
+  - /opt/flowise
+sqlite_scan:
+- /opt/flowise

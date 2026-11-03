@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 REPO = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location(
-    'extra_images', REPO / 'hosts/server-1/backup/infra-backup-extra-state.py')
+    'extra_images', REPO / 'backup/infra-backup-extra-state.py')
 extra = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(extra)
 

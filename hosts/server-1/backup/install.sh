@@ -5,6 +5,7 @@
 set -Eeuo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 [[ ${EUID} -eq 0 ]] || { echo "Run with sudo." >&2; exit 1; }
+shared="$(cd ../../../backup && pwd)"
 dry_run=false; [[ "${1:-}" == "--dry-run" ]] && dry_run=true
 settings=/etc/infra-backup/backup.env
 [[ -r "${settings}" ]] || { echo "Create ${settings} from backup.env.example first." >&2; exit 1; }
@@ -23,14 +24,14 @@ install_file() {  # source target mode
   fi
 }
 
-scripts=(infra-backup infra-backup-maintenance infra-backup-declared.py infra-backup-sqlite.py infra-backup-extra-state.py)
+scripts=(infra-backup infra-backup-maintenance infra-backup-declared.py infra-backup-sqlite.py infra-backup-extra-state.py nextcloud.py)
 for script in "${scripts[@]}"; do
   for target in "/usr/local/sbin/${script}" "/opt/backup/${script}"; do
-    install_file "${script}" "${target}" 0755 || true
+    install_file "${shared}/${script}" "${target}" 0755 || true
   done
 done
 units_changed=false
-for unit in units/*; do
+for unit in units/*.service "${shared}"/units/*.timer; do
   install_file "${unit}" "/etc/systemd/system/$(basename "${unit}")" 0644 && units_changed=true
 done
 if ! "${dry_run}"; then
