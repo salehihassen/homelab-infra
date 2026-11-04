@@ -1,0 +1,15 @@
+[Unit]
+Description=Alert when a backup job has not succeeded recently
+Documentation=file:///usr/local/sbin/infra-backup-alert
+
+[Service]
+Type=oneshot
+# User= and Group= come from the install-time drop-in 10-user.conf.
+EnvironmentFile=/etc/infra-backup/alert.env
+ExecStart=/usr/local/sbin/infra-backup-alert check
+StateDirectory=infra-backup-alert
+StateDirectoryMode=0700
+TimeoutStartSec=10min
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full

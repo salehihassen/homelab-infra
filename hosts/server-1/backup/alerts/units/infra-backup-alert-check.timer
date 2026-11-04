@@ -1,0 +1,11 @@
+[Unit]
+Description=Hourly check for overdue backup and maintenance runs
+
+[Timer]
+OnBootSec=15min
+OnCalendar=hourly
+RandomizedDelaySec=5min
+Unit=infra-backup-alert-check.service
+
+[Install]
+WantedBy=timers.target

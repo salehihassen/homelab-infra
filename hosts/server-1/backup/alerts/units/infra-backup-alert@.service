@@ -1,0 +1,19 @@
+[Unit]
+Description=Backup failure alert for %i
+Documentation=file:///usr/local/sbin/infra-backup-alert
+# Started by OnFailure= of the backup jobs. Deliberately has no OnFailure= of
+# its own, so a broken alert path cannot loop.
+
+[Service]
+Type=oneshot
+# User= and Group= come from the install-time drop-in 10-user.conf: the alert
+# runs as the account that owns the Ping Me configuration, so no credential is
+# copied anywhere.
+EnvironmentFile=/etc/infra-backup/alert.env
+ExecStart=/usr/local/sbin/infra-backup-alert on-failure %i
+StateDirectory=infra-backup-alert
+StateDirectoryMode=0700
+TimeoutStartSec=5min
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
