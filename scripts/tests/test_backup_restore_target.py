@@ -73,7 +73,7 @@ class RestoreTargetTests(unittest.TestCase):
             argv = ['run.py', '--settings', str(root / 'backup.env'), 'restic',
                     'restore', 'example-snapshot', '--target', str(target), '--verify']
             with patch.object(sys, 'argv', argv), \
-                    patch.object(launcher.os, 'geteuid', return_value=1000), \
+                    patch.object(launcher.os, 'geteuid', return_value=root.stat().st_uid), \
                     patch.object(launcher.signal, 'signal'), \
                     patch.object(launcher.subprocess, 'check_output', return_value=raw), \
                     patch.object(launcher.subprocess, 'run') as run:
