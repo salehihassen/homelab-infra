@@ -1,0 +1,34 @@
+name: server
+include:
+- path: caddy/compose.yaml
+  env_file:
+  - caddy/${STACK_ENV_FILE:-.env}
+  - caddy/${STACK_ROUTING_ENV_FILE:-routing.env}
+- path: flowise/compose.yaml
+  env_file:
+  - flowise/${STACK_ENV_FILE:-.env}
+  - flowise/${STACK_ROUTING_ENV_FILE:-routing.env}
+- path: n8n/compose.yaml
+  env_file:
+  - n8n/${STACK_ENV_FILE:-.env}
+  - n8n/${STACK_ROUTING_ENV_FILE:-routing.env}
+- path: nextcloud-aio/compose.yaml
+  env_file:
+  - nextcloud-aio/${STACK_ENV_FILE:-.env}
+  - nextcloud-aio/${STACK_ROUTING_ENV_FILE:-routing.env}
+- path: open-webui/compose.yaml
+  env_file:
+  - open-webui/${STACK_ENV_FILE:-.env}
+  - open-webui/${STACK_ROUTING_ENV_FILE:-routing.env}
+- path: mock-traveler/compose.yaml
+  env_file:
+  - mock-traveler/${STACK_ENV_FILE:-.env}
+  - mock-traveler/${STACK_ROUTING_ENV_FILE:-routing.env}
+- path: personal-network/compose.yaml
+  env_file:
+  - personal-network/${STACK_ENV_FILE:-.env}
+  - personal-network/${STACK_ROUTING_ENV_FILE:-routing.env}
+- path: observability/compose.yaml
+  env_file:
+  - observability/${STACK_ENV_FILE:-.env}
+  - observability/${STACK_ROUTING_ENV_FILE:-routing.env}

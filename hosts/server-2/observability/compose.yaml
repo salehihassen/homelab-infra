@@ -1,0 +1,75 @@
+x-stack:
+  requires: []
+services:
+  alloy:
+    image: ${ALLOY_IMAGE:?Set ALLOY_IMAGE}
+    container_name: server-2-alloy
+    restart: unless-stopped
+    command:
+    - run
+    - --server.http.listen-addr=0.0.0.0:12345
+    - --storage.path=/var/lib/alloy/data
+    - --disable-reporting
+    - /etc/alloy/config.alloy
+    ports:
+    - 127.0.0.1:12345:12345
+    env_file:
+    - path: /opt/observability/app.env
+      format: raw
+    volumes:
+    - type: bind
+      source: ./alloy-config.alloy
+      target: /etc/alloy/config.alloy
+      read_only: true
+      bind:
+        create_host_path: false
+    - type: bind
+      source: /var/run/docker.sock
+      target: /var/run/docker.sock
+      read_only: true
+      bind:
+        create_host_path: false
+    - type: bind
+      source: /opt/observability/data
+      target: /var/lib/alloy
+      bind:
+        create_host_path: false
+    - type: bind
+      source: /opt/observability/secrets/loki_writer_password
+      target: /run/secrets/loki_writer_password
+      read_only: true
+      bind:
+        create_host_path: false
+    - type: bind
+      source: ${JOURNAL_DIR:?Set JOURNAL_DIR}
+      target: /var/log/journal
+      read_only: true
+      bind:
+        create_host_path: false
+    - type: bind
+      source: /etc/machine-id
+      target: /etc/machine-id
+      read_only: true
+      bind:
+        create_host_path: false
+    networks:
+    - log_shipping
+    read_only: true
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    mem_limit: 192m
+    cpus: 1.0
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    user: 0:0
+networks:
+  log_shipping:
+    driver: bridge
+    ipam:
+      config:
+      - subnet: ${ALLOY_SUBNET:?Set ALLOY_SUBNET}

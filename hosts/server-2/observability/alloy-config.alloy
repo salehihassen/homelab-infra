@@ -1,0 +1,88 @@
+logging {
+	level  = "info"
+	format = "logfmt"
+}
+
+discovery.docker "local" {
+	host             = "unix:///var/run/docker.sock"
+	refresh_interval = "5s"
+}
+
+discovery.relabel "docker" {
+	targets = discovery.docker.local.targets
+
+	rule {
+		source_labels = ["__meta_docker_container_name"]
+		regex         = "/(.*)"
+		target_label  = "container"
+	}
+
+	rule {
+		source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+		target_label  = "compose_project"
+	}
+
+	rule {
+		source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+		target_label  = "compose_service"
+	}
+
+	rule {
+		source_labels = ["__meta_docker_container_image"]
+		target_label  = "image"
+	}
+
+	rule {
+		target_label = "host"
+		replacement  = sys.env("HOST_LABEL")
+	}
+}
+
+loki.source.docker "local" {
+	host       = "unix:///var/run/docker.sock"
+	targets    = discovery.relabel.docker.output
+	forward_to = [loki.process.bounded.receiver]
+}
+
+discovery.relabel "journal" {
+	targets = []
+
+	rule {
+		source_labels = ["__journal__systemd_unit"]
+		target_label  = "unit"
+	}
+
+	rule {
+		source_labels = ["__journal__systemd_user_unit"]
+		regex         = "(.+)"
+		target_label  = "unit"
+	}
+}
+
+loki.source.journal "persistent" {
+	path          = "/var/log/journal"
+	max_age       = "168h"
+	labels        = {"host" = sys.env("HOST_LABEL"), "job" = "systemd-journal"}
+	relabel_rules = discovery.relabel.journal.rules
+	forward_to    = [loki.process.bounded.receiver]
+}
+
+loki.process "bounded" {
+	forward_to = [loki.write.central.receiver]
+
+	stage.drop {
+		older_than          = "168h"
+		drop_counter_reason = "replay_too_old"
+	}
+}
+
+loki.write "central" {
+	endpoint {
+		url = sys.env("LOKI_PUSH_URL")
+
+		basic_auth {
+			username      = sys.env("LOKI_USERNAME")
+			password_file = "/run/secrets/loki_writer_password"
+		}
+	}
+}

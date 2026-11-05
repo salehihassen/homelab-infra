@@ -3,6 +3,9 @@
 Commands assume the repository checkout as the working directory unless they
 `cd` first. Real host names, domains, repository locations and the restic
 repository for this deployment are in the untracked `local/site.md`.
+The commands below primarily describe server-1. Use the
+[server-2 playbook](hosts/server-2/PLAYBOOK.md) for its public ingress,
+AIO controller, existing data binds and separate backup pipeline.
 
 ## Where things are
 
@@ -131,8 +134,11 @@ Network subnet changes require recreation of the affected networks.
    `hosts/<host>/caddy/compose.yaml`, and include the routing env file in that
    stack's root include. With a wildcard DNS record and the wildcard
    certificate, no DNS or certificate change is needed.
-4. `bash scripts/validate-stack.sh`, `python3 hosts/<host>/backup/infra-backup-declared.py check --live`,
-   `bash scripts/env-files.sh check`, commit, `docker compose up -d <service>`.
+4. Run the host's validation and live backup checker: server-1 uses
+   `infra-backup-declared.py check --live`; server-2 uses
+   `INFRA_HOST=server-2 bash scripts/validate-stack.sh all` and
+   `python3 backup/run.py --settings /opt/infra-backup/backup.env check`.
+   Check env links, commit, then apply `docker compose up -d <service>`.
 
 ## Komodo
 
@@ -157,7 +163,13 @@ Change Komodo's own services from the CLI, never from the Komodo UI.
 
 ## Backups
 
-The runner, its scripts and systemd units are in `hosts/<host>/backup/`; the
+Both hosts use the [shared backup playbook](docs/backups.md) and tooling in
+`backup/`. The same nightly capture, weekly maintenance, retention and restore
+workflow applies to both. Server-2 uses user units with a Docker helper and a
+dedicated B2 bucket; server-1 uses root system units. Installation below is for
+system units; the shared playbook gives the user-unit installation steps.
+
+Host settings and service units are in `hosts/<host>/backup/`; the
 format of the declarations is in `docs/backups.md`. To install or update:
 
 ```bash

@@ -1,0 +1,48 @@
+x-stack:
+  requires: []
+services:
+  mock-traveler:
+    image: ${MOCK_TRAVELER_IMAGE:?Set MOCK_TRAVELER_IMAGE in mock-traveler/.env}
+    container_name: mock-traveler
+    restart: unless-stopped
+    init: true
+    ports:
+    - target: 80
+      published: '8090'
+      host_ip: ${MOCK_TRAVELER_BIND_ADDRESS:-127.0.0.1}
+      protocol: tcp
+    - target: 80
+      published: '8090'
+      host_ip: ${MOCK_TRAVELER_BIND_ADDRESS_V6:-::1}
+      protocol: tcp
+    networks:
+    - mock_traveler
+    mem_limit: ${MOCK_TRAVELER_MEMORY_LIMIT:-128m}
+    cpus: 2.0
+    pids_limit: 512
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    healthcheck:
+      test:
+      - CMD
+      - wget
+      - -qO-
+      - http://127.0.0.1/healthz
+      interval: 30s
+      timeout: 10s
+      start_period: 120s
+      retries: 5
+    build:
+      context: ${MOCK_TRAVELER_SOURCE_DIR:?Set MOCK_TRAVELER_SOURCE_DIR}
+      dockerfile: deploy/mockup/Dockerfile
+networks:
+  mock_traveler:
+    driver: bridge
+    ipam:
+      config:
+      - subnet: ${MOCK_TRAVELER_SUBNET:?Set MOCK_TRAVELER_SUBNET}

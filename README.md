@@ -1,7 +1,15 @@
 # Homelab infra
 
+> [!IMPORTANT]
+> **A migration to K3s is under consideration.** I'm considering moving this
+> fleet's compute infrastructure from Docker Compose to Kubernetes using K3s.
+> The current deployment remains Compose-based, but deployment definitions,
+> repository layout and operating instructions may change as plans develop.
+> If you use this repository, pin a known-good commit and review changes before
+> updating your own deployment.
+
 Deployment source of truth for a small self-hosted fleet: Docker Compose,
-Caddy, DNS-01 certificates, and Tailscale. Routed services use tailnet HTTPS
+Caddy, DNS-01 certificates, and Tailscale. Server-1 routed services use tailnet HTTPS
 at `https://<name>.<PRIVATE_ZONE>`; the zone and each service's hostname are
 set in env files, never in Git. Intentional LAN and loopback-only listeners
 are recorded in `inventory.yaml`; the media stack preserves Jellyfin's LAN HTTP.
@@ -9,7 +17,9 @@ are recorded in `inventory.yaml`; the media stack preserves Jellyfin's LAN HTTP.
 Hosts appear under neutral aliases (`server-1`, ...). Application source lives
 in its own repositories; images are referenced through each stack's env file.
 Runtime state and secrets stay on each host (under `/opt`), never in Git; the
-nightly restic backup is their only other copy.
+encrypted Restic backups protect runtime state. Server-2 also serves public
+HTTPS integrations; its [operations playbook](hosts/server-2/PLAYBOOK.md)
+describes adoption, Nextcloud AIO ownership, logging and recovery.
 
 ## Layout
 
@@ -27,6 +37,8 @@ hosts/server-1/
   caddy/Caddyfile         # global options, wildcard cert, host-level sites
   backup/                 # backup declaration, runner scripts, systemd units
   env-files.tsv           # which repo symlink points at which /opt env file
+hosts/server-2/            # independent project; active apps and AIO controller only
+  PLAYBOOK.md             # deployment, checks, backups, restore and rollback
 inventory.yaml            # service -> host alias, URL variable, data, backup, exposure
 RUNBOOK.md                # rebuild, restore, secrets, day-to-day operations
 docs/                     # backups format, agent telemetry, archived services
@@ -93,7 +105,8 @@ requiring it, or requires a stack it does not use. Current graph:
 bash scripts/validate-stack.sh           # compose + deps, Caddy, Alloy, Prometheus rules/tests, Loki, private identifiers
 bash scripts/validate-stack.sh compose   # fast: Compose config + stack dependency check
 bash scripts/check-private.sh            # no real host names, domains or paths in tracked files
-python3 hosts/server-1/backup/infra-backup-declared.py check --live   # backup coverage (on the host)
+INFRA_HOST=server-2 bash scripts/validate-stack.sh all  # independent host contracts
+python3 backup/infra-backup-declared.py --host server-1 check --live   # backup coverage (on the host)
 ```
 
 Validation uses Docker Compose **v5.5.1**, matching CI. If your installed version

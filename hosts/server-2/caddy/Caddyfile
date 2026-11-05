@@ -1,0 +1,46 @@
+# Public ingress belongs to this host; identities come from private env files.
+https://{$NEXTCLOUD_DOMAIN} {
+	reverse_proxy 127.0.0.1:11000 {
+		header_up -Tailscale-*
+	}
+}
+https://{$NEXTCLOUD_AIO_DOMAIN} {
+	reverse_proxy https://127.0.0.1:8080 {
+		header_up -Tailscale-*
+		transport http {
+			# The controller serves its own local self-signed certificate.
+			tls_insecure_skip_verify
+		}
+	}
+}
+https://{$OPENWEBUI_DOMAIN} {
+	reverse_proxy 127.0.0.1:3009 {
+		header_up -Tailscale-*
+	}
+}
+https://{$N8N_DOMAIN} {
+	reverse_proxy 127.0.0.1:5678 {
+		header_up -Tailscale-*
+	}
+}
+https://{$FLOWISE_DOMAIN} {
+	reverse_proxy 127.0.0.1:3003 {
+		header_up -Tailscale-*
+	}
+}
+https://{$MOCK_TRAVELER_DOMAIN} {
+	reverse_proxy 127.0.0.1:8090 {
+		header_up -Tailscale-*
+	}
+}
+https://{$PERSONAL_NETWORK_DOMAIN} {
+	reverse_proxy 127.0.0.1:3100 {
+		header_up -Tailscale-*
+	}
+}
+https://{$PROFILE_DOMAIN}, https://{$PROFILE_ALIAS_DOMAIN} {
+	redir {$PROFILE_REDIRECT_URL} temporary
+}
+https://{$RESOURCES_DOMAIN} {
+	redir {$RESOURCES_REDIRECT_URL} temporary
+}

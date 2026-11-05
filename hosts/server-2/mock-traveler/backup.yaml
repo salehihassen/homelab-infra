@@ -1,0 +1,4 @@
+paths:
+- /opt/mock-traveler
+save_images:
+- mock-traveler

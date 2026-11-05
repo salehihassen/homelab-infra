@@ -13,5 +13,9 @@ export RESTIC_REPOSITORY RESTIC_PASSWORD_FILE RCLONE_CONFIG RESTIC_CACHE_DIR
 mkdir -p "${BACKUP_STATE_DIR}" "${RESTIC_CACHE_DIR}"
 exec 9>"${BACKUP_STATE_DIR}/backup.lock"
 flock -n 9 || { echo "A backup or maintenance job is running." >&2; exit 1; }
-restic forget --host "${BACKUP_HOST}" --tag "${BACKUP_HOST}" --group-by host --keep-daily 14 --keep-weekly 8 --keep-monthly 12 --prune
-restic check
+restic forget --host "${BACKUP_HOST}" --tag "${BACKUP_HOST}" --group-by host --keep-daily 7 --keep-weekly 5 --keep-monthly 2 --prune
+restic check --read-data-subset=10%
+date --iso-8601=seconds >"${BACKUP_STATE_DIR}/last-maintenance-success"
+if [[ -n ${BACKUP_OWNER_UID:-} ]]; then
+  chown "${BACKUP_OWNER_UID}:${BACKUP_OWNER_GID}" "${BACKUP_STATE_DIR}/last-maintenance-success"
+fi

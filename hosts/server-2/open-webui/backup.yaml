@@ -1,0 +1,10 @@
+paths:
+- /opt/open-webui
+quiesce:
+  services:
+  - open-webui
+  method: stop
+  copy:
+  - /opt/open-webui
+sqlite_scan:
+- /opt/open-webui

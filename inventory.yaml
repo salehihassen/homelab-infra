@@ -3,6 +3,9 @@
 # maps them to real machines. scripts/check-stacks.py keeps each host's stack
 # list in sync with hosts/<host>/compose.yaml.
 #
+# Both managed hosts use shared direct-to-B2 backups: nightly capture and weekly
+# maintenance, retaining 7 daily, 5 weekly and 2 monthly snapshots.
+#
 # exposure:
 #   tailnet  - HTTPS through Caddy on the host's Tailscale addresses only
 #   loopback - no direct network listener; reached only through Caddy or the host
@@ -17,7 +20,10 @@ hosts:
     backup: nightly restic to Backblaze B2 (infra-backup.timer, 03:15)
   server-2:
     role: VPS; public entry point
-    status: not yet managed from this repo
+    repo_path: hosts/server-2
+    data_root: /opt (runtime settings); existing data binds remain private inputs
+    caddy: true
+    backup: nightly restic directly to a dedicated Backblaze B2 bucket (shared tooling)
   server-3:
     role: NAS (Immich, Jellyfin, Kiwix)
     status: not yet managed from this repo
@@ -156,6 +162,56 @@ stacks:
       data: [postgres:forgejo, /opt/forgejo, /opt/forgejo-runner]
       backup: paused pg_dump + repository copy
       exposure: [tailnet, lan]   # git over SSH on 2222
+
+  server-2:
+    caddy:
+      services: [caddy]
+      urls: [NEXTCLOUD_DOMAIN, NEXTCLOUD_AIO_DOMAIN, OPENWEBUI_DOMAIN, N8N_DOMAIN, FLOWISE_DOMAIN, MOCK_TRAVELER_DOMAIN, PERSONAL_NETWORK_DOMAIN, PROFILE_DOMAIN, PROFILE_ALIAS_DOMAIN, RESOURCES_DOMAIN]
+      data: [/opt/caddy, volume:caddy_data]
+      backup: configuration and TLS state
+      exposure: [public, loopback]
+    flowise:
+      services: [flowise]
+      urls: [FLOWISE_DOMAIN]
+      data: [/opt/flowise, FLOWISE_DATA_DIR]
+      backup: consistent SQLite and matching keys/files
+      exposure: [public, loopback]
+    n8n:
+      services: [n8n]
+      urls: [N8N_DOMAIN]
+      data: [/opt/n8n, volume:n8n_data, N8N_FILES_DIR]
+      backup: consistent SQLite, credential encryption key and files
+      exposure: [public, loopback]
+    nextcloud-aio:
+      services: [nextcloud-aio-mastercontainer]
+      urls: [NEXTCLOUD_DOMAIN, NEXTCLOUD_AIO_DOMAIN]
+      data: [/opt/nextcloud-aio, volume:nextcloud_aio_mastercontainer, AIO-managed volumes, NEXTCLOUD_DATADIR]
+      backup: coordinated native PostgreSQL, Redis and matching AIO/user files
+      exposure: [public, loopback]
+    open-webui:
+      services: [open-webui]
+      urls: [OPENWEBUI_DOMAIN]
+      data: [/opt/open-webui, OPENWEBUI_DATA_DIR]
+      backup: consistent application/vector SQLite, keys, uploads and settings
+      exposure: [public, loopback]
+    mock-traveler:
+      services: [mock-traveler]
+      urls: [MOCK_TRAVELER_DOMAIN]
+      data: [/opt/mock-traveler, MOCK_TRAVELER_SOURCE_DIR]
+      backup: source, build inputs and exact local image
+      exposure: [public, loopback]
+    personal-network:
+      services: [personal-network]
+      urls: [PERSONAL_NETWORK_DOMAIN]
+      data: [/opt/personal-network]
+      backup: settings and exact private-registry image; application is stateless
+      exposure: [public, loopback]
+    observability:
+      services: [alloy]
+      urls: []
+      data: [/opt/observability]
+      backup: configuration and write-only logging credential; cursors excluded
+      exposure: [loopback]
 
   # Running on server-1 but outside hosts/server-1 (development or separately owned).
   server-1-unmanaged:

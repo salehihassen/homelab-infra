@@ -1,0 +1,61 @@
+x-stack:
+  requires: []
+services:
+  n8n:
+    image: ${N8N_IMAGE:?Set N8N_IMAGE in n8n/.env}
+    container_name: n8n
+    restart: unless-stopped
+    init: true
+    ports:
+    - target: 5678
+      published: '5678'
+      host_ip: ${N8N_BIND_ADDRESS:-127.0.0.1}
+      protocol: tcp
+    - target: 5678
+      published: '5678'
+      host_ip: ${N8N_BIND_ADDRESS_V6:-::1}
+      protocol: tcp
+    networks:
+    - n8n
+    mem_limit: ${N8N_MEMORY_LIMIT:-1g}
+    cpus: 2.0
+    pids_limit: 512
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    healthcheck:
+      test:
+      - CMD
+      - node
+      - -e
+      - fetch('http://127.0.0.1:5678/healthz/readiness').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))
+      interval: 30s
+      timeout: 10s
+      start_period: 120s
+      retries: 5
+    env_file:
+    - path: /opt/n8n/app.env
+      format: raw
+    volumes:
+    - type: volume
+      source: n8n_data
+      target: /home/node/.n8n
+    - type: bind
+      source: ${N8N_FILES_DIR:?Set N8N_FILES_DIR}
+      target: /files
+      bind:
+        create_host_path: false
+networks:
+  n8n:
+    driver: bridge
+    ipam:
+      config:
+      - subnet: ${N8N_SUBNET:?Set N8N_SUBNET}
+volumes:
+  n8n_data:
+    external: true
+    name: n8n_data

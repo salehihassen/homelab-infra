@@ -1,0 +1,72 @@
+x-stack:
+  requires: []
+services:
+  caddy:
+    image: ${CADDY_IMAGE:?Set CADDY_IMAGE}
+    container_name: caddy
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+    - type: bind
+      source: ./Caddyfile
+      target: /etc/caddy/Caddyfile
+      read_only: true
+      bind:
+        create_host_path: false
+    - type: bind
+      source: ${CADDY_CERTS_DIR:?Set CADDY_CERTS_DIR}
+      target: /certs
+      bind:
+        create_host_path: false
+    - type: bind
+      source: ${CADDY_STATE_DIR:?Set CADDY_STATE_DIR}
+      target: /config
+      bind:
+        create_host_path: false
+    - type: bind
+      source: ${CADDY_SITES_DIR:?Set CADDY_SITES_DIR}
+      target: /srv
+      read_only: true
+      bind:
+        create_host_path: false
+    - type: volume
+      source: caddy_data
+      target: /data
+    mem_limit: 128m
+    cpus: 1.0
+    security_opt:
+    - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    healthcheck:
+      test:
+      - CMD
+      - wget
+      - -q
+      - --spider
+      - http://127.0.0.1:2019/config/
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    env_file:
+    - path: /opt/caddy/routing.env
+      format: raw
+    - path: /opt/flowise/routing.env
+      format: raw
+    - path: /opt/n8n/routing.env
+      format: raw
+    - path: /opt/nextcloud-aio/routing.env
+      format: raw
+    - path: /opt/open-webui/routing.env
+      format: raw
+    - path: /opt/mock-traveler/routing.env
+      format: raw
+    - path: /opt/personal-network/routing.env
+      format: raw
+volumes:
+  caddy_data:
+    external: true
+    name: caddy_data

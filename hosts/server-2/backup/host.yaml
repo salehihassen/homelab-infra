@@ -1,0 +1,6 @@
+paths:
+- /opt/server-2
+- /opt/infra-backup
+exclude:
+  /opt/infra-backup-state: temporary exports and cache; consistent exports are captured
+    explicitly

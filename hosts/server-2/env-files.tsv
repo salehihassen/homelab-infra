@@ -1,0 +1,25 @@
+# Runtime files stay private; only templates enter Git.
+.env	/opt/server-2/host.env
+caddy/.env	/opt/caddy/compose.env
+caddy/routing.env	/opt/caddy/routing.env
+flowise/.env	/opt/flowise/compose.env
+flowise/routing.env	/opt/flowise/routing.env
+n8n/.env	/opt/n8n/compose.env
+n8n/routing.env	/opt/n8n/routing.env
+nextcloud-aio/.env	/opt/nextcloud-aio/compose.env
+nextcloud-aio/routing.env	/opt/nextcloud-aio/routing.env
+open-webui/.env	/opt/open-webui/compose.env
+open-webui/routing.env	/opt/open-webui/routing.env
+mock-traveler/.env	/opt/mock-traveler/compose.env
+mock-traveler/routing.env	/opt/mock-traveler/routing.env
+personal-network/.env	/opt/personal-network/compose.env
+personal-network/routing.env	/opt/personal-network/routing.env
+observability/.env	/opt/observability/compose.env
+observability/routing.env	/opt/observability/routing.env
+-	/opt/flowise/app.env
+-	/opt/n8n/app.env
+-	/opt/nextcloud-aio/app.env
+-	/opt/open-webui/app.env
+-	/opt/observability/app.env
+-	/opt/infra-backup/backup.env
+-	/opt/infra-backup/tool.json
