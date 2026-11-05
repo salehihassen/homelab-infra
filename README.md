@@ -1,5 +1,13 @@
 # Homelab infra
 
+> [!IMPORTANT]
+> **A migration to K3s is under consideration.** I'm considering moving this
+> fleet's compute infrastructure from Docker Compose to Kubernetes using K3s.
+> The current deployment remains Compose-based, but deployment definitions,
+> repository layout and operating instructions may change as plans develop.
+> If you use this repository, pin a known-good commit and review changes before
+> updating your own deployment.
+
 Deployment source of truth for a small self-hosted fleet: Docker Compose,
 Caddy, DNS-01 certificates, and Tailscale. Server-1 routed services use tailnet HTTPS
 at `https://<name>.<PRIVATE_ZONE>`; the zone and each service's hostname are
