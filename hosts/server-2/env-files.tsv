@@ -22,4 +22,4 @@ observability/routing.env	/opt/observability/routing.env
 -	/opt/open-webui/app.env
 -	/opt/observability/app.env
 -	/opt/infra-backup/backup.env
--	/opt/infra-backup/config.json
+-	/opt/infra-backup/tool.json
