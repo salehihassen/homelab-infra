@@ -21,6 +21,7 @@ Subcommands:
 """
 
 import argparse
+from contextlib import ExitStack
 import json
 import os
 from pathlib import Path
@@ -47,6 +48,14 @@ def fail(message):
 def under(path, roots):
     path = os.path.normpath(path)
     return any(path == r or path.startswith(r.rstrip("/") + "/") for r in map(os.path.normpath, roots))
+
+
+def copy_roots(paths):
+    roots = []
+    for path in sorted(set(map(os.path.normpath, paths)), key=len):
+        if not under(path, roots):
+            roots.append(path)
+    return sorted(roots)
 
 
 def load(infra, host):
@@ -192,11 +201,13 @@ def plan(infra, host, stage):
                 for name in doc["quiesce"]["services"]:
                     doc["quiesce"]["copy"] += [m["source"] for m in services.get(name, {}).get("volumes", [])
                                                if m["type"] == "bind" and not m.get("read_only")]
-            doc["quiesce"]["copy"] = sorted(set(doc["quiesce"]["copy"]))
     adapters = {}
     if any(d.get("adapter") == "nextcloud-aio" for d in declarations.values()):
         import nextcloud
         adapters = nextcloud.plan(declarations, volume_paths)
+    for doc in declarations.values():
+        if doc.get("quiesce"):
+            doc["quiesce"]["copy"] = copy_roots(doc["quiesce"]["copy"])
     quiesced_copies = [p for doc in declarations.values() for p in (doc.get("quiesce") or {}).get("copy", [])]
     excludes = [p for doc in declarations.values() for p in doc.get("exclude", {})]
     # Live files replaced by staged consistent copies.
@@ -254,12 +265,8 @@ def pg_dump(stage, database):
 
 
 def check_space(stage, planned):
-    roots = sorted({p for q in planned["quiesce"].values() for p in q.get("copy", [])}, key=len)
-    unique = []
-    for path in roots:
-        if not under(path, unique):
-            unique.append(path)
-    size = sum(int(subprocess.check_output(["du", "-sb", "--", p], text=True).split()[0]) for p in unique)
+    roots = copy_roots(p for q in planned["quiesce"].values() for p in q.get("copy", []))
+    size = sum(int(subprocess.check_output(["du", "-sb", "--", p], text=True).split()[0]) for p in roots)
     if size + max(2 * 1024**3, size // 10) > shutil.disk_usage(stage).free:
         raise RuntimeError("Insufficient free space for coordinated copies and recovery headroom")
 
@@ -286,10 +293,11 @@ def dump_postgres(stage):
         paused = []
         method = quiesce.get("method", "pause")
         adapter = None
+        cleanup = ExitStack()
         try:
             if stack in planned.get("adapters", {}):
                 import nextcloud
-                nextcloud.prepare()
+                nextcloud.prepare(cleanup)
                 adapter = nextcloud
             for service in services:
                 paused.append(service)
@@ -309,8 +317,7 @@ def dump_postgres(stage):
                 result = subprocess.run(["docker", "unpause" if method == "pause" else "start", service], check=False)
                 if result.returncode:
                     errors.append(service)
-            if adapter:
-                adapter.resume()
+            cleanup.close()
             if errors:
                 raise RuntimeError("Failed to resume: " + ", ".join(errors))
             if paused:

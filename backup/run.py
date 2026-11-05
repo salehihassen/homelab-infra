@@ -33,6 +33,9 @@ def main():
         if restore_target is None:
             parser.error('restore requires --target with an empty private scratch directory')
         restore_target.mkdir(mode=0o700, parents=True, exist_ok=True)
+        info = restore_target.stat()
+        if info.st_uid != os.geteuid() or info.st_mode & 0o7777 != 0o700:
+            raise RuntimeError('Restore target must be owned by the current user with mode 0700')
         if any(restore_target.iterdir()):
             raise RuntimeError('Restore target must be empty; preserve existing files before retrying')
     raw = subprocess.check_output(['bash', '-ec', 'set -a; . "$1"; env -0', 'bash', args.settings])

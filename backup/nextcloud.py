@@ -48,11 +48,12 @@ def plan(declarations, volumes):
                              'containers': children}}
 
 
-def prepare():
+def prepare(cleanup):
     status = json.loads(output(['docker', 'exec', '--user', 'www-data', 'nextcloud-aio-nextcloud',
                                'php', 'occ', 'status', '--output=json']))
     if status.get('maintenance'):
         raise RuntimeError('Preserving existing Nextcloud maintenance state; capture aborted')
+    cleanup.callback(resume)
     command(['docker', 'exec', '--user', 'www-data', 'nextcloud-aio-nextcloud',
              'php', 'occ', 'maintenance:mode', '--on'], stdout=subprocess.DEVNULL)
 

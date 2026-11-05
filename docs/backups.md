@@ -230,7 +230,9 @@ the same interface. The data format and acceptance steps below apply to both
 hosts. Restore tests belong on isolated scratch storage on another machine when
 possible; metadata checks alone do not prove application recovery. The shared
 restore command requires an empty private target and mounts it writable in
-user mode. Keep its configured metadata cache enabled for cloud restores.
+user mode. The target must be owned by the invoking user with permissions `0700`;
+existing targets with different ownership or permissions are rejected. Keep its
+configured metadata cache enabled for cloud restores.
 
 Nextcloud's native exports are under the shared `staging/` root. Import PG globals
 into a fresh cluster using a unique bootstrap admin, then database attributes

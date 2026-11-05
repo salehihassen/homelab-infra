@@ -94,3 +94,26 @@ class RestoreTargetTests(unittest.TestCase):
                     launcher.main()
             run.assert_not_called()
             self.assertEqual((target / 'keep').read_text(), 'existing data')
+
+    def test_existing_public_target_is_rejected_before_reading_credentials(self):
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory)
+            target.chmod(0o755)
+            argv = ['run.py', 'restic', 'restore', 'example-snapshot', '--target', str(target)]
+            with patch.object(sys, 'argv', argv), \
+                    patch.object(launcher.subprocess, 'check_output') as output:
+                with self.assertRaisesRegex(RuntimeError, 'mode 0700'):
+                    launcher.main()
+            output.assert_not_called()
+            self.assertEqual(target.stat().st_mode & 0o777, 0o755)
+
+    def test_target_owned_by_another_user_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory)
+            argv = ['run.py', 'restic', 'restore', 'example-snapshot', '--target', str(target)]
+            with patch.object(sys, 'argv', argv), \
+                    patch.object(launcher.os, 'geteuid', return_value=target.stat().st_uid + 1), \
+                    patch.object(launcher.subprocess, 'check_output') as output:
+                with self.assertRaisesRegex(RuntimeError, 'owned by the current user'):
+                    launcher.main()
+            output.assert_not_called()
