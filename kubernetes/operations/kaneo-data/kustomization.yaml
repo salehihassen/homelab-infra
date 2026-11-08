@@ -1,0 +1,6 @@
+# Manual recovery tool. Not included in either Flux reconciliation path.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: kaneo
+resources:
+  - helper.yaml

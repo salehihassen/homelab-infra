@@ -1,0 +1,88 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kaneo
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  revisionHistoryLimit: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kaneo
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kaneo
+    spec:
+      automountServiceAccountToken: false
+      nodeSelector:
+        homelab.example/cluster: public-edge
+        homelab.example/kaneo-storage: "true"
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: kaneo
+          # Same release as Compose; migrate before considering an upgrade.
+          image: ghcr.io/usekaneo/kaneo:2.47.1@sha256:880b2df38fe5385032c9772c8989182d45029bc1f1711a3cb9489b94f482848d
+          env:
+            - name: POSTGRES_HOST
+              value: kaneo-postgres
+            - name: POSTGRES_PORT
+              value: "5432"
+            - name: POSTGRES_DB
+              value: kaneo
+            - name: POSTGRES_USER
+              value: kaneo
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: kaneo-credentials, key: POSTGRES_PASSWORD}
+            - name: AUTH_SECRET
+              valueFrom:
+                secretKeyRef: {name: kaneo-credentials, key: AUTH_SECRET}
+            - name: KANEO_CLIENT_URL
+              valueFrom:
+                configMapKeyRef: {name: kaneo-settings, key: KANEO_CLIENT_URL}
+            - name: DISABLE_GUEST_ACCESS
+              value: "true"
+            - name: DISABLE_REGISTRATION
+              value: "true"
+          ports:
+            - name: http
+              containerPort: 5173
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: "2", memory: 1Gi}
+          startupProbe:
+            httpGet: {path: /api/health, port: http}
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: {path: /api/health, port: http}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /api/health, port: http}
+            periodSeconds: 30
+          volumeMounts:
+            - name: data
+              mountPath: /app/apps/api/data
+            - name: runtime
+              mountPath: /var/lib/kaneo
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: data
+          persistentVolumeClaim: {claimName: kaneo-data}
+        - name: runtime
+          emptyDir: {medium: Memory, sizeLimit: 256Mi}
+        - name: tmp
+          emptyDir: {medium: Memory, sizeLimit: 64Mi}

@@ -1,0 +1,18 @@
+# Copy to local/public-edge.yaml; fill in after host/network discovery.
+# Install as /etc/rancher/k3s/config.yaml on the PUBLIC server only.
+node-name: public-server
+node-ip: REPLACE_WITH_PUBLIC_SERVER_TAILSCALE_IPV4
+tls-san:
+  - REPLACE_WITH_PUBLIC_SERVER_TAILSCALE_IPV4
+node-label:
+  - homelab.example/cluster=public-edge
+# Apply the kaneo-storage label manually only after selecting its data disk.
+cluster-cidr: 10.144.0.0/16
+service-cidr: 10.145.0.0/16
+cluster-dns: 10.145.0.10
+disable:
+  - traefik
+  - servicelb
+flannel-backend: vxlan
+secrets-encryption: true
+write-kubeconfig-mode: "0600"

@@ -1,9 +1,10 @@
 # Homelab infra
 
 > [!IMPORTANT]
-> **A migration to K3s is under consideration.** I'm considering moving this
-> fleet's compute infrastructure from Docker Compose to Kubernetes using K3s.
-> The current deployment remains Compose-based, but deployment definitions,
+> **An incremental K3s migration is being prepared.** The two-cluster
+> [foundation](kubernetes/README.md) stages public Kaneo and a private Podinfo
+> pilot. Current deployments remain Compose-based; no host is bootstrapped or
+> service cut over by merging these files. Deployment definitions,
 > repository layout and operating instructions may change as plans develop.
 > If you use this repository, pin a known-good commit and review changes before
 > updating your own deployment.
@@ -43,6 +44,8 @@ inventory.yaml            # service -> host alias, URL variable, data, backup, e
 RUNBOOK.md                # rebuild, restore, secrets, day-to-day operations
 docs/                     # backups format, agent telemetry, archived services
 scripts/                  # validation, dependency/backup/private-identifier checks
+kubernetes/               # two independent Flux roots and initial pilot apps
+provisioning/k3s/          # reviewed-by-operator host examples; no remote installer
 local/                    # untracked: real host names, domains, scan patterns
 ```
 
@@ -105,6 +108,7 @@ requiring it, or requires a stack it does not use. Current graph:
 bash scripts/validate-stack.sh           # compose + deps, Caddy, Alloy, Prometheus rules/tests, Loki, private identifiers
 bash scripts/validate-stack.sh compose   # fast: Compose config + stack dependency check
 bash scripts/check-private.sh            # no real host names, domains or paths in tracked files
+bash scripts/validate-kubernetes.sh      # render roots/children, schemas and migration safety contracts
 INFRA_HOST=server-2 bash scripts/validate-stack.sh all  # independent host contracts
 python3 backup/infra-backup-declared.py --host server-1 check --live   # backup coverage (on the host)
 ```
@@ -121,7 +125,8 @@ CPA management denial. Gitleaks runs in CI and in the Git hooks. Enable the
 hooks once per clone with `git config core.hooksPath .githooks`:
 
 - **pre-commit**: Gitleaks, env files and private identifiers on the staged
-  files, then `validate-stack.sh compose` on the staged snapshot.
+  files, then `validate-stack.sh compose` on the staged snapshot; Kubernetes
+  changes also run the manifest suite on that exact snapshot.
 - **pre-push**: private identifiers and Gitleaks on every commit being pushed
   (a later fix does not unpublish an earlier commit), then the full
   `validate-stack.sh` on each pushed tip.

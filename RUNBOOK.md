@@ -7,6 +7,13 @@ The commands below primarily describe server-1. Use the
 [server-2 playbook](hosts/server-2/PLAYBOOK.md) for its public ingress,
 AIO controller, existing data binds and separate backup pipeline.
 
+For the staged two-cluster migration, start with the
+[K3s architecture](docs/kubernetes/architecture.md),
+[bootstrap runbook](docs/kubernetes/bootstrap.md), and
+[public Kaneo migration](docs/kubernetes/kaneo.md). Existing Compose operations
+remain authoritative until each service's explicit cutover. Kubernetes PVCs
+are not automatically protected by the Compose backup discovery.
+
 ## Where things are
 
 | What | Where |

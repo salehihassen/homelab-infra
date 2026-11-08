@@ -1,0 +1,8 @@
+# No network ingress or egress. Operator access uses API-authorized port-forward.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]

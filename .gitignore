@@ -7,6 +7,7 @@
 secrets/
 *.key
 *.pem
+*.agekey
 !**/testdata/**
 
 # Host-specific values that identify this deployment (see README.md).

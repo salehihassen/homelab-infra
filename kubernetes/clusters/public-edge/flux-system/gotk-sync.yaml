@@ -1,0 +1,36 @@
+# URL comes from the operator-managed cluster-settings Secret, not public Git.
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: flux-system
+  namespace: flux-system
+spec:
+  interval: 1m
+  url: ${GIT_REPOSITORY_URL}
+  ref:
+    branch: main
+  secretRef:
+    name: flux-system
+  sparseCheckout:
+    - kubernetes/clusters/public-edge
+    - kubernetes/apps/kaneo
+    - kubernetes/infrastructure/flux-system
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: flux-system
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 1m
+  timeout: 5m
+  path: ./kubernetes/clusters/public-edge
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  prune: true
+  postBuild:
+    substituteFrom:
+      - kind: Secret
+        name: cluster-settings

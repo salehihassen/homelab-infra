@@ -1,0 +1,8 @@
+# Opt-in at cutover: append to the public host's Caddyfile after review.
+# Add both variables to that Caddy container's existing private routing.env.
+# The upstream is the kaneo Service's actual ClusterIP:5173 on this same host.
+https://{$KANEO_PUBLIC_DOMAIN} {
+	reverse_proxy {$KANEO_K3S_UPSTREAM} {
+		header_up -Tailscale-*
+	}
+}

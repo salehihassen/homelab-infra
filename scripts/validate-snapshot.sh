@@ -24,5 +24,9 @@ else
 fi
 # The private-identifier patterns are untracked; the hooks run that check on
 # the repository itself, so the snapshot's own `private` step skips quietly.
+if [[ "$suite" == kubernetes ]]; then
+  bash "$work/tree/scripts/validate-kubernetes.sh"
+  exit
+fi
 bash scripts/with-validation-compose.sh bash "$work/tree/scripts/validate-stack.sh" "$suite" \
   2> >(grep -v '^check-private: no ' >&2)

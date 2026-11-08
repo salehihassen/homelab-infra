@@ -1,0 +1,20 @@
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: kaneo
+  namespace: flux-system
+spec:
+  interval: 10m
+  retryInterval: 1m
+  timeout: 5m
+  path: ./kubernetes/apps/kaneo
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  prune: false
+  wait: true
+  suspend: true
+  decryption:
+    provider: sops
+    secretRef:
+      name: sops-age

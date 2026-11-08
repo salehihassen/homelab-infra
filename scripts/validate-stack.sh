@@ -208,6 +208,7 @@ case "${1:-all}" in
     validate_prometheus
     validate_loki
     validate_private
+    bash scripts/validate-kubernetes.sh
     ;;
   *) echo "Usage: bash scripts/validate-stack.sh [all|compose|caddy-build|caddy|alloy|prometheus|loki|private]" >&2; exit 2 ;;
 esac
