@@ -4,6 +4,11 @@ This first step adds one public cluster and a fresh Kaneo instance with its own
 PostgreSQL database. Existing services stay in Compose. The private cluster
 and its pilot belong to a later MR.
 
+The [migration roadmap](../docs/kubernetes/roadmap.md) keeps both supplied plans
+as the target: independent public/private clusters, then tested public serving
+continuity with one control-plane server. It records the current staging choices
+and the checks required before progressing.
+
 Read the [architecture](../docs/kubernetes/architecture.md), follow
 [bootstrap](../docs/kubernetes/bootstrap.md) and
 [new Kaneo setup](../docs/kubernetes/kaneo.md), then work through the

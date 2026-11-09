@@ -5,6 +5,10 @@ This first change introduces only a public cluster and an independent, empty
 Kaneo instance. All existing services, including private Compose Kaneo, retain
 their current Compose deployments, routes, credentials and data.
 
+The [migration roadmap](roadmap.md) preserves the decisions and acceptance
+criteria from both supplied handoffs. Narrowing this MR does not discard the
+future private cluster or the single-server public serving-continuity goal.
+
 ## Initial topology
 
 | Component | Initial placement | State |
