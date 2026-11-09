@@ -1,10 +1,10 @@
 # Homelab infra
 
 > [!IMPORTANT]
-> **An incremental K3s migration is being prepared.** The two-cluster
-> [foundation](kubernetes/README.md) stages public Kaneo and a private Podinfo
-> pilot. Current deployments remain Compose-based; no host is bootstrapped or
-> service cut over by merging these files. Deployment definitions,
+> **An incremental K3s migration is being prepared.** The public-cluster
+> [foundation](kubernetes/README.md) adds a fresh Kaneo instance with dedicated
+> PostgreSQL. Existing services stay in Compose; the private cluster is deferred.
+> Merging these files does not install K3s or expose Kaneo. Deployment definitions,
 > repository layout and operating instructions may change as plans develop.
 > If you use this repository, pin a known-good commit and review changes before
 > updating your own deployment.
@@ -44,7 +44,7 @@ inventory.yaml            # service -> host alias, URL variable, data, backup, e
 RUNBOOK.md                # rebuild, restore, secrets, day-to-day operations
 docs/                     # backups format, agent telemetry, archived services
 scripts/                  # validation, dependency/backup/private-identifier checks
-kubernetes/               # two independent Flux roots and initial pilot apps
+kubernetes/               # public Flux root, new Kaneo instance and PostgreSQL
 provisioning/k3s/          # reviewed-by-operator host examples; no remote installer
 local/                    # untracked: real host names, domains, scan patterns
 ```

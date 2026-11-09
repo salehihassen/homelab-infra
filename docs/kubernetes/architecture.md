@@ -1,108 +1,110 @@
-# Two-cluster K3s foundation
+# Public K3s foundation: a new Kaneo instance
 
-Status: initial implementation, 2026-11-08. Nothing has been installed or cut over.
-This RFC adapts the supplied migration handoff to the current Compose inventory.
+Scope revised 2026-11-09. No host has been installed or changed by this branch.
+This first change introduces only a public cluster and an independent, empty
+Kaneo instance. All existing services, including private Compose Kaneo, retain
+their current Compose deployments, routes, credentials and data.
 
-## Scope and placement
+## Initial topology
 
-| Cluster | Initial server | Workload in this change | Later capacity |
-| --- | --- | --- | --- |
-| private-home | server-1, local x86_64 | Podinfo, a disposable private GitOps pilot | Trusted local x86 nodes; optional node-pinned NAS workloads |
-| public-edge | server-2, existing public VPS | Kaneo + dedicated PostgreSQL 16, initially suspended | Other offsite VPS agents, including a future OCI ARM64 agent |
+| Component | Initial placement | State |
+| --- | --- | --- |
+| public-edge | server-2, existing public VPS | One K3s server, also running workloads; SQLite datastore |
+| Flux | public-edge | Source and Kustomize controllers; read-only Git deploy identity |
+| Kaneo | public server | One replica, new credentials and application-data PVC |
+| PostgreSQL 16 | public server | Dedicated Kaneo database and separate PVC |
+| Public ingress | Existing Compose Caddy on server-2 | Optional new Kaneo route after local acceptance |
 
-These are independent Kubernetes trust domains with separate APIs, tokens,
-kubeconfigs, Flux deploy keys, SOPS age keys, and backup credentials. No node
-joins both. The initial public cluster is entirely offsite; no LAN worker,
-inter-cluster routing, provider provisioning, or distributed etcd is introduced.
-An extra ARM agent adds capacity, not control-plane or storage availability.
-Both initial servers use K3s's single-server SQLite datastore.
+A K3s server already runs the agent components needed to host Pods. Do not
+install a second agent service on this machine. No worker enrollment, provider
+provisioning, private-cluster bootstrap or Compose service migration is included.
 
 ```mermaid
 flowchart TD
-  Git[Protected Git branch] --> FP[Private Flux / private-home path]
-  Git --> FE[Public Flux / public-edge path]
-  FP --> P[Private home K3s: local x86]
-  FE --> E[Public edge K3s: offsite VPS]
-  P --> PI[Podinfo: ClusterIP only]
-  E --> K[Kaneo + PostgreSQL: pinned local storage]
-  E -. later agent .-> ARM[Offsite ARM64 VPS]
+  Git[Protected Git main branch] --> Flux[Flux / public-edge root]
+  Flux --> K[Kaneo: fresh instance]
+  K --> DB[Dedicated PostgreSQL / retained local PVC]
+  K --> Data[Retained application-data PVC]
   Internet --> C[Existing Compose Caddy]
-  C -. explicit later cutover .-> K
+  C -. reviewed new route after tests .-> K
 ```
 
 ## Coexistence and networking
 
-Keep every existing Compose definition, listener, backup, and route active.
-K3s uses its own containerd, not Docker. Disable Traefik and ServiceLB so K3s
-claims neither 80/443 nor Compose ports. Do not install an ingress controller,
-LoadBalancer, NodePort, hostPort, or hostNetwork workload in this change.
-Both pilot Services are ClusterIP; operator port-forward binds loopback.
+K3s uses its own containerd. Traefik and ServiceLB are disabled so the existing
+Compose Caddy keeps ports 80/443. This change installs no ingress controller,
+LoadBalancer, NodePort, hostPort or hostNetwork workload. Kaneo and PostgreSQL
+have ClusterIP Services. First access uses an administrator's loopback-only
+port-forward. A later operator step adds only the new Kaneo hostname to Caddy,
+using the same-host ClusterIP path; it does not replace existing routes.
 
-Choose nonoverlapping Pod and Service CIDRs *after* inspecting host routes,
-Docker networks, LAN/VPN routes, and future provider ranges. Example CIDRs in
-provisioning are illustrative, not an asserted network inventory. Restrict the
-K3s API to approved Tailscale sources with the host/provider firewall, keep
-6443 closed to the internet, and retain K3s NetworkPolicy enforcement. Flannel VXLAN
-is sufficient for the initial single-node clusters. Never open UDP 8472 to the
-internet. Tailscale remains a host prerequisite, outside Kubernetes.
+Discover host routes, Docker networks, LAN/VPN ranges and spare resources
+before selecting Pod/Service CIDRs or installing anything. The API must be
+reachable only through approved administrative access and firewalls; setting
+node-ip or tls-san alone does not restrict its listener. An existing Tailscale
+connection may provide workstation administration. Public inter-node networking
+will not use Tailscale. No cross-node path is implemented in this single-node
+step; choose and test a documented K3s multi-cloud option before adding agents.
+Initial Flannel VXLAN is local to this one node; never expose UDP 8472 publicly.
 
-Adding any node is a separate change: select and rehearse a supported CNI
-path across the actual VPS networks, including MTU, DNS, policy enforcement,
-pod-to-pod return traffic and direct/DERP behavior. Do not assume host-level
-Tailscale reachability provides pod networking. There is deliberately no ready
-to run cross-provider join command or public home worker in this PR.
+## GitOps and bootstrap ordering
 
-## GitOps, configuration, and storage
+The public root reconciles exactly its own source/controllers and Kaneo. Git
+URL, deploy key, age private key, database password, auth secret and application
+origin are external bootstrap inputs. Source artifacts include only the public
+root, Kaneo and Flux paths. Git credentials have no write permission. Keep main
+protected; controllers use strict substitution and reject cross-namespace
+references/remote bases. No image automation is installed.
 
-One Flux instance reconciles each cluster root. Pinned, vendored Flux 2.10.0
-source/kustomize controllers are shared as manifests, installed independently.
-Each root includes its own Git source and root reconciliation. A host-local
-`cluster-settings` Secret supplies the Git URL through strict Flux substitution;
-no deployment identity is baked into public Git. Independent read-only Git
-deploy keys grant no Git push permission.
-Sharing a repository still shares a supply-chain boundary: protect main and
-require configuration/secret checks. There is no remote kubeconfig in Flux.
+The operator installs controllers, prepares the namespace, dedicated Secrets,
+URL ConfigMap, storage-owner label and recovery copies, then applies the Git
+sync. Kaneo is active in Git: starting root reconciliation deploys it without a
+second activation PR. Missing inputs are a bootstrap error, not a reason to add
+placeholder secrets. A feature branch is validated locally; live bootstrap
+tracks reviewed main. Rehearse against a separate disposable repository if main
+does not yet contain these files.
 
-Only Podinfo is immediately reconciled. Public Kaneo reconciliation is
-suspended in Git until operator preparation is complete. No placeholder
-password, domain, address, or database is deployed. Kaneo references a
-precreated Secret and URL ConfigMap. They initially remain operator-managed;
-SOPS encryption can take over only after independent age keys and a tested
-recovery copy exist. The Kaneo reconciler is already configured to decrypt
-with its own cluster's `sops-age` Secret. No private identity belongs in public
-Git, including unencrypted URLs. Never share either age private key.
+Credentials initially remain operator-managed. Kaneo's reconciler supports
+SOPS/age once encrypted resources are deliberately added to its path. Plain
+Kubernetes Secrets are base64, not encryption. Protect the public age key and
+server token outside Git and test their recovery. A future private cluster must
+use separate identities, keys, tokens, kubeconfigs and backups.
 
-Kaneo and PostgreSQL use single replicas, Recreate rollouts, required node
-selection, and a Retain local-path StorageClass. The operator labels exactly
-one public server as their storage owner. PV node affinity keeps disks on
-that node; adding ARM compute does not move state. Both images are pinned to
-multiarchitecture index digests. Keep Kaneo at the existing Compose release
-2.47.1 for the first restore; upgrading the application is separate work.
+## Runtime, persistence and exposure
 
-Default-deny ingress/egress policies isolate the pilots. Kaneo may reach only
-cluster DNS and its own PostgreSQL. Integrations, SMTP, webhooks, external
-storage and private APIs require separately reviewed exceptions. Public
-exposure needs application auth, a claimed initial administrator, verified
-backups, and a deliberately configured ingress path. No existing Kaneo data
-is copied automatically.
+Kaneo and PostgreSQL use one replica, Recreate rollouts, non-root restricted
+runtime settings, health probes and bounded resources. Images retain the
+previously rehearsed versions and multiarchitecture digests. This is a new
+instance, with no import or reuse of existing private Kaneo content or secrets.
 
-## Implementation and follow-up PRs
+Both Deployments require the public-cluster label and the kaneo-storage label.
+Apply storage ownership to exactly one inspected node. Retain local-path PVCs
+with WaitForFirstConsumer bind data to that node. Adding an ARM agent provides
+compute capacity; it does not replicate this data or move Kaneo automatically.
 
-1. **This branch:** provisioning examples, distinct Flux roots, private pilot,
-   paused public Kaneo, offline validation, and operator runbooks.
-2. **Bootstrap rehearsal:** discover host/network/storage capacity; install
-   one server per cluster; generate and review Flux bootstrap manifests with
-   separate identities; verify reconciliation and negative reachability tests.
-3. **Kaneo cutover:** restore an application-consistent copy, claim/test auth,
-   prove backup/restore, add a reviewed Caddy-to-cluster path, and switch only
-   Kaneo. Preserve the old Compose recovery set.
-4. **Additional public agents:** validate cross-provider CNI and ARM runtime,
-   then enroll the future VPS without granting private-cluster access.
-5. **Incremental migration:** one service per PR. NAS/hardware workloads stay
-   with their owning hardware. Docker-managing applications stay in Compose
-   until a supported migration exists.
+Default-deny policies allow Kaneo only cluster DNS and its own PostgreSQL.
+SMTP, OAuth, webhooks, object storage and other integrations are out of scope.
+Claim the first administrator through local access before exposing the app;
+DISABLE_REGISTRATION does not prevent first-account bootstrap. Public use also
+requires tested authentication, a coherent backup/restore and reviewed DNS/TLS.
+Existing Compose backup discovery does not automatically protect these PVCs.
 
-RTO/RPO, host resources, real network addresses, storage capacity, DNS/TLS,
-backup schedule/retention, and future VPS availability remain operator inputs.
-No production readiness, HA, provider eligibility, or successful restore is
-claimed by rendering manifests.
+## Later changes
+
+1. Private/home cluster with one simple pilot, independently secured.
+2. Public agents after validating routing, firewall rules, MTU, NetworkPolicy
+   enforcement and ARM runtime compatibility. No public worker joins the
+   private cluster or receives private-cluster credentials.
+3. Public application-serving continuity during a temporary server VPS outage:
+   pre-existing app/ingress replicas on surviving agents, external failover and
+   surviving data/runtime dependencies. Keep one control-plane server unless
+   outage tests or new requirements justify HA. The current local Kaneo data
+   and same-host Caddy do not satisfy that future goal.
+4. Migrate other services individually, with hardware/storage ownership and
+   restore tests. Keep Docker-managing apps in Compose until a supported path
+   exists.
+
+See [bootstrap](bootstrap.md), [new Kaneo setup and recovery](kaneo.md), and
+the [public-cluster test walkthrough](testing.md). Fleet capacity, real routes,
+DNS/TLS, RPO/RTO and backup scheduling remain operator inputs. This branch
+does not claim public deployment or fault tolerance.

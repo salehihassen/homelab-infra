@@ -13,7 +13,8 @@ spec:
     name: flux-system
   prune: false
   wait: true
-  suspend: true
+  # Prepare credentials, URL, storage ownership and recovery keys before sync.
+  suspend: false
   decryption:
     provider: sops
     secretRef:

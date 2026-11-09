@@ -1,44 +1,62 @@
-# Public Kaneo pilot: prepare, restore, cut over
+# New public Kaneo: inputs, HTTPS and recovery
 
-Kaneo currently runs privately in Compose on server-1. This change adds a
-**separate** public-cluster candidate and leaves that deployment intact.
-Decide explicitly whether to migrate existing private Kaneo data into an
-internet-facing application or start empty. Do not publish private project
-content merely to prove the deployment path. Nothing here runs automatically.
+This is an independent, empty instance. Existing private Compose Kaneo and every
+other Compose service keep their current data, credentials and routes. Do not
+import personal projects or reuse private Kaneo's database/auth secret for this
+pilot. This change adds Kaneo, dedicated PostgreSQL 16 and two retained local
+PVCs; SMTP, OAuth, Redis, uploads/S3 integrations and other services are not added.
 
-## Prepare the public candidate
+## Prepare the new instance
 
-After the public cluster/Flux acceptance checks:
+Complete this after installing Flux controllers but **before applying the root
+Git sync** in [bootstrap](bootstrap.md). All commands below use the workstation's
+public kubeconfig and explicitly selected PUBLIC_CONTEXT.
 
-Set/export `KUBECONFIG` to the public cluster's own file and confirm
-`PUBLIC_CONTEXT` matches it before running any of the commands below.
-
-1. Choose and inspect the data disk on the initial public server. K3s's
-   local-path provisioner uses its configured host storage (normally under
-   `/var/lib/rancher/k3s/storage`). Set its path before allocation if needed.
-   PVC sizes are requests; local-path does not enforce a disk quota. Check
-   available space, ownership, inode usage and monitoring independently.
-2. Label **only that node** for storage after confirming its cluster label:
+1. Inspect the data disk and local-path provisioner path on the public server
+   (normally `/var/lib/rancher/k3s/storage`). Configure it before PVC allocation
+   if a different disk is required. Check capacity, inodes, ownership and
+   monitoring. PVC size requests do not enforce local-path disk quotas.
+2. Export PUBLIC_STORAGE_NODE to the inspected public node's name. Confirm the
+   cluster label and apply storage ownership to exactly that one node:
 
    ```bash
+   : "${KUBECONFIG:?}" "${PUBLIC_CONTEXT:?}" "${PUBLIC_STORAGE_NODE:?}"
    kubectl --context "$PUBLIC_CONTEXT" get nodes --show-labels
    kubectl --context "$PUBLIC_CONTEXT" label node "$PUBLIC_STORAGE_NODE" homelab.example/kaneo-storage=true
+   kubectl --context "$PUBLIC_CONTEXT" get nodes -l homelab.example/kaneo-storage=true
    ```
 
-   Both deployments require this label and `homelab.example/cluster=public-edge`.
-   PV node affinity and Recreate deployments prevent silent relocation or
-   concurrent writers. This is one-node persistence, with expected downtime
-   when that server is unavailable. It is not replicated storage or HA.
-3. Create the namespace from `kubernetes/apps/kaneo/namespace.yaml`. Prepare a
-   mode-0600 private env file with `POSTGRES_PASSWORD` and stable `AUTH_SECRET`,
-   and a separate mode-0600 env file with `KANEO_CLIENT_URL` (the intended public
-   HTTPS origin). For restoring an existing instance, preserve its auth secret
-   and any other encryption keys/features used by that exact instance. The
-   candidate database/user names in this pilot are both `kaneo`; check the
-   source names/ownership and adapt a private restore plan if different.
-4. Create inputs in the **public** cluster. Files live outside Git:
+   Expect exactly one node, also labeled homelab.example/cluster=public-edge.
+   Both Deployments are pinned there. This is one-node persistence: losing the
+   server takes this app and its database offline.
+3. Create fresh inputs in ignored/private storage. The following example uses
+   the repository's ignored local directory, creates mode-0600 files and refuses
+   to overwrite existing inputs. Save recovery copies in private storage too.
+   Run on the workstation from the repo root; it does not print secrets.
 
    ```bash
+   umask 077
+   export KANEO_INPUT_DIR=local/public-edge-inputs
+   python3 - <<'PY'
+   import os
+   from pathlib import Path
+   import secrets
+
+   target = Path(os.environ['KANEO_INPUT_DIR'])
+   target.mkdir(mode=0o700, parents=True, exist_ok=True)
+   credentials = target / 'credentials.env'
+   settings = target / 'settings.env'
+   if credentials.exists() or settings.exists():
+       raise SystemExit('Inputs already exist; inspect privately, do not regenerate.')
+   credentials.write_text(
+       f'POSTGRES_PASSWORD={secrets.token_hex(32)}\n'
+       f'AUTH_SECRET={secrets.token_hex(32)}\n')
+   settings.write_text('KANEO_CLIENT_URL=http://127.0.0.1:8911\n')
+   credentials.chmod(0o600)
+   settings.chmod(0o600)
+   PY
+   export KANEO_CREDENTIALS_FILE="$KANEO_INPUT_DIR/credentials.env"
+   export KANEO_SETTINGS_FILE="$KANEO_INPUT_DIR/settings.env"
    kubectl --context "$PUBLIC_CONTEXT" apply -f kubernetes/apps/kaneo/namespace.yaml
    kubectl --context "$PUBLIC_CONTEXT" -n kaneo create secret generic kaneo-credentials \
      --from-env-file="$KANEO_CREDENTIALS_FILE"
@@ -46,193 +64,159 @@ Set/export `KUBECONFIG` to the public cluster's own file and confirm
      --from-env-file="$KANEO_SETTINGS_FILE"
    ```
 
-   Both deployments reference the same password. Changing the Secret does not
-   change the password inside an existing initialized PostgreSQL database;
-   perform SQL rotation and restart the app as one coordinated operation.
-   No SMTP, uploads/S3, Redis, OAuth or integrations are configured by this PR.
-   If the source uses any, preserve and test their keys/data and policy rules
-   before migrating. Do not silently omit them.
-5. Back up the candidate credentials and configure its data-aware backup
-   capture into the existing Restic/B2 system. Prove a restore to an isolated
-   target before serving real writes. Kubernetes state is not yet covered by
-   Compose's automatic backup declarations.
-6. After these inputs and `sops-age` exist, make a reviewed activation change:
-   change `clusters/public-edge/apps.yaml` to `suspend: false` and update the
-   initial-pilot suspension assertion in `scripts/check-kubernetes.py` in that
-   same change. Keep `prune: false`. Merge, reconcile, and verify the database
-   and application are healthy. For a restoration, scale Kaneo to zero before
-   importing a coherent source recovery set (procedure below). Keep Caddy/DNS
-   unchanged until restoration and authentication are verified.
+   The initial origin deliberately matches the loopback test port. Both
+   Deployments use the dedicated password; database/user names are kaneo.
+   Changing a Secret after PostgreSQL initialization does not rotate its stored
+   password. Coordinate SQL rotation and app restart if rotation is needed.
+4. Save these inputs and Flux/age keys in independently recoverable storage.
+   Plan native DB + app-file backup into the existing Restic/B2 system; prove
+   restore with test data before accepting valuable writes. Existing Compose
+   backup declarations do not automatically capture Kubernetes state.
+5. Return to bootstrap step 4 and start reconciliation. Work through
+   [testing.md](testing.md) to claim the initial administrator, verify auth,
+   CRUD, restart survival and Flux drift repair before public exposure.
 
-If adopting SOPS later, put encrypted runtime resources under the public app's
-Kustomize path and add them to its resources. Encrypt both `data`/`stringData`
-with only the **public** age recipient. Hostnames in ConfigMap values are also
-private deployment inputs: encrypt them or keep them operator-managed. Plain
-Kubernetes Secrets are base64, not encryption. The public app Kustomization
-already references its public `sops-age` key. Add CI rules for any new encrypted
-files before including them; never test with an actual private key in CI.
+Inputs initially stay operator-managed. To adopt SOPS later, add encrypted
+resources to the public app's Kustomize path and encrypt only to its public
+cluster age recipient. The app reconciler already references sops-age. Protect
+both data/stringData; ConfigMap hostnames are private deployment inputs too.
+Never commit private keys or plaintext runtime resources.
 
-## Restore and validate before exposure
+## Add only the new public HTTPS route
 
-Use the existing Compose [Kaneo migration runbook](../../hosts/server-1/kaneo/MIGRATION.md)
-to capture a native PostgreSQL recovery set and matching application files and
-keys. A copied live PostgreSQL data directory is not suitable. Test with a copy;
-at final cutover, stop the old writer and take one final consistent capture.
-A rehearsal must use test users/content if source data is sensitive.
+After local acceptance and a restore drill:
 
-For operator-controlled restoration, prevent Flux from undoing the temporary
-app scaling. Pause the parent too if it could reassert the child's spec:
+1. Select a new public hostname. Set KANEO_CLIENT_URL in the private settings
+   file to its final HTTPS origin (no trailing slash). Apply the updated
+   ConfigMap and restart Kaneo so the new origin takes effect:
+
+   ```bash
+   kubectl --context "$PUBLIC_CONTEXT" -n kaneo create configmap kaneo-settings \
+     --from-env-file="$KANEO_SETTINGS_FILE" --dry-run=client -o yaml \
+     | kubectl --context "$PUBLIC_CONTEXT" apply -f -
+   kubectl --context "$PUBLIC_CONTEXT" -n kaneo rollout restart deployment/kaneo
+   kubectl --context "$PUBLIC_CONTEXT" -n kaneo rollout status deployment/kaneo --timeout=300s
+   kubectl --context "$PUBLIC_CONTEXT" -n kaneo get service kaneo
+   ```
+
+   Login now needs that HTTPS origin. Loopback remains useful for health checks.
+2. The public Caddy container uses host networking. On this same public node it
+   can reach Kaneo's actual ClusterIP:5173 through K3s service rules. Set private
+   KANEO_K3S_UPSTREAM to that address/port and KANEO_PUBLIC_DOMAIN to the chosen
+   hostname in `/opt/caddy/routing.env`, already loaded by Compose Caddy.
+   From the VPS and the actual Caddy container, request the upstream's
+   `/api/health` before changing routes. The node-to-local-Pod path is permitted
+   by Kubernetes policy semantics; this host remains an administrative trust
+   boundary. Do not add an allow-all policy to mask a failed path test.
+3. Review the opt-in `provisioning/k3s/caddy-kaneo.caddy.example` block and add
+   only that new site to the public host's Caddyfile. Do not replace existing
+   routes. Arrange DNS and certificate issuance. Validate the full config and
+   existing routes using the server-2 playbook/tooling before applying it.
+   The template is not imported by this branch's active Compose configuration.
+4. Recreate **only Caddy** to load added environment values; reload alone does
+   not refresh its process environment. Follow the existing server-2 playbook.
+   From the repository root on that host, the targeted Compose operation is:
+
+   ```bash
+   docker compose --project-directory hosts/server-2 -f hosts/server-2/compose.yaml up -d --no-deps caddy
+   ```
+
+   Run the checks in testing.md against public HTTPS and every pre-existing
+   public service. No direct 5173/5432 listener should be exposed.
+
+Do not assume the ClusterIP stays constant after deleting/recreating its Service
+or cluster. Update the private upstream during recovery. This same-host bridge
+is for the single-node pilot. Redundant ingress and external traffic failover
+belong to a later change; Caddy here is a single entry point.
+
+## Capture one coherent recovery set
+
+Use test content for the first rehearsal. Before public use, define RPO/RTO,
+retention, backup scheduling and failure alerts. Keep matching database, files,
+stable auth secret, password and origin settings together. A raw live PostgreSQL
+data-directory copy is not a native backup.
+
+Set RECOVERY_DIR to a new private directory **outside tracked source**, and
+export the input file paths from preparation. The following workstation
+subshell stops only the new Kubernetes app, leaving its database and Compose
+services running. Its cleanup resumes reconciliation even if capture fails.
+Treat a failing capture as incomplete and never upload it as a valid backup.
 
 ```bash
-flux --context "$PUBLIC_CONTEXT" suspend kustomization flux-system
-flux --context "$PUBLIC_CONTEXT" suspend kustomization kaneo
-kubectl --context "$PUBLIC_CONTEXT" -n kaneo scale deployment/kaneo --replicas=0
-kubectl --context "$PUBLIC_CONTEXT" -n kaneo wait --for=delete pod \
-  -l app.kubernetes.io/name=kaneo --timeout=120s
+(
+  set -euo pipefail
+  : "${KUBECONFIG:?}" "${PUBLIC_CONTEXT:?}" "${RECOVERY_DIR:?}" "${KANEO_CREDENTIALS_FILE:?}" "${KANEO_SETTINGS_FILE:?}"
+  umask 077
+  mkdir -m 0700 "$RECOVERY_DIR"
+  cleanup_capture() {
+    kubectl --context "$PUBLIC_CONTEXT" -n kaneo delete pod kaneo-data-helper --ignore-not-found || true
+    flux --context "$PUBLIC_CONTEXT" resume kustomization kaneo || true
+    flux --context "$PUBLIC_CONTEXT" resume kustomization flux-system || true
+  }
+  trap cleanup_capture EXIT
+  flux --context "$PUBLIC_CONTEXT" suspend kustomization flux-system
+  flux --context "$PUBLIC_CONTEXT" suspend kustomization kaneo
+  kubectl --context "$PUBLIC_CONTEXT" -n kaneo scale deployment/kaneo --replicas=0
+  kubectl --context "$PUBLIC_CONTEXT" -n kaneo wait --for=delete pod \
+    -l app.kubernetes.io/name=kaneo --timeout=120s
+  kubectl --context "$PUBLIC_CONTEXT" -n kaneo exec deployment/kaneo-postgres -- \
+    pg_dump -U kaneo -d kaneo --format=custom > "$RECOVERY_DIR/kaneo.dump"
+  kubectl --context "$PUBLIC_CONTEXT" apply -k kubernetes/operations/kaneo-data
+  kubectl --context "$PUBLIC_CONTEXT" -n kaneo wait --for=condition=Ready pod/kaneo-data-helper --timeout=120s
+  kubectl --context "$PUBLIC_CONTEXT" -n kaneo exec kaneo-data-helper -- \
+    tar -C /recovery -cf - . > "$RECOVERY_DIR/kaneo-files.tar"
+  cp "$KANEO_CREDENTIALS_FILE" "$RECOVERY_DIR/credentials.env"
+  cp "$KANEO_SETTINGS_FILE" "$RECOVERY_DIR/settings.env"
+)
+flux --context "$PUBLIC_CONTEXT" reconcile kustomization kaneo --with-source
+kubectl --context "$PUBLIC_CONTEXT" -n kaneo rollout status deployment/kaneo --timeout=300s
 ```
 
-Keep PostgreSQL running and ready. For a rehearsal or database-only recovery
-point in custom format:
+Keep the private input files synchronized with any credential/origin changes
+before capture. Check capture success and resumed application health explicitly; cleanup errors
+must be repaired. Include the complete set in encrypted Restic storage using a
+separately configured host capture/transfer job. No scheduler or backup account
+is silently installed by this branch. Capture K3s state separately as described
+in bootstrap.md; Git alone does not preserve credentials or application data.
+
+## Restore drill and retirement
+
+Restore to an isolated fresh candidate with **no public route**, never over the
+running instance or existing Compose Kaneo. Use the same pinned app/PostgreSQL
+release and matching recovery credentials. Suspend root and app reconciliation,
+scale candidate Kaneo to zero, and wait for its Pod to disappear. Keep candidate
+PostgreSQL running.
+
+Review the dump with pg_restore --list. The target database must be empty:
+Kaneo creates schema on startup. In the isolated candidate only, prepare a fresh
+empty database owned by kaneo, then import the custom-format dump:
 
 ```bash
-# Produces a private export on the operator's machine. The app must be stopped
-# while capturing its matching files; do not treat unrelated exports as one set.
-umask 077
-kubectl --context "$PUBLIC_CONTEXT" -n kaneo exec deployment/kaneo-postgres -- \
-  pg_dump -U kaneo -d kaneo --format=custom > "$RECOVERY_DIR/kaneo.dump"
-```
-
-For the actual migration, adapt the source's native dump to the selected target
-roles. The Compose backup can be cluster-wide SQL including roles: restore into
-an isolated PostgreSQL 16 instance with a unique temporary bootstrap admin,
-then export `kaneo` as a custom-format dump with the correct owner. Do not feed
-cluster-wide SQL containing role/database creation blindly into the pilot's
-already initialized database. Review `pg_restore --list` before importing.
-For a **fresh, empty candidate only**, restore the database with:
-
-```bash
-kubectl --context "$PUBLIC_CONTEXT" -n kaneo exec -i deployment/kaneo-postgres -- \
+kubectl --context "$RESTORE_CONTEXT" -n kaneo exec -i deployment/kaneo-postgres -- \
   pg_restore -U kaneo -d kaneo --no-owner --no-acl --exit-on-error < "$RECOVERY_DIR/kaneo.dump"
 ```
 
-The target must be empty: Kaneo startup creates schema. If it has already run,
-with the app still stopped, deliberately recreate only this candidate database
-(`dropdb`/`createdb -O kaneo`) or restore to a fresh candidate. Do not apply that
-operation to the source/production database. Preserve a recovery copy first.
-
-Use the supplied temporary restricted helper for PVC `kaneo-data`. It is pinned
-to the same storage owner, runs as UID/GID 1001, mounts only application data,
-and is excluded from Flux. With the application still stopped:
+Use the restricted helper against the candidate PVC, while candidate Kaneo is
+stopped. Inspect archive relative paths before extraction. Files must land at
+the PVC root, owned by UID/GID 1001:
 
 ```bash
-kubectl --context "$PUBLIC_CONTEXT" apply -k kubernetes/operations/kaneo-data
-kubectl --context "$PUBLIC_CONTEXT" -n kaneo wait --for=condition=Ready pod/kaneo-data-helper --timeout=120s
-```
-
-For capture, create this archive alongside the database dump:
-
-```bash
-kubectl --context "$PUBLIC_CONTEXT" -n kaneo exec kaneo-data-helper -- \
-  tar -C /recovery -cf - . > "$RECOVERY_DIR/kaneo-files.tar"
-```
-
-For restore instead, extract the matching source archive into an empty target:
-
-```bash
-kubectl --context "$PUBLIC_CONTEXT" -n kaneo exec -i kaneo-data-helper -- \
+kubectl --context "$RESTORE_CONTEXT" apply -k kubernetes/operations/kaneo-data
+kubectl --context "$RESTORE_CONTEXT" -n kaneo wait --for=condition=Ready pod/kaneo-data-helper --timeout=120s
+kubectl --context "$RESTORE_CONTEXT" -n kaneo exec -i kaneo-data-helper -- \
   tar -C /recovery -xf - --no-same-owner < "$RECOVERY_DIR/kaneo-files.tar"
+kubectl --context "$RESTORE_CONTEXT" -n kaneo delete pod kaneo-data-helper
 ```
 
-Remove the helper before starting the app:
+RESTORE_CONTEXT must select an isolated candidate kubeconfig; export its
+KUBECONFIG explicitly. Never mount/edit a live PostgreSQL PVC. Restore the
+matching auth secret/password, adapt only the candidate browser origin for
+local access, resume its app/root reconciliation and verify login, test project,
+task, files/features in use and restart survival. A successful SQL import alone
+is not an application restore drill.
 
-```bash
-kubectl --context "$PUBLIC_CONTEXT" -n kaneo delete pod kaneo-data-helper
-```
-
-Capture and restore are alternative operations: never overwrite a source archive
-by capturing an empty target. Review the archive's relative paths first. Files
-must land at the PVC root, mounted at `/app/apps/api/data`; restored application
-files belong to UID/GID 1001. Do not mount or edit a live database PVC. Keep the
-app stopped until the database, files and stable keys from one recovery point
-are all restored.
-
-Resume the child and parent Flux reconcilers, verify their Ready status and
-single-writer rollout, then use temporary administrative access:
-
-```bash
-flux --context "$PUBLIC_CONTEXT" resume kustomization kaneo
-flux --context "$PUBLIC_CONTEXT" resume kustomization flux-system
-kubectl --context "$PUBLIC_CONTEXT" -n kaneo rollout status deployment/kaneo-postgres
-kubectl --context "$PUBLIC_CONTEXT" -n kaneo rollout status deployment/kaneo
-kubectl --context "$PUBLIC_CONTEXT" -n kaneo port-forward --address=127.0.0.1 service/kaneo 8911:5173
-```
-
-For initial account setup, temporarily route the configured origin through a
-trusted local/private proxy or SSH tunnel; the browser origin must match
-`KANEO_CLIENT_URL`. Do not open public ingress with an unclaimed empty database.
-First-account bootstrap can still register an admin despite
-`DISABLE_REGISTRATION=true`. Claim it before exposure, verify unauthenticated
-access fails, guest access is disabled, and subsequent registration is denied.
-For restored data, verify the expected existing administrator instead. Check
-projects, attachments/features in use, sessions, restart survival and native
-backup/restore. Health checks alone do not prove an application migration.
-
-## Opt-in Caddy cutover
-
-The public host's existing Caddy uses host networking. For this first
-single-server pilot, it can reach the Kaneo **ClusterIP** through that host's
-K3s service rules. There is no NodePort, port-forward daemon or second TLS
-listener. This assumes Caddy and the selected public storage node are the same
-host; prove the path from the actual Caddy container before changing routing.
-
-1. Read the actual Service IP with `kubectl --context "$PUBLIC_CONTEXT" -n kaneo
-   get service kaneo`. Set private `KANEO_K3S_UPSTREAM=<ClusterIP>:5173` and
-   `KANEO_PUBLIC_DOMAIN` in `/opt/caddy/routing.env`, which is already loaded by
-   the public Caddy Compose service. Use a dedicated public hostname chosen by
-   the operator; it need not reuse the old private hostname.
-2. From the public host and its Caddy container, request that upstream's
-   `/api/health`. K3s's policy engine permits traffic from the local node;
-   default-deny policies do not isolate a pod from its own node. This host is
-   an administrative trust boundary. Verify real packet behavior and restrict
-   host access; do not add an allow-all ingress rule to resolve a failed test.
-3. Review/append the opt-in block in
-   `provisioning/k3s/caddy-kaneo.caddy.example` to the public Caddyfile. It is not
-   imported by any active configuration in this initial PR. Validate the full
-   Caddy config and existing routes with the repository tooling, arrange
-   DNS/certificates explicitly, and reload only after authorized cutover.
-   If adding env values, recreate **only** the Caddy service to load them;
-   a reload by itself does not refresh its process environment. Keep other
-   routes and ports unchanged.
-4. Test HTTPS, login, denial of registration, CRUD and client behavior from an
-   external client. Confirm no direct 5173/5432 or Kubernetes API listener is
-   exposed publicly. From unrelated pods test denial of Kaneo/PostgreSQL access
-   and Kaneo-to-private/LAN egress. Host/cross-cluster access restrictions need
-   firewall/Tailscale tests too; NetworkPolicy is only part of the boundary.
-5. Keep the previous private Compose instance stopped if migrating its data,
-   with its final backup and env files retained. If this was a fresh, separate
-   public instance, retain the existing private instance as separately owned.
-
-Do not depend on a ClusterIP remaining unchanged after deleting/recreating its
-Service/cluster. Update the private upstream and test it during recovery. A
-future ingress-controller/worker design should replace this same-host bridge
-in a separate change with explicit 80/443 ownership and policy rules.
-
-## Backup cadence and rollback
-
-Define RPO/RTO and schedule coherent native database + app-file captures with
-failure alerts and retention before accepting public writes. While the app is
-stopped, a restricted helper on the same node can stream a tar of `kaneo-data`
-into the same protected staging directory as the native DB dump. Back up stable
-keys/config at that recovery point. Restart/resume the app in cleanup even when
-capture fails, but mark the capture failed and never upload it as complete.
-Feed that staging directory into the host's existing encrypted Restic snapshot;
-never stage plaintext in tracked source. Prove an isolated import/file restore.
-No backup automation is silently installed by this PR.
-
-Rollback before accepting public writes: remove the new Caddy block/DNS change,
-resume the original Compose Kaneo if it was stopped, and preserve the candidate
-for investigation. After public writes, decide which database is authoritative;
-stop writes, export and reverse-restore if compatible. Repointing traffic at a
-stale Compose database loses new work. Never delete PVCs to roll back an image.
-Local-path PVs and protected PVCs survive Flux pruning, but not disk failure or
-an unreviewed K3s uninstallation.
+To withdraw the new service, remove only its new Caddy route and preserve its
+PVCs/credentials/recovery set. Keep existing private Compose Kaneo running as
+its own instance. After public writes, any redeployment needs the new instance's
+current data, not an old private database. Never delete PVCs to roll back an
+image; retained PVCs do not survive disk failure or careless K3s uninstall.

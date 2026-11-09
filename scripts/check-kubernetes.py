@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check the initial migration's trust/exposure/data contracts on rendered YAML."""
+"""Check the public-only pilot's trust/exposure/data contracts on rendered YAML."""
 import argparse
 import ipaddress
 import json
@@ -38,7 +38,13 @@ def main():
                     (args.schemas / name).write_text(json.dumps(version["schema"]["openAPIV3Schema"]))
         return
 
-    for cluster, app in [("private-home", "podinfo"), ("public-edge", "kaneo")]:
+    require({p.name for p in (ROOT / "kubernetes/clusters").iterdir() if p.is_dir()} == {"public-edge"},
+            "This initial change must bootstrap only the public cluster")
+    require({p.name for p in (ROOT / "kubernetes/apps").iterdir() if p.is_dir()} == {"kaneo"},
+            "This initial change adds only Kaneo and its database")
+    require({p.name for p in (ROOT / "provisioning/k3s").glob("*.yaml.example")} == {"public-edge.yaml.example"},
+            "Private-cluster provisioning belongs to a later change")
+    for cluster, app in [("public-edge", "kaneo")]:
         docs = render(f"kubernetes/clusters/{cluster}")
         source = next(d for d in docs if d["kind"] == "GitRepository")
         require(source["spec"]["secretRef"]["name"] == "flux-system", "Git must use this cluster's deploy identity")
@@ -54,7 +60,8 @@ def main():
         require(syncs["flux-system"]["spec"]["path"] == f"./kubernetes/clusters/{cluster}", "Wrong cluster root")
         require(syncs[app]["spec"]["path"] == f"./kubernetes/apps/{app}", "Wrong workload path")
         if app == "kaneo":
-            require(syncs[app]["spec"]["suspend"] is True, "Kaneo activation needs a separate reviewed change")
+            require(syncs[app]["spec"].get("suspend", False) is False,
+                    "Prepared public bootstrap must reconcile Kaneo")
             require(syncs[app]["spec"]["prune"] is False, "Kaneo state must not be pruned")
 
     all_networks = []
@@ -70,7 +77,7 @@ def main():
     for i, net in enumerate(all_networks):
         require(all(not net.overlaps(other) for other in all_networks[i + 1:]), "Example cluster networks overlap")
 
-    for app in ["podinfo", "kaneo"]:
+    for app in ["kaneo"]:
         docs = render(f"kubernetes/apps/{app}")
         deny = [d for d in docs if d["kind"] == "NetworkPolicy" and
                 d["spec"].get("podSelector") == {} and
@@ -109,7 +116,7 @@ def main():
                 for env in container.get("env", []):
                     if re.search("PASSWORD|SECRET|CLIENT_URL", env["name"]):
                         require("valueFrom" in env, "Credentials and deployment URLs must stay outside Git")
-    print("Kubernetes cluster isolation, pilot exposure, runtime and storage contracts passed.")
+    print("Public-only Kubernetes scope, pilot exposure, runtime and storage contracts passed.")
 
 
 if __name__ == "__main__":

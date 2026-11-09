@@ -13,19 +13,12 @@
 #   public   - reachable from the internet (only through server-2)
 # Planned Kubernetes ownership; this does not change the active Compose stacks.
 kubernetes:
-  private-home:
-    status: staged; no bootstrap performed
-    initial_server: server-1
-    architecture: amd64
-    flux_path: kubernetes/clusters/private-home
-    pilot: podinfo (disposable, ClusterIP only)
-    future_nodes: trusted local workers; NAS workloads stay pinned to their owner
   public-edge:
-    status: staged; Kaneo reconciliation suspended
+    status: staged; operator prepares inputs before starting Flux reconciliation
     initial_server: server-2
     flux_path: kubernetes/clusters/public-edge
-    pilot: Kaneo + dedicated PostgreSQL 16 (retained local PVCs, one storage owner)
-    exposure: ClusterIP until explicitly reviewed Caddy/DNS cutover
+    pilot: fresh Kaneo + dedicated PostgreSQL 16 (retained local PVCs, one storage owner)
+    exposure: ClusterIP until explicitly reviewed new Caddy/DNS route
     backup: operator must add native DB + matching files to Restic and prove restore
     future_nodes: offsite VPS agents, including ARM64; no capacity provisioned
 

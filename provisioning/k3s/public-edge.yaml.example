@@ -1,9 +1,11 @@
 # Copy to local/public-edge.yaml; fill in after host/network discovery.
 # Install as /etc/rancher/k3s/config.yaml on the PUBLIC server only.
 node-name: public-server
-node-ip: REPLACE_WITH_PUBLIC_SERVER_TAILSCALE_IPV4
+node-ip: REPLACE_WITH_PUBLIC_SERVER_NODE_IPV4
 tls-san:
-  - REPLACE_WITH_PUBLIC_SERVER_TAILSCALE_IPV4
+  - REPLACE_WITH_PROTECTED_ADMIN_API_HOST_OR_IPV4
+# Select the node's own address after route discovery. An admin VPN address in
+# tls-san does not select a public multi-node CNI or restrict the API listener.
 node-label:
   - homelab.example/cluster=public-edge
 # Apply the kaneo-storage label manually only after selecting its data disk.
