@@ -1,0 +1,10 @@
+# Keep existing resource identities; this pilot database still serves only Kaneo.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: kaneo
+resources:
+  - namespace.yaml
+  - storage-class.yaml
+  - statefulset.yaml
+  - services.yaml
+  - network-policy.yaml

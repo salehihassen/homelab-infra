@@ -49,18 +49,23 @@ server is also the only worker; a second local agent install is unnecessary.
 flux --context "$PUBLIC_CONTEXT" check
 flux --context "$PUBLIC_CONTEXT" reconcile source git flux-system
 flux --context "$PUBLIC_CONTEXT" reconcile kustomization flux-system --with-source
+flux --context "$PUBLIC_CONTEXT" reconcile kustomization postgres --with-source
 flux --context "$PUBLIC_CONTEXT" reconcile kustomization kaneo --with-source
 flux --context "$PUBLIC_CONTEXT" get sources git
 flux --context "$PUBLIC_CONTEXT" get kustomizations
 kubectl --context "$PUBLIC_CONTEXT" -n kaneo rollout status statefulset/kaneo-postgres --timeout=300s
 kubectl --context "$PUBLIC_CONTEXT" -n kaneo rollout status deployment/kaneo --timeout=300s
 kubectl --context "$PUBLIC_CONTEXT" -n kaneo get deployment,statefulset,pods,svc,pvc -o wide
+kubectl --context "$PUBLIC_CONTEXT" -n kaneo exec statefulset/kaneo-postgres -- \
+  psql -U kaneo -d kaneo -tAc 'SHOW server_version; SHOW data_directory;'
 ```
 
-Expect source and both Kustomizations Ready, not suspended. The source revision
+Expect the source and all three Kustomizations (root, postgres and kaneo) Ready,
+not suspended. Kaneo must depend on postgres being Ready. The source revision
 must match the intended main commit. Expect one healthy Kaneo Pod, one healthy
 PostgreSQL Pod named `kaneo-postgres-0`, two regular ClusterIP Services, one
 headless governing Service and one Bound PVC named `data-kaneo-postgres-0`.
+The SQL check must report PostgreSQL 18.6 and `/var/lib/postgresql/18/docker`.
 Kaneo has only temporary runtime mounts and no application PVC. No other
 application is reconciled. Pending Pods generally mean missing storage labels,
 capacity or PVC provisioning; CreateContainerConfigError often means missing

@@ -8,6 +8,8 @@ spec:
   retryInterval: 1m
   timeout: 5m
   path: ./kubernetes/apps/kaneo
+  dependsOn:
+    - name: postgres
   sourceRef:
     kind: GitRepository
     name: flux-system

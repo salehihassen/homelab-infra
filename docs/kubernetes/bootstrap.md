@@ -120,7 +120,8 @@ Secrets, inspect ownership privately; do not overwrite them to force bootstrap.
 
 ## 4. Start Git reconciliation
 
-Kaneo is enabled in Git. This step creates the app once its inputs are ready.
+PostgreSQL and Kaneo are enabled in Git. This step deploys the database first;
+Kaneo waits for its database dependency to become Ready.
 Controllers alone did not deploy it. From the same workstation shell:
 
 ```bash
@@ -130,6 +131,7 @@ cat kubernetes/clusters/public-edge/flux-system/gotk-sync.yaml \
   | kubectl --context "$PUBLIC_CONTEXT" apply --server-side -f -
 flux --context "$PUBLIC_CONTEXT" reconcile source git flux-system
 flux --context "$PUBLIC_CONTEXT" reconcile kustomization flux-system --with-source
+flux --context "$PUBLIC_CONTEXT" reconcile kustomization postgres --with-source
 flux --context "$PUBLIC_CONTEXT" reconcile kustomization kaneo --with-source
 flux --context "$PUBLIC_CONTEXT" get all
 ```
@@ -147,8 +149,9 @@ Before persistent use, add and rehearse backup of:
   encryption material. For SQLite, stop only K3s and cold-copy its complete
   `/var/lib/rancher/k3s/server` directory plus config; restart even if capture
   fails. Compose stays running. etcd-snapshot is not a SQLite backup method.
-- Native PostgreSQL export, quiesced Kaneo application files and stable keys
-  from one recovery point; see [Kaneo recovery](kaneo.md).
+- Native PostgreSQL export and stable credentials/settings from one recovery
+  point; Kaneo runtime files are temporary and need no backup. See
+  [Kaneo recovery](kaneo.md).
 - SSH/age keys, kubeconfig and recovery instructions in private recoverable
   storage. Existing Compose backup discovery does not capture these PVCs.
 
@@ -158,8 +161,8 @@ external inputs/native app recovery set to fresh PVCs. Retained disks from a
 lost API are not an automatic restore. Define backup schedule/retention and
 RPO/RTO before accepting valuable public writes.
 
-For manual maintenance pause both root and app reconcilers. To retire this new
-service, disable only its new Caddy route, stop its reconciliation, and preserve
+For manual maintenance pause root, app and database reconcilers. To retire this
+new service, disable only its new Caddy route, stop its reconciliation, and preserve
 its state/credentials. All existing Compose services remain independently owned.
 Do not use an old private Kaneo database as rollback for this fresh instance.
 K3s uninstall removes local-path data and alters host networking; there is no

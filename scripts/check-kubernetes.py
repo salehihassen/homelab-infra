@@ -42,6 +42,8 @@ def main():
             "This initial change must bootstrap only the public cluster")
     require({p.name for p in (ROOT / "kubernetes/apps").iterdir() if p.is_dir()} == {"kaneo"},
             "This initial change adds only Kaneo and its database")
+    require({p.name for p in (ROOT / "kubernetes/databases").iterdir() if p.is_dir()} == {"postgres"},
+            "Only the pilot's PostgreSQL database is in scope")
     require({p.name for p in (ROOT / "provisioning/k3s").glob("*.yaml.example")} == {"public-edge.yaml.example"},
             "Private-cluster provisioning belongs to a later change")
     for cluster, app in [("public-edge", "kaneo")]:
@@ -52,13 +54,21 @@ def main():
         require(source["spec"]["ref"] == {"branch": "main"}, "Deploy only the protected main branch")
         require(set(source["spec"]["sparseCheckout"]) == {
             f"kubernetes/clusters/{cluster}", f"kubernetes/apps/{app}",
-            "kubernetes/infrastructure/flux-system",
+            "kubernetes/databases/postgres", "kubernetes/infrastructure/flux-system",
         }, "Source must include only this cluster's paths and shared controllers")
         syncs = {d["metadata"]["name"]: d for d in docs
                  if d["kind"] == "Kustomization"}
-        require(set(syncs) == {"flux-system", app}, "Each cluster reconciles only its own pilot")
+        require(set(syncs) == {"flux-system", "postgres", app}, "Each cluster reconciles only its own pilot and database")
         require(syncs["flux-system"]["spec"]["path"] == f"./kubernetes/clusters/{cluster}", "Wrong cluster root")
         require(syncs[app]["spec"]["path"] == f"./kubernetes/apps/{app}", "Wrong workload path")
+        require(syncs["postgres"]["spec"]["path"] == "./kubernetes/databases/postgres",
+                "PostgreSQL must reconcile independently from the application")
+        require(syncs[app]["spec"].get("dependsOn") == [{"name": "postgres"}],
+                "Kaneo must wait for PostgreSQL reconciliation")
+        require(syncs["postgres"]["spec"].get("wait") is True and
+                syncs["postgres"]["spec"].get("suspend", False) is False and
+                syncs["postgres"]["spec"]["prune"] is False,
+                "Database reconciliation must check health and protect state")
         if app == "kaneo":
             require(syncs[app]["spec"].get("suspend", False) is False,
                     "Prepared public bootstrap must reconcile Kaneo")
@@ -78,7 +88,20 @@ def main():
         require(all(not net.overlaps(other) for other in all_networks[i + 1:]), "Example cluster networks overlap")
 
     for app in ["kaneo"]:
-        docs = render(f"kubernetes/apps/{app}")
+        app_docs = render(f"kubernetes/apps/{app}")
+        database_docs = render("kubernetes/databases/postgres")
+        require([(d["kind"], d["metadata"]["name"]) for d in app_docs
+                 if d["kind"] in {"Deployment", "StatefulSet"}] == [("Deployment", "kaneo")],
+                "The app path must not own PostgreSQL")
+        require([(d["kind"], d["metadata"]["name"]) for d in database_docs
+                 if d["kind"] in {"Deployment", "StatefulSet"}] == [("StatefulSet", "kaneo-postgres")],
+                "The database path must own only its StatefulSet")
+        docs = app_docs + database_docs
+        identities = [(d["apiVersion"], d["kind"], d["metadata"].get("namespace"), d["metadata"]["name"]) for d in docs]
+        require(len(set(identities)) == len(identities), "App/database Flux inventories must not share resources")
+        require(all(d["metadata"].get("namespace") == "kaneo" for d in docs
+                    if d["kind"] in {"Deployment", "StatefulSet", "Service", "NetworkPolicy"}),
+                "Keep pilot resource identities in their existing namespace")
         workloads = {(d["kind"], d["metadata"]["name"]): d for d in docs
                      if d["kind"] in {"Deployment", "StatefulSet"}}
         require(set(workloads) == {("Deployment", "kaneo"), ("StatefulSet", "kaneo-postgres")},
@@ -105,8 +128,11 @@ def main():
                     "accessModes": ["ReadWriteOnce"], "storageClassName": "kaneo-local-retain",
                     "resources": {"requests": {"storage": "10Gi"}},
                 }, "Protect the PostgreSQL data claim and retain its storage contract")
-        require({m["name"]: m["mountPath"] for m in postgres["template"]["spec"]["containers"][0]["volumeMounts"]}["data"] ==
-                "/var/lib/postgresql/data", "Mount PostgreSQL's stable claim at its data directory")
+        pg_container = postgres["template"]["spec"]["containers"][0]
+        require(pg_container["image"].startswith("postgres:18.") and
+                {e["name"]: e.get("value") for e in pg_container["env"]}["PGDATA"] == "/var/lib/postgresql/18/docker" and
+                {m["name"]: m["mountPath"] for m in pg_container["volumeMounts"]}["data"] == "/var/lib/postgresql",
+                "Use PostgreSQL 18 with its supported major-version data layout")
         services = {d["metadata"]["name"]: d["spec"] for d in docs if d["kind"] == "Service"}
         require(postgres["serviceName"] == "kaneo-postgres-headless" and
                 services["kaneo-postgres-headless"]["clusterIP"] == "None" and

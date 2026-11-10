@@ -14,6 +14,7 @@ spec:
   sparseCheckout:
     - kubernetes/clusters/public-edge
     - kubernetes/apps/kaneo
+    - kubernetes/databases/postgres
     - kubernetes/infrastructure/flux-system
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1

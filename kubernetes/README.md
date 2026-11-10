@@ -15,12 +15,15 @@ Read the [architecture](../docs/kubernetes/architecture.md), follow
 [public-cluster tests](../docs/kubernetes/testing.md).
 
 - `clusters/public-edge`: public Flux root, tracking protected main.
-- `apps/kaneo`: Kaneo Deployment, PostgreSQL StatefulSet, retained database claim
-  and NetworkPolicies. Kaneo runtime files use temporary `emptyDir` storage.
+- `databases/postgres`: PostgreSQL 18 StatefulSet, retained database claim,
+  database Services, namespace and baseline/database policies.
+- `apps/kaneo`: Kaneo Deployment, Service and egress policy. Runtime files use
+  temporary `emptyDir` storage; its Flux reconciliation depends on postgres.
 - `infrastructure/flux-system`: vendored Flux 2.10.0 source/Kustomize controllers.
 
 Prepare credentials, storage ownership and the initial local URL before starting
-Git reconciliation. Kaneo is enabled in Git; applying the root sync deploys it.
+Git reconciliation. PostgreSQL and Kaneo are enabled in Git; applying the root
+sync deploys the database before Kaneo. See [database ownership and upgrades](../docs/kubernetes/postgres.md).
 No host is installed and no ingress changes merely by merging these files.
 No private cluster configuration is included.
 

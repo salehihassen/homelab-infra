@@ -16,7 +16,7 @@ future private cluster or the single-server public serving-continuity goal.
 | public-edge | server-2, existing public VPS | One K3s server, also running workloads; SQLite datastore |
 | Flux | public-edge | Source and Kustomize controllers; read-only Git deploy identity |
 | Kaneo | public server | One Deployment replica, new credentials and temporary runtime storage |
-| PostgreSQL 16 | public server | One StatefulSet replica and a retained 10 GiB data claim |
+| PostgreSQL 18 | public server | One StatefulSet replica and a retained 10 GiB data claim |
 | Public ingress | Existing Compose Caddy on server-2 | Optional new Kaneo route after local acceptance |
 
 A K3s server already runs the agent components needed to host Pods. Do not
@@ -27,7 +27,8 @@ provisioning, private-cluster bootstrap or Compose service migration is included
 flowchart TD
   Git[Protected Git main branch] --> Flux[Flux / public-edge root]
   Flux --> K[Kaneo: fresh instance]
-  K --> DB[Dedicated PostgreSQL / retained local PVC]
+  Flux --> DB[Dedicated PostgreSQL / retained local PVC]
+  K --> DB
   Internet --> C[Existing Compose Caddy]
   C -. reviewed new route after tests .-> K
 ```
@@ -52,18 +53,19 @@ Initial Flannel VXLAN is local to this one node; never expose UDP 8472 publicly.
 
 ## GitOps and bootstrap ordering
 
-The public root reconciles exactly its own source/controllers and Kaneo. Git
+The public root reconciles its source/controllers, PostgreSQL and Kaneo. Git
 URL, deploy key, age private key, database password, auth secret and application
 origin are external bootstrap inputs. Source artifacts include only the public
-root, Kaneo and Flux paths. Git credentials have no write permission. Keep main
-protected; controllers use strict substitution and reject cross-namespace
+root, PostgreSQL, Kaneo and Flux paths. Git credentials have no write permission.
+Keep main protected; controllers use strict substitution and reject cross-namespace
 references/remote bases. No image automation is installed.
 
 The operator installs controllers, prepares the namespace, dedicated Secrets,
 URL ConfigMap, storage-owner label and recovery copies, then applies the Git
 sync. Kaneo is active in Git: starting root reconciliation deploys it without a
-second activation PR. Missing inputs are a bootstrap error, not a reason to add
-placeholder secrets. A feature branch is validated locally; live bootstrap
+second activation PR. Its Flux reconciliation depends on the independently
+managed PostgreSQL reconciliation being Ready. Missing inputs are a bootstrap
+error, not a reason to add placeholder secrets. A feature branch is validated locally; live bootstrap
 tracks reviewed main. Rehearse against a separate disposable repository if main
 does not yet contain these files.
 
@@ -81,7 +83,9 @@ Service and a retained claim template. Its stable Pod `kaneo-postgres-0` reuses
 `data-kaneo-postgres-0` across replacement. This gives stable identity and
 persistence, not PostgreSQL replication or database HA. Both workloads use
 non-root restricted runtime settings, health probes and bounded resources.
-Images retain the previously rehearsed versions and multiarchitecture digests.
+Kaneo retains its rehearsed image; PostgreSQL is pinned to 18.6-alpine, both
+using multiarchitecture digests. The database mount follows the official
+PostgreSQL 18 layout. See [database ownership and upgrades](postgres.md).
 This is a new instance, with no import or reuse of existing private Kaneo
 content or secrets.
 

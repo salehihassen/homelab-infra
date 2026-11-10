@@ -31,7 +31,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: postgres
-          image: postgres:16-alpine@sha256:aa6cb33cf4c19c765cefcf48d96176258800870a9a1e930ad126200f9d825139
+          image: postgres:18.6-alpine@sha256:123b17998ccaf47e53b502e8c6a1e79afd8f579c6f3eec83c563da026f957395
           env:
             - name: POSTGRES_DB
               value: kaneo
@@ -41,7 +41,7 @@ spec:
               valueFrom:
                 secretKeyRef: {name: kaneo-credentials, key: POSTGRES_PASSWORD}
             - name: PGDATA
-              value: /var/lib/postgresql/data/pgdata
+              value: /var/lib/postgresql/18/docker
           ports:
             - name: postgres
               containerPort: 5432
@@ -64,7 +64,7 @@ spec:
             periodSeconds: 30
           volumeMounts:
             - name: data
-              mountPath: /var/lib/postgresql/data
+              mountPath: /var/lib/postgresql
             - name: runtime
               mountPath: /var/run/postgresql
             - name: tmp

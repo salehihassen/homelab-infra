@@ -63,7 +63,8 @@ Original private host names and deployment details are deliberately omitted.
 ## Step 1: current MR, new public Kaneo only
 
 One public server hosts a fresh Kaneo Deployment with ephemeral runtime storage
-and a dedicated PostgreSQL StatefulSet with a retained local database claim.
+and a dedicated PostgreSQL 18 StatefulSet with a retained local database claim.
+The database has its own directory/Flux reconciliation, which Kaneo depends on.
 No existing private Kaneo data/credentials are imported.
 Prepare external inputs before starting active Flux reconciliation. Claim the
 initial administrator through local access and add only its new Caddy site
