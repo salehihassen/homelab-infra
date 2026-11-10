@@ -73,15 +73,11 @@ spec:
             httpGet: {path: /api/health, port: http}
             periodSeconds: 30
           volumeMounts:
-            - name: data
-              mountPath: /app/apps/api/data
             - name: runtime
               mountPath: /var/lib/kaneo
             - name: tmp
               mountPath: /tmp
       volumes:
-        - name: data
-          persistentVolumeClaim: {claimName: kaneo-data}
         - name: runtime
           emptyDir: {medium: Memory, sizeLimit: 256Mi}
         - name: tmp

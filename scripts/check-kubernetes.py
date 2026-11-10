@@ -79,6 +79,42 @@ def main():
 
     for app in ["kaneo"]:
         docs = render(f"kubernetes/apps/{app}")
+        workloads = {(d["kind"], d["metadata"]["name"]): d for d in docs
+                     if d["kind"] in {"Deployment", "StatefulSet"}}
+        require(set(workloads) == {("Deployment", "kaneo"), ("StatefulSet", "kaneo-postgres")},
+                "Kaneo must be a Deployment and PostgreSQL a StatefulSet")
+        require(not any(d["kind"] == "PersistentVolumeClaim" for d in docs),
+                "Only PostgreSQL's StatefulSet may allocate persistent storage")
+        kaneo = workloads[("Deployment", "kaneo")]["spec"]["template"]["spec"]
+        require({v["name"] for v in kaneo["volumes"]} == {"runtime", "tmp"} and
+                all("emptyDir" in v for v in kaneo["volumes"]),
+                "Kaneo needs only ephemeral runtime and temporary storage")
+        require({m["mountPath"] for m in kaneo["containers"][0]["volumeMounts"]} ==
+                {"/var/lib/kaneo", "/tmp"}, "Kaneo must have no application-data mount")
+        postgres = workloads[("StatefulSet", "kaneo-postgres")]["spec"]
+        require(postgres["replicas"] == 1, "PostgreSQL must remain a single database writer")
+        require(postgres["persistentVolumeClaimRetentionPolicy"] == {
+            "whenDeleted": "Retain", "whenScaled": "Retain",
+        }, "Retain PostgreSQL claims on StatefulSet deletion and scale-down")
+        claims = postgres["volumeClaimTemplates"]
+        require(len(claims) == 1 and claims[0]["metadata"]["name"] == "data",
+                "PostgreSQL needs one stable data claim per database Pod")
+        claim = claims[0]
+        require(claim["metadata"]["annotations"].get("kustomize.toolkit.fluxcd.io/prune") == "disabled" and
+                claim["spec"] == {
+                    "accessModes": ["ReadWriteOnce"], "storageClassName": "kaneo-local-retain",
+                    "resources": {"requests": {"storage": "10Gi"}},
+                }, "Protect the PostgreSQL data claim and retain its storage contract")
+        require({m["name"]: m["mountPath"] for m in postgres["template"]["spec"]["containers"][0]["volumeMounts"]}["data"] ==
+                "/var/lib/postgresql/data", "Mount PostgreSQL's stable claim at its data directory")
+        services = {d["metadata"]["name"]: d["spec"] for d in docs if d["kind"] == "Service"}
+        require(postgres["serviceName"] == "kaneo-postgres-headless" and
+                services["kaneo-postgres-headless"]["clusterIP"] == "None" and
+                services["kaneo-postgres-headless"]["selector"] == postgres["selector"]["matchLabels"],
+                "PostgreSQL needs a matching governing headless Service")
+        require(services["kaneo-postgres"].get("clusterIP") != "None" and
+                services["kaneo-postgres"]["selector"] == postgres["selector"]["matchLabels"],
+                "Keep Kaneo's database connection on its existing ClusterIP Service")
         deny = [d for d in docs if d["kind"] == "NetworkPolicy" and
                 d["spec"].get("podSelector") == {} and
                 set(d["spec"]["policyTypes"]) == {"Ingress", "Egress"} and
@@ -89,17 +125,15 @@ def main():
             require(kind not in {"Ingress", "Secret"}, f"{app}: exposure/secrets must be explicit operator inputs")
             if kind == "Service":
                 require(spec.get("type", "ClusterIP") == "ClusterIP", f"{app} must have no external Service listener")
-            if kind == "PersistentVolumeClaim":
-                require(doc["metadata"]["annotations"].get("kustomize.toolkit.fluxcd.io/prune") == "disabled", "Protect PVCs from pruning")
             if kind == "StorageClass":
                 require(doc["reclaimPolicy"] == "Retain" and doc["volumeBindingMode"] == "WaitForFirstConsumer", "Keep data on the selected node")
-            if kind != "Deployment":
+            if kind not in {"Deployment", "StatefulSet"}:
                 continue
             pod = spec["template"]["spec"]
             require(not pod.get("hostNetwork") and pod.get("automountServiceAccountToken") is False, "Pilot cannot access host networking or Kubernetes credentials")
             require(pod["securityContext"]["runAsNonRoot"] is True, "Pilot must run without root")
             if app == "kaneo":
-                require(spec["replicas"] == 1 and spec["strategy"]["type"] == "Recreate", "Stateful pilot must have one writer")
+                require(spec["replicas"] == 1, "Keep pilot workloads at one replica")
                 require(pod["nodeSelector"] == {
                     "homelab.example/cluster": "public-edge",
                     "homelab.example/kaneo-storage": "true",

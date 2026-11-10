@@ -1,10 +1,14 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: kaneo-postgres
 spec:
+  serviceName: kaneo-postgres-headless
   replicas: 1
-  strategy: {type: Recreate}
+  updateStrategy: {type: RollingUpdate}
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
   revisionHistoryLimit: 2
   selector:
     matchLabels:
@@ -68,11 +72,21 @@ spec:
             - name: shm
               mountPath: /dev/shm
       volumes:
-        - name: data
-          persistentVolumeClaim: {claimName: kaneo-postgres}
         - name: runtime
           emptyDir: {medium: Memory, sizeLimit: 16Mi}
         - name: tmp
           emptyDir: {medium: Memory, sizeLimit: 32Mi}
         - name: shm
           emptyDir: {medium: Memory, sizeLimit: 64Mi}
+  # One PostgreSQL writer. More replicas require a database replication design.
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        annotations:
+          kustomize.toolkit.fluxcd.io/prune: disabled
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: kaneo-local-retain
+        resources:
+          requests:
+            storage: 10Gi

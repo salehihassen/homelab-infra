@@ -4,7 +4,6 @@ namespace: kaneo
 resources:
   - namespace.yaml
   - storage-class.yaml
-  - volumes.yaml
   - postgres.yaml
   - deployment.yaml
   - services.yaml

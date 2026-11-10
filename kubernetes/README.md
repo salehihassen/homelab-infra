@@ -15,8 +15,8 @@ Read the [architecture](../docs/kubernetes/architecture.md), follow
 [public-cluster tests](../docs/kubernetes/testing.md).
 
 - `clusters/public-edge`: public Flux root, tracking protected main.
-- `apps/kaneo`: Kaneo, dedicated PostgreSQL, retained PVCs and NetworkPolicies.
-- `operations/kaneo-data`: manual recovery helper, excluded from reconciliation.
+- `apps/kaneo`: Kaneo Deployment, PostgreSQL StatefulSet, retained database claim
+  and NetworkPolicies. Kaneo runtime files use temporary `emptyDir` storage.
 - `infrastructure/flux-system`: vendored Flux 2.10.0 source/Kustomize controllers.
 
 Prepare credentials, storage ownership and the initial local URL before starting

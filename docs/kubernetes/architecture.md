@@ -15,8 +15,8 @@ future private cluster or the single-server public serving-continuity goal.
 | --- | --- | --- |
 | public-edge | server-2, existing public VPS | One K3s server, also running workloads; SQLite datastore |
 | Flux | public-edge | Source and Kustomize controllers; read-only Git deploy identity |
-| Kaneo | public server | One replica, new credentials and application-data PVC |
-| PostgreSQL 16 | public server | Dedicated Kaneo database and separate PVC |
+| Kaneo | public server | One Deployment replica, new credentials and temporary runtime storage |
+| PostgreSQL 16 | public server | One StatefulSet replica and a retained 10 GiB data claim |
 | Public ingress | Existing Compose Caddy on server-2 | Optional new Kaneo route after local acceptance |
 
 A K3s server already runs the agent components needed to host Pods. Do not
@@ -28,7 +28,6 @@ flowchart TD
   Git[Protected Git main branch] --> Flux[Flux / public-edge root]
   Flux --> K[Kaneo: fresh instance]
   K --> DB[Dedicated PostgreSQL / retained local PVC]
-  K --> Data[Retained application-data PVC]
   Internet --> C[Existing Compose Caddy]
   C -. reviewed new route after tests .-> K
 ```
@@ -76,22 +75,28 @@ use separate identities, keys, tokens, kubeconfigs and backups.
 
 ## Runtime, persistence and exposure
 
-Kaneo and PostgreSQL use one replica, Recreate rollouts, non-root restricted
-runtime settings, health probes and bounded resources. Images retain the
-previously rehearsed versions and multiarchitecture digests. This is a new
-instance, with no import or reuse of existing private Kaneo content or secrets.
+Kaneo uses a one-replica Deployment with Recreate rollouts and only `emptyDir`
+runtime mounts. PostgreSQL uses a one-replica StatefulSet, a governing headless
+Service and a retained claim template. Its stable Pod `kaneo-postgres-0` reuses
+`data-kaneo-postgres-0` across replacement. This gives stable identity and
+persistence, not PostgreSQL replication or database HA. Both workloads use
+non-root restricted runtime settings, health probes and bounded resources.
+Images retain the previously rehearsed versions and multiarchitecture digests.
+This is a new instance, with no import or reuse of existing private Kaneo
+content or secrets.
 
-Both Deployments require the public-cluster label and the kaneo-storage label.
-Apply storage ownership to exactly one inspected node. Retain local-path PVCs
-with WaitForFirstConsumer bind data to that node. Adding an ARM agent provides
-compute capacity; it does not replicate this data or move Kaneo automatically.
+Both workloads require the public-cluster label and the kaneo-storage label.
+Apply storage ownership to exactly one inspected node. The retained local-path
+database claim with WaitForFirstConsumer binds data to that node. Adding an ARM
+agent provides compute capacity; it does not replicate this data or move Kaneo
+automatically.
 
 Default-deny policies allow Kaneo only cluster DNS and its own PostgreSQL.
 SMTP, OAuth, webhooks, object storage and other integrations are out of scope.
 Claim the first administrator through local access before exposing the app;
 DISABLE_REGISTRATION does not prevent first-account bootstrap. Public use also
 requires tested authentication, a coherent backup/restore and reviewed DNS/TLS.
-Existing Compose backup discovery does not automatically protect these PVCs.
+Existing Compose backup discovery does not automatically protect this database.
 
 ## Later changes
 

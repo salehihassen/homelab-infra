@@ -1,38 +1,62 @@
 # Public-only pilot validation record
 
-Revised 2026-11-09 after narrowing scope to a fresh public Kaneo instance.
+Revised 2026-11-09 for ephemeral Kaneo storage and the PostgreSQL StatefulSet.
 These are local rehearsal results, not deployment evidence for the real fleet.
 No live credentials, host configuration, DNS or ingress changed.
 
 ## Current scope checks
 
-- The single public root, Kaneo app path and manual recovery helper render with
+- The single public root and Kaneo app path render with
   Kustomize 5.8.1. Kubeconform 0.8.0 reports zero invalid resources/errors against
   Kubernetes 1.37 and the exact vendored Flux custom-resource schemas. Generated
   CRD definitions are excluded from Kubeconform and accepted by the actual API.
 - The contract checker enforces public-only provisioning/root/app scope,
   active Kaneo reconciliation after operator preparation, protected persistence,
   restricted runtime, health/resource settings and no public workload listeners.
+  It also requires a PostgreSQL StatefulSet with one retained data claim
+  template, a matching headless Service and only ephemeral Kaneo mounts.
 - Runbook Bash examples pass syntax checks and relative documentation links
   resolve. Existing host Compose definitions are unchanged from the base branch.
 
-## Disposable single-node rehearsal
+## Current storage rehearsal
 
-A Docker-backed K3s v1.37.2+k3s1 server ran Flux 2.10.0 and the current
-Kaneo/PostgreSQL manifests with generated disposable inputs. It has no agents,
-no ingress controller and no host-exposed application/database port.
+A separate disposable K3s v1.37.2+k3s1 server ran the revised manifests directly,
+with generated inputs and no Flux controllers, agents, ingress controller or
+host-exposed application/database ports.
+
+- Kaneo started without an application PVC under the existing restricted
+  runtime settings. PostgreSQL ran as `kaneo-postgres-0`, with the governing
+  headless Service and exactly one Bound claim, `data-kaneo-postgres-0`.
+- Replacing both Pods preserved a test database row and allowed the registered
+  account to sign in again. Marker files in both Kaneo `emptyDir` mounts were
+  absent after replacement, confirming that runtime files are disposable.
+- Scaling PostgreSQL to zero and back, then deleting and recreating its
+  StatefulSet, preserved the claim's UID and test data. After workloads were
+  Ready again, account sign-in succeeded. These deliberate single-database
+  outages are persistence checks, not availability tests.
+- A native PostgreSQL dump imported into an isolated scratch database preserved
+  the test row. Node-origin HTTP reached Kaneo's ClusterIP health endpoint.
+  Full browser CRUD and a complete application restore drill remain operator
+  acceptance steps.
+
+The disposable cluster and its kubeconfig were removed after testing. Existing
+local development workloads were left alone.
+
+## Earlier Flux and policy rehearsal
+
+Before the storage revision, a Docker-backed K3s v1.37.2+k3s1 server ran Flux
+2.10.0 and the earlier Deployment-based manifests with generated disposable
+inputs. It had no agents, ingress controller or host-exposed app/database port.
+These Flux and policy tests were not repeated for the storage-only revision;
+the separate storage rehearsal above tests the new workload layout directly.
 
 - Flux fetched a snapshot of the public-only manifests from a disposable local
   Git HTTP fixture on main. Source, root and Kaneo Kustomizations all became
   Ready. Strict substitution from cluster-settings and root self-management
-  worked with the current manifests. This tests actual Git artifact fetch and
+  worked with those manifests. This tests actual Git artifact fetch and
   reconciliation; it does not test production GitHub SSH authentication.
-- Kaneo and PostgreSQL started under the restricted non-root/read-only settings,
-  with two bound retained local PVCs. Node-origin HTTP reached Kaneo's ClusterIP,
-  exercising the proposed same-host Caddy upstream path.
 - Pausing the app reconciler, scaling Kaneo to zero, resuming and reconciling
-  restored the Git-declared replica. Restarting PostgreSQL and Kaneo preserved
-  a test database row and a marker file on the app PVC.
+  restored the Git-declared replica.
 - An unrelated restricted probe was denied Kaneo ingress, allowed by a temporary
   probe-only policy, then denied again after removing it. Kaneo egress to a
   separately reachable controlled target was denied. Test policies/probes were
@@ -40,13 +64,8 @@ no ingress controller and no host-exposed application/database port.
 - First-account registration with the initial loopback origin succeeded (HTTP
   200); a second registration was rejected (HTTP 403). This is an API smoke
   test; full browser login/CRUD/public HTTPS remain operator acceptance steps.
-- A native PostgreSQL export imported into an isolated scratch database and
-  preserved the test row. The manual restricted app-data helper captured the
-  PVC marker while Kaneo was stopped; app/root reconciliation resumed after
-  helper removal. This is not a full application restore drill.
 
-The test cluster, Git fixture and disposable credentials are removed after
-validation. The pre-existing local development cluster is left alone.
+The earlier test cluster, Git fixture and disposable credentials were removed.
 
 ## Existing repository checks
 

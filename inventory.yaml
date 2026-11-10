@@ -17,7 +17,7 @@ kubernetes:
     status: staged; operator prepares inputs before starting Flux reconciliation
     initial_server: server-2
     flux_path: kubernetes/clusters/public-edge
-    pilot: fresh Kaneo + dedicated PostgreSQL 16 (retained local PVCs, one storage owner)
+    pilot: fresh Kaneo Deployment + PostgreSQL 16 StatefulSet (retained database claim, one storage owner)
     exposure: ClusterIP until explicitly reviewed new Caddy/DNS route
     backup: operator must add native DB + matching files to Restic and prove restore
     future_nodes: offsite VPS agents, including ARM64; no capacity provisioned

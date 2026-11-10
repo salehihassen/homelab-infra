@@ -62,8 +62,9 @@ Original private host names and deployment details are deliberately omitted.
 
 ## Step 1: current MR, new public Kaneo only
 
-One public server hosts a fresh Kaneo instance and its dedicated PostgreSQL,
-with retained local PVCs. No existing private Kaneo data/credentials are imported.
+One public server hosts a fresh Kaneo Deployment with ephemeral runtime storage
+and a dedicated PostgreSQL StatefulSet with a retained local database claim.
+No existing private Kaneo data/credentials are imported.
 Prepare external inputs before starting active Flux reconciliation. Claim the
 initial administrator through local access and add only its new Caddy site
 after application, policy and recovery acceptance. All existing services stay
@@ -121,8 +122,10 @@ Implement this in later reviewed changes:
 3. Remove the failed VPS from each selected app's critical runtime dependency
    chain: databases, volumes, DNS, sessions, authentication/token dependencies
    and certificates as applicable. Choose an explicit data-availability design
-   per app. Do not simply increase replicas for Kaneo's node-bound data or its
-   single PostgreSQL writer. Some apps may intentionally remain single-node.
+   per app. Kaneo's app replicas can use shared PostgreSQL, but its single
+   PostgreSQL writer still has node-bound data. Add shared Redis for realtime
+   broadcasts when scaling Kaneo, and shared S3-compatible storage if uploads
+   are enabled. Some apps may intentionally remain single-node.
 4. Test stale Service endpoints and ingress behavior with the API unavailable.
    Keep ordinary ClusterIP Services by default. Use internalTrafficPolicy:
    Local only for selected apps with ready local replicas and a verified
@@ -149,8 +152,8 @@ require management, rescheduling or broader failure recovery during outages.
 - **Networking:** initial VXLAN is for the one-node pilot. Review the CNI change
   before agent enrollment; do not expose VXLAN publicly or join nodes under
   the assumption that VPN host connectivity provides Pod networking.
-- **Data:** local retained Kaneo/PostgreSQL PVCs are intentionally temporary
-  availability limits. Capacity growth does not resolve them. Storage/DB
+- **Data:** the local retained PostgreSQL claim is an intentionally temporary
+  availability limit. Capacity growth does not resolve it. Storage/DB
   availability must be addressed before claiming continuity for Kaneo.
 - **Secrets:** operator-managed inputs bootstrap the pilot; SOPS/age support
   is prepared. Add encrypted resources deliberately once independent keys and

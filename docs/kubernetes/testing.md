@@ -52,16 +52,19 @@ flux --context "$PUBLIC_CONTEXT" reconcile kustomization flux-system --with-sour
 flux --context "$PUBLIC_CONTEXT" reconcile kustomization kaneo --with-source
 flux --context "$PUBLIC_CONTEXT" get sources git
 flux --context "$PUBLIC_CONTEXT" get kustomizations
-kubectl --context "$PUBLIC_CONTEXT" -n kaneo rollout status deployment/kaneo-postgres --timeout=300s
+kubectl --context "$PUBLIC_CONTEXT" -n kaneo rollout status statefulset/kaneo-postgres --timeout=300s
 kubectl --context "$PUBLIC_CONTEXT" -n kaneo rollout status deployment/kaneo --timeout=300s
-kubectl --context "$PUBLIC_CONTEXT" -n kaneo get pods,svc,pvc -o wide
+kubectl --context "$PUBLIC_CONTEXT" -n kaneo get deployment,statefulset,pods,svc,pvc -o wide
 ```
 
 Expect source and both Kustomizations Ready, not suspended. The source revision
 must match the intended main commit. Expect one healthy Kaneo Pod, one healthy
-PostgreSQL Pod, two ClusterIP Services and two Bound PVCs. No other application
-is reconciled. Pending Pods generally mean missing storage labels, capacity or
-PVC provisioning; CreateContainerConfigError often means missing input keys.
+PostgreSQL Pod named `kaneo-postgres-0`, two regular ClusterIP Services, one
+headless governing Service and one Bound PVC named `data-kaneo-postgres-0`.
+Kaneo has only temporary runtime mounts and no application PVC. No other
+application is reconciled. Pending Pods generally mean missing storage labels,
+capacity or PVC provisioning; CreateContainerConfigError often means missing
+input keys.
 
 ## 4. Open Kaneo locally and claim the administrator
 
@@ -110,18 +113,22 @@ changes, edit Git and merge; manual scaling is repaired back to Git's state.
 
 ## 6. Prove persistence and policy boundaries
 
-Before real use, restart both new Deployments one at a time:
+Before real use, restart the PostgreSQL StatefulSet and Kaneo Deployment one at
+a time:
 
 ```bash
-kubectl --context "$PUBLIC_CONTEXT" -n kaneo rollout restart deployment/kaneo-postgres
-kubectl --context "$PUBLIC_CONTEXT" -n kaneo rollout status deployment/kaneo-postgres --timeout=300s
+kubectl --context "$PUBLIC_CONTEXT" -n kaneo rollout restart statefulset/kaneo-postgres
+kubectl --context "$PUBLIC_CONTEXT" -n kaneo rollout status statefulset/kaneo-postgres --timeout=300s
 kubectl --context "$PUBLIC_CONTEXT" -n kaneo rollout restart deployment/kaneo
 kubectl --context "$PUBLIC_CONTEXT" -n kaneo rollout status deployment/kaneo --timeout=300s
 kubectl --context "$PUBLIC_CONTEXT" -n kaneo get pvc
 kubectl --context "$PUBLIC_CONTEXT" -n kaneo get networkpolicy
 ```
 
-Expect the same Bound PVCs, successful login and the same test project/task.
+Expect the same Bound database PVC, the stable `kaneo-postgres-0` Pod name,
+successful login and the same test project/task. Verify that the replacement
+Pod has a new UID but still mounts `data-kaneo-postgres-0`; Kaneo runtime files
+are temporary and should not be treated as persistent data.
 Restart the port-forward after Pod replacement. A restart proves local
 persistence; it does not prove restore from backup or tolerance of VPS loss.
 
@@ -180,7 +187,7 @@ flux --context "$PUBLIC_CONTEXT" get all
 kubectl --context "$PUBLIC_CONTEXT" -n kaneo get events --sort-by=.lastTimestamp
 kubectl --context "$PUBLIC_CONTEXT" -n kaneo describe pods
 kubectl --context "$PUBLIC_CONTEXT" -n kaneo logs deployment/kaneo --tail=100
-kubectl --context "$PUBLIC_CONTEXT" -n kaneo logs deployment/kaneo-postgres --tail=100
+kubectl --context "$PUBLIC_CONTEXT" -n kaneo logs statefulset/kaneo-postgres --tail=100
 ```
 
 Inspect logs locally and redact them before sharing; application logs and event
