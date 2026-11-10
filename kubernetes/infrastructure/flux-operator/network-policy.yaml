@@ -1,0 +1,15 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: flux-operator-admin-access
+  namespace: flux-system
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: flux-operator
+      app.kubernetes.io/instance: flux-operator
+  policyTypes:
+    - Ingress
+  # Port-forward through the Kubernetes API remains available. The FluxInstance
+  # narrows Flux's shared allow policies so they do not also select this Pod.
+  ingress: []

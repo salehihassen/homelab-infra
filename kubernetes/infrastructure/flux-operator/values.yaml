@@ -1,0 +1,23 @@
+# Input to scripts/render-flux-operator.sh; not a HelmRelease.
+# The rendered chart is applied by Kustomize, so Helm is only an update-time tool.
+image:
+  tag: v0.62.1@sha256:1d09a3f96524d0895fb11e8072d84a3dd029cecdec0f869efa371be6b001469c
+commonAnnotations:
+  # Upstream CRD descriptions include literal substitution examples.
+  kustomize.toolkit.fluxcd.io/substitute: disabled
+rbac:
+  createAggregation: false
+web:
+  enabled: true
+  # Default anonymous mode is read-only. Access is through the authenticated
+  # Kubernetes port-forward only; do not expose this Service through Caddy.
+  config: {}
+  networkPolicy:
+    create: false
+  rbac:
+    createRoles: false
+    createAggregation: false
+  ingress:
+    enabled: false
+  httpRoute:
+    enabled: false

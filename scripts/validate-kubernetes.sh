@@ -9,7 +9,7 @@ work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 mkdir "$work/schemas"
 python3 scripts/check-kubernetes.py --schemas "$work/schemas"
-for path in kubernetes/clusters/* kubernetes/databases/* kubernetes/apps/*; do
+for path in kubernetes/infrastructure/* kubernetes/clusters/* kubernetes/databases/* kubernetes/apps/*; do
   name="$(basename "$path")"
   kustomize build "$path" > "$work/$name.yaml"
   # Strict substitution is also enforced by the in-cluster controller. Render

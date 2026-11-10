@@ -1,6 +1,6 @@
 # Public K3s foundation: a new Kaneo instance
 
-Scope revised 2026-11-09. No host has been installed or changed by this branch.
+Scope revised 2026-11-10. No fleet host has been installed or changed by this branch.
 This first change introduces only a public cluster and an independent, empty
 Kaneo instance. All existing services, including private Compose Kaneo, retain
 their current Compose deployments, routes, credentials and data.
@@ -14,7 +14,8 @@ future private cluster or the single-server public serving-continuity goal.
 | Component | Initial placement | State |
 | --- | --- | --- |
 | public-edge | server-2, existing public VPS | One K3s server, also running workloads; SQLite datastore |
-| Flux | public-edge | Source and Kustomize controllers; read-only Git deploy identity |
+| Flux Operator / Mission Control | public-edge | Pinned operator with embedded read-only UI; loopback port-forward access |
+| Flux | public-edge | Operator-managed source/Kustomize controllers; read-only Git deploy identity |
 | Kaneo | public server | One Deployment replica, new credentials and temporary runtime storage |
 | PostgreSQL 18 | public server | One StatefulSet replica and a retained 10 GiB data claim |
 | Public ingress | Existing Compose Caddy on server-2 | Optional new Kaneo route after local acceptance |
@@ -25,7 +26,8 @@ provisioning, private-cluster bootstrap or Compose service migration is included
 
 ```mermaid
 flowchart TD
-  Git[Protected Git main branch] --> Flux[Flux / public-edge root]
+  Operator[Flux Operator / private Mission Control UI] --> Flux[Flux / public-edge root]
+  Git[Protected Git main branch] --> Flux
   Flux --> K[Kaneo: fresh instance]
   Flux --> DB[Dedicated PostgreSQL / retained local PVC]
   K --> DB
@@ -53,17 +55,20 @@ Initial Flannel VXLAN is local to this one node; never expose UDP 8472 publicly.
 
 ## GitOps and bootstrap ordering
 
-The public root reconciles its source/controllers, PostgreSQL and Kaneo. Git
-URL, deploy key, age private key, database password, auth secret and application
+Flux Operator owns the Flux controllers and generated source/root sync. The
+public root reconciles the pinned operator installation, FluxInstance,
+PostgreSQL and Kaneo. Git URL, deploy key, age private key, database password,
+auth secret and application
 origin are external bootstrap inputs. Source artifacts include only the public
-root, PostgreSQL, Kaneo and Flux paths. Git credentials have no write permission.
+root, PostgreSQL, Kaneo and operator paths. Git credentials have no write permission.
 Keep main protected; controllers use strict substitution and reject cross-namespace
 references/remote bases. No image automation is installed.
 
-The operator installs controllers, prepares the namespace, dedicated Secrets,
-URL ConfigMap, storage-owner label and recovery copies, then applies the Git
-sync. Kaneo is active in Git: starting root reconciliation deploys it without a
-second activation PR. Its Flux reconciliation depends on the independently
+The administrator installs Flux Operator, prepares the namespace, dedicated
+Secrets, URL ConfigMap, storage-owner label and recovery copies, then applies
+the FluxInstance to install controllers and generate Git sync. Kaneo is active
+in Git: starting root reconciliation deploys it without a second activation
+PR. Its Flux reconciliation depends on the independently
 managed PostgreSQL reconciliation being Ready. Missing inputs are a bootstrap
 error, not a reason to add placeholder secrets. A feature branch is validated locally; live bootstrap
 tracks reviewed main. Rehearse against a separate disposable repository if main
@@ -74,6 +79,15 @@ SOPS/age once encrypted resources are deliberately added to its path. Plain
 Kubernetes Secrets are base64, not encryption. Protect the public age key and
 server token outside Git and test their recovery. A future private cluster must
 use separate identities, keys, tokens, kubeconfigs and backups.
+
+Mission Control is embedded in the operator, uses its upstream read-only mode
+and has no separate login in this pilot. Access is by loopback port-forward
+authorized through the protected Kubernetes API. Its ClusterIP has no public
+route, and direct Pod ingress is denied; generated Flux allowance policies are
+narrowed so they do not reopen it. Host-origin traffic remains a separate
+firewall concern. Shared/public dashboard access requires SSO/RBAC first. See
+[GitOps ownership and maintenance](gitops.md). Adding the operator does not add
+a Helm controller or change application/database manifests.
 
 ## Runtime, persistence and exposure
 

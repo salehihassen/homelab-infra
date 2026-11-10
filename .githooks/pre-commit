@@ -14,6 +14,6 @@ bash scripts/check-private.sh --staged
 # Compose config, stack dependencies and unit tests on the staged snapshot;
 # the full suite runs before push.
 bash scripts/validate-snapshot.sh --index compose
-if git diff --cached --name-only --diff-filter=ACMR | grep -Eq '^(kubernetes/|provisioning/k3s/|scripts/(check-kubernetes\.py|validate-kubernetes\.sh|with-kubernetes-tools\.sh)|\.github/workflows/validate-kubernetes\.yml)'; then
+if git diff --cached --name-only --diff-filter=ACMR | grep -Eq '^(kubernetes/|provisioning/k3s/|scripts/(check-kubernetes\.py|validate-kubernetes\.sh|with-kubernetes-tools\.sh|render-flux-operator\.sh)|\.github/workflows/validate-kubernetes\.yml)'; then
   bash scripts/validate-snapshot.sh --index kubernetes
 fi

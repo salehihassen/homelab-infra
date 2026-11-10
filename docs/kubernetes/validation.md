@@ -1,6 +1,6 @@
 # Public-only pilot validation record
 
-Revised 2026-11-09 for separate PostgreSQL 18 ownership and database-first Flux.
+Revised 2026-11-10 for Flux Operator, Mission Control and database-first Flux.
 These are local rehearsal results, not deployment evidence for the real fleet.
 No live credentials, host configuration, DNS or ingress changed.
 
@@ -16,10 +16,55 @@ No live credentials, host configuration, DNS or ingress changed.
   It also requires a PostgreSQL StatefulSet with one retained data claim
   template, a matching headless Service, PostgreSQL 18 data layout, separate
   Flux inventories and only ephemeral Kaneo mounts.
+- Operator and public-root renders are validated against pinned operator and
+  Flux schemas. Contracts require the exact two selected Flux controllers,
+  operator-only ownership of the source/root/controllers/namespace, retained
+  SOPS references, internal Services and read-only dashboard configuration.
 - Runbook Bash examples pass syntax checks and relative documentation links
   resolve. Existing host Compose definitions are unchanged from the base branch.
 
-## Current PostgreSQL 18 and Flux rehearsal
+## Current Flux Operator and Mission Control rehearsal
+
+A disposable Docker-backed K3s v1.37.2+k3s1 server ran Flux Operator 0.62.1
+with its embedded UI and Flux 2.10.0 source/Kustomize controllers. A separate
+local Git HTTP fixture served main; no GitHub or fleet credentials were used.
+The operator image is pinned to its multiarchitecture index digest. The chart
+archive checksum passed, and regenerating its YAML produced identical output.
+
+- The operator installed the controllers and generated GitRepository/root
+  Kustomization. Actual Git fetch and subsequent root self-management became
+  Ready. Live restrictions, main reference, sparse-checkout paths and required
+  cluster-settings substitution matched the configuration. Operator and root
+  resource inventories were disjoint, including namespace ownership. The
+  validation-only Flux CRD schemas exactly matched the live installed schemas.
+- Before database readiness, Kaneo reported DependencyNotReady and had no
+  Deployment. After supplying disposable inputs, PostgreSQL 18 and Kaneo became
+  healthy, and the FluxInstance, source and all three Kustomizations were Ready.
+  The PostgreSQL claim was Bound; Kaneo's loopback health endpoint returned ok.
+- A temporary encrypted Secret committed only to the disposable fixture was
+  decrypted correctly by Flux using its separate age key. No secret manifests
+  or private keys were added to the actual repository.
+- API-authorized loopback port-forward served Mission Control. Its resource
+  and workload endpoints returned the FluxInstance, PostgreSQL StatefulSet and
+  Kaneo Deployment. A dashboard suspend request returned HTTP 405 with actions
+  disabled. These are HTTP/API checks, not a full browser usability assessment.
+- Probe Pods in both flux-system and an unrelated namespace could reach their
+  control HTTP endpoint but could not reach the dashboard Pod on 9080. Live
+  generated allow-policy selectors excluded the operator. Port-forward still
+  worked. This verifies Pod policy isolation, not provider/host firewall rules.
+- Maintenance paused the FluxInstance, root and children, stopped Kaneo and
+  captured a native PostgreSQL dump. After resuming reconciliation, Flux restored
+  the app to one healthy replica; the database test row remained. Root and
+  children returned Ready, and database/app inventories remained disjoint.
+
+Cold image downloads caused temporary readiness timeouts before eventual
+success. The runbook explains inspection/retry without reinstalling components
+or regenerating credentials. The scratch cluster, Git server, probes,
+port-forwards, credentials and kubeconfig were removed after validation.
+Existing local development workloads remained running. No VPS, DNS, ingress or
+Compose configuration was changed.
+
+## Prior PostgreSQL 18 and Flux rehearsal
 
 A disposable K3s v1.37.2+k3s1 server ran Flux 2.10.0 and fetched a snapshot of
 the revised manifests from a local Git HTTP fixture on main. Generated inputs

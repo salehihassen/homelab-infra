@@ -66,6 +66,10 @@ One public server hosts a fresh Kaneo Deployment with ephemeral runtime storage
 and a dedicated PostgreSQL 18 StatefulSet with a retained local database claim.
 The database has its own directory/Flux reconciliation, which Kaneo depends on.
 No existing private Kaneo data/credentials are imported.
+Flux Operator manages the two Flux controllers and generated Git/root sync;
+its embedded Mission Control UI is read-only with private port-forward access.
+No extra GitOps engine or public dashboard route is introduced. See
+[GitOps ownership](gitops.md).
 Prepare external inputs before starting active Flux reconciliation. Claim the
 initial administrator through local access and add only its new Caddy site
 after application, policy and recovery acceptance. All existing services stay

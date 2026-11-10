@@ -47,6 +47,9 @@ server is also the only worker; a second local agent install is unnecessary.
 
 ```bash
 flux --context "$PUBLIC_CONTEXT" check
+kubectl --context "$PUBLIC_CONTEXT" -n flux-system get fluxinstances,fluxreports
+kubectl --context "$PUBLIC_CONTEXT" -n flux-system wait --for=condition=Ready \
+  fluxinstance/flux --timeout=300s
 flux --context "$PUBLIC_CONTEXT" reconcile source git flux-system
 flux --context "$PUBLIC_CONTEXT" reconcile kustomization flux-system --with-source
 flux --context "$PUBLIC_CONTEXT" reconcile kustomization postgres --with-source
@@ -70,6 +73,41 @@ Kaneo has only temporary runtime mounts and no application PVC. No other
 application is reconciled. Pending Pods generally mean missing storage labels,
 capacity or PVC provisioning; CreateContainerConfigError often means missing
 input keys.
+
+The FluxInstance must be Ready and own the two Flux controller Deployments,
+GitRepository and root Kustomization. The root's inventory must contain the
+operator/FluxInstance and child reconciliations, but no second copy of the
+operator-generated controllers/source/root. Inspect without printing Secrets:
+
+```bash
+kubectl --context "$PUBLIC_CONTEXT" -n flux-system get fluxinstance flux \
+  -o jsonpath='{.status.inventory.entries[*].id}{"\n"}'
+kubectl --context "$PUBLIC_CONTEXT" -n flux-system get kustomization flux-system \
+  -o jsonpath='{.status.inventory.entries[*].id}{"\n"}'
+```
+
+### Inspect Mission Control
+
+In a separate terminal:
+
+```bash
+kubectl --context "$PUBLIC_CONTEXT" -n flux-system port-forward --address=127.0.0.1 \
+  service/flux-operator 9080:9080
+```
+
+Open `http://127.0.0.1:9080`. Verify the main revision, postgres dependency,
+StatefulSet and Kaneo Deployment agree with the CLI. Inspect workload status,
+events and Pod logs; reconcile/suspend/restart must be unavailable in read-only
+mode. No separate dashboard login is expected: the protected kubeconfig permits
+the port-forward. There must be no public Caddy route, Ingress, NodePort or
+host listener for 9080. Stop port-forward and confirm local access ends.
+
+In the disposable rehearsal, verify an otherwise reachable probe in both
+flux-system and an unrelated namespace cannot connect to the operator Pod on
+9080, while the API port-forward works. NetworkPolicies are additive: confirm
+the live allow-egress and allow-scraping selectors match only the two Flux
+controllers. A deny policy alone is not sufficient if another policy permits
+the same traffic. Host/node access requires separate firewall tests.
 
 ## 4. Open Kaneo locally and claim the administrator
 

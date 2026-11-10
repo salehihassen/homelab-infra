@@ -30,12 +30,14 @@ def main():
     parser.add_argument("--schemas", type=Path)
     args = parser.parse_args()
     if args.schemas:
-        # Use the exact vendored Flux CRD schemas, not a moving external branch.
-        for doc in yaml.safe_load_all((ROOT / "kubernetes/infrastructure/flux-system/gotk-components.yaml").read_text()):
-            if doc and doc["kind"] == "CustomResourceDefinition":
-                for version in doc["spec"]["versions"]:
-                    name = f'{doc["spec"]["names"]["kind"].lower()}_{version["name"]}.json'
-                    (args.schemas / name).write_text(json.dumps(version["schema"]["openAPIV3Schema"]))
+        # Exact pinned Flux and operator schemas; neither requires a cluster.
+        for path in ["kubernetes/schemas/flux-2.10.0-crds.yaml",
+                     "kubernetes/infrastructure/flux-operator/operator.yaml"]:
+            for doc in yaml.safe_load_all((ROOT / path).read_text()):
+                if doc and doc["kind"] == "CustomResourceDefinition":
+                    for version in doc["spec"]["versions"]:
+                        name = f'{doc["spec"]["names"]["kind"].lower()}_{version["name"]}.json'
+                        (args.schemas / name).write_text(json.dumps(version["schema"]["openAPIV3Schema"]))
         return
 
     require({p.name for p in (ROOT / "kubernetes/clusters").iterdir() if p.is_dir()} == {"public-edge"},
@@ -48,18 +50,42 @@ def main():
             "Private-cluster provisioning belongs to a later change")
     for cluster, app in [("public-edge", "kaneo")]:
         docs = render(f"kubernetes/clusters/{cluster}")
-        source = next(d for d in docs if d["kind"] == "GitRepository")
-        require(source["spec"]["secretRef"]["name"] == "flux-system", "Git must use this cluster's deploy identity")
-        require(source["spec"]["url"] == "${GIT_REPOSITORY_URL}", "Git URL must remain an external bootstrap input")
-        require(source["spec"]["ref"] == {"branch": "main"}, "Deploy only the protected main branch")
-        require(set(source["spec"]["sparseCheckout"]) == {
+        instances = [d for d in docs if d["kind"] == "FluxInstance"]
+        require(len(instances) == 1 and instances[0]["metadata"]["name"] == "flux",
+                "One public FluxInstance must own the Flux installation")
+        instance = instances[0]
+        spec = instance["spec"]
+        require(instance["metadata"]["annotations"].get("kustomize.toolkit.fluxcd.io/prune") == "disabled",
+                "Accidental root pruning must not uninstall Flux")
+        require(spec["distribution"] == {"version": "2.10.0", "registry": "ghcr.io/fluxcd"} and
+                set(spec["components"]) == {"source-controller", "kustomize-controller"},
+                "Pin Flux and install only the selected two controllers")
+        require(spec["sync"] == {
+            "name": "flux-system", "kind": "GitRepository", "url": "${GIT_REPOSITORY_URL}",
+            "ref": "refs/heads/main", "path": f"./kubernetes/clusters/{cluster}",
+            "pullSecret": "flux-system", "interval": "1m",
+        }, "Operator-generated sync must use main, the public root and this cluster's external identity/URL")
+        patches = {p["target"]["kind"]: yaml.safe_load(p["patch"]) for p in spec["kustomize"]["patches"]}
+        source_patch = {p["path"]: p.get("value") for p in patches["GitRepository"]}
+        require(set(source_patch["/spec/sparseCheckout"]) == {
             f"kubernetes/clusters/{cluster}", f"kubernetes/apps/{app}",
-            "kubernetes/databases/postgres", "kubernetes/infrastructure/flux-system",
-        }, "Source must include only this cluster's paths and shared controllers")
+            "kubernetes/databases/postgres", "kubernetes/infrastructure/flux-operator",
+        }, "Source must include only this cluster's paths and operator")
+        require({p["value"] for p in patches["Deployment"]} >= {
+            "--no-cross-namespace-refs=true", "--no-remote-bases=true",
+            "--feature-gates=StrictPostBuildSubstitutions=true",
+        }, "Keep the controller restrictions when transferring ownership")
+        root_patch = {p["path"]: p.get("value") for p in patches["Kustomization"]}
+        require(root_patch["/spec/postBuild"] == {
+            "substituteFrom": [{"kind": "Secret", "name": "cluster-settings"}],
+        }, "Root sync must substitute the operator's external Git URL on subsequent reconciliations")
+        require(not any(d["kind"] == "GitRepository" for d in docs),
+                "Only Flux Operator may declare the root source")
+        require(not any(d["kind"] == "Namespace" for d in docs),
+                "Bootstrap the namespace separately; only Flux Operator may inventory it")
         syncs = {d["metadata"]["name"]: d for d in docs
                  if d["kind"] == "Kustomization"}
-        require(set(syncs) == {"flux-system", "postgres", app}, "Each cluster reconciles only its own pilot and database")
-        require(syncs["flux-system"]["spec"]["path"] == f"./kubernetes/clusters/{cluster}", "Wrong cluster root")
+        require(set(syncs) == {"postgres", app}, "Only the operator may declare the root reconciliation")
         require(syncs[app]["spec"]["path"] == f"./kubernetes/apps/{app}", "Wrong workload path")
         require(syncs["postgres"]["spec"]["path"] == "./kubernetes/databases/postgres",
                 "PostgreSQL must reconcile independently from the application")
@@ -73,6 +99,42 @@ def main():
             require(syncs[app]["spec"].get("suspend", False) is False,
                     "Prepared public bootstrap must reconcile Kaneo")
             require(syncs[app]["spec"]["prune"] is False, "Kaneo state must not be pruned")
+        for name in ["postgres", app]:
+            require(syncs[name]["spec"]["decryption"] == {
+                "provider": "sops", "secretRef": {"name": "sops-age"},
+            }, "Preserve built-in SOPS/age support for both workloads")
+
+        deployments = [d for d in docs if d["kind"] == "Deployment"]
+        require([d["metadata"]["name"] for d in deployments] == ["flux-operator"],
+                "Git must manage the operator, not a second copy of its Flux controllers")
+        operator = deployments[0]["spec"]["template"]["spec"]
+        container = operator["containers"][0]
+        require(container["image"] == "ghcr.io/controlplaneio-fluxcd/flux-operator:v0.62.1@sha256:1d09a3f96524d0895fb11e8072d84a3dd029cecdec0f869efa371be6b001469c",
+                "Pin the multiarchitecture operator image")
+        require({e["name"]: e.get("value") for e in container["env"]}["WEB_SERVER_PORT"] == "9080" and
+                "--web-server-only=true" not in container["args"],
+                "The supported operator must run its embedded dashboard")
+        require(not operator.get("hostNetwork") and
+                all("hostPort" not in p for p in container["ports"]),
+                "The dashboard must not bind host ports")
+        require(not any(d["kind"] in {"Ingress", "HTTPRoute", "Secret", "HelmRelease"} for d in docs),
+                "No public dashboard, credentials or extra Helm controller in the pilot root")
+        require(all(d["spec"].get("type", "ClusterIP") == "ClusterIP" for d in docs if d["kind"] == "Service"),
+                "Operator Services must remain internal")
+        values = yaml.safe_load((ROOT / "kubernetes/infrastructure/flux-operator/values.yaml").read_text())
+        require(values["web"]["config"] == {} and values["web"]["networkPolicy"]["create"] is False,
+                "Keep the default read-only dashboard and replace the broad chart ingress allowance")
+        policy = next(d for d in docs if d["kind"] == "NetworkPolicy")
+        require(policy["spec"] == {
+            "podSelector": {"matchLabels": {"app.kubernetes.io/name": "flux-operator", "app.kubernetes.io/instance": "flux-operator"}},
+            "policyTypes": ["Ingress"], "ingress": [],
+        }, "Dashboard Pod ingress must be denied; access uses API port-forward")
+        require(patches["NetworkPolicy"] == [{
+            "op": "replace", "path": "/spec/podSelector", "value": {
+                "matchExpressions": [{"key": "app", "operator": "In",
+                                      "values": ["source-controller", "kustomize-controller"]}],
+            },
+        }], "Shared Flux allowances must not reopen dashboard ingress")
 
     all_networks = []
     for example in (ROOT / "provisioning/k3s").glob("*.yaml.example"):

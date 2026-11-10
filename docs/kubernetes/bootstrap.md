@@ -25,7 +25,8 @@ Tailscale as their inter-node transport and are not enrolled in this change.
 
 ## 2. Install one K3s server
 
-This branch retains the rehearsed K3s **v1.37.2+k3s1** and Flux **2.10.0** pins.
+This branch pins K3s **v1.37.2+k3s1**, Flux **2.10.0**, and Flux Operator
+**0.62.1**, including its Mission Control dashboard.
 Check supported versions before a future installation; upgrades are separate
 reviewed changes. K3s server also runs workloads, so no separate agent install
 is needed. Use K3s containerd, not `--docker`.
@@ -74,7 +75,7 @@ Expect one Ready node, CoreDNS/local-path provisioner healthy and no Traefik or
 ServiceLB. Recheck existing Compose health/listeners and public routes. From an
 untrusted external machine verify that the API is unreachable.
 
-## 3. Install Flux controllers and prepare inputs
+## 3. Install Flux Operator and prepare inputs
 
 Live sync tracks protected main. Merge/review this change before enabling it.
 For GitOps rehearsal before merge, use a separate disposable repository with
@@ -100,11 +101,13 @@ From the repo root on the workstation:
 : "${KUBECONFIG:?}" "${PUBLIC_CONTEXT:?}" "${GIT_REPOSITORY_URL:?}" "${KEY_FILE:?}" "${AGE_KEY_FILE:?}"
 export GIT_REPOSITORY_URL KUBECONFIG
 flux --context "$PUBLIC_CONTEXT" check --pre
-kubectl --context "$PUBLIC_CONTEXT" apply --server-side -k kubernetes/infrastructure/flux-system
+kubectl --context "$PUBLIC_CONTEXT" apply --server-side --field-manager=kustomize-controller \
+  -f kubernetes/infrastructure/flux-operator/namespace.yaml
+kubectl --context "$PUBLIC_CONTEXT" apply --server-side --field-manager=kustomize-controller \
+  -k kubernetes/infrastructure/flux-operator
 kubectl --context "$PUBLIC_CONTEXT" wait --for=condition=Established --timeout=90s \
-  crd/gitrepositories.source.toolkit.fluxcd.io crd/kustomizations.kustomize.toolkit.fluxcd.io
-kubectl --context "$PUBLIC_CONTEXT" -n flux-system rollout status deployment/source-controller --timeout=180s
-kubectl --context "$PUBLIC_CONTEXT" -n flux-system rollout status deployment/kustomize-controller --timeout=180s
+  crd/fluxinstances.fluxcd.controlplane.io crd/fluxreports.fluxcd.controlplane.io
+kubectl --context "$PUBLIC_CONTEXT" -n flux-system rollout status deployment/flux-operator --timeout=180s
 flux --context "$PUBLIC_CONTEXT" create secret git flux-system \
   --url="$GIT_REPOSITORY_URL" --private-key-file="$KEY_FILE"
 kubectl --context "$PUBLIC_CONTEXT" -n flux-system create secret generic cluster-settings \
@@ -115,20 +118,26 @@ kubectl --context "$PUBLIC_CONTEXT" -n flux-system create secret generic sops-ag
 
 Stop here and complete **Prepare the new instance** in [kaneo.md](kaneo.md):
 select the one storage owner, create the dedicated credentials and local-origin
-ConfigMap, and save recoverable copies. No app sync exists yet. For existing
+ConfigMap, and save recoverable copies. Installing the operator alone does not
+install the Flux controllers or start app sync. For existing
 Secrets, inspect ownership privately; do not overwrite them to force bootstrap.
 
 ## 4. Start Git reconciliation
 
 PostgreSQL and Kaneo are enabled in Git. This step deploys the database first;
 Kaneo waits for its database dependency to become Ready.
-Controllers alone did not deploy it. From the same workstation shell:
+The FluxInstance now installs the two selected Flux controllers and creates
+the GitRepository/root Kustomization. From the same workstation shell:
 
 ```bash
 set -o pipefail
-cat kubernetes/clusters/public-edge/flux-system/gotk-sync.yaml \
+cat kubernetes/clusters/public-edge/flux-instance.yaml \
   | flux envsubst --strict \
-  | kubectl --context "$PUBLIC_CONTEXT" apply --server-side -f -
+  | kubectl --context "$PUBLIC_CONTEXT" apply --server-side --field-manager=kustomize-controller -f -
+kubectl --context "$PUBLIC_CONTEXT" -n flux-system wait --for=condition=Ready \
+  fluxinstance/flux --timeout=600s
+kubectl --context "$PUBLIC_CONTEXT" -n flux-system rollout status deployment/source-controller --timeout=180s
+kubectl --context "$PUBLIC_CONTEXT" -n flux-system rollout status deployment/kustomize-controller --timeout=180s
 flux --context "$PUBLIC_CONTEXT" reconcile source git flux-system
 flux --context "$PUBLIC_CONTEXT" reconcile kustomization flux-system --with-source
 flux --context "$PUBLIC_CONTEXT" reconcile kustomization postgres --with-source
@@ -136,10 +145,42 @@ flux --context "$PUBLIC_CONTEXT" reconcile kustomization kaneo --with-source
 flux --context "$PUBLIC_CONTEXT" get all
 ```
 
-The root subsequently reads the Git URL from cluster-settings and manages its
-own source/controllers. Missing substitution fails. Secrets/URL ConfigMap are
-operator-managed, outside Git and root pruning. No placeholder credentials or
-public hostname is deployed. Now follow [the test walkthrough](testing.md).
+Cold image downloads can exceed a readiness timeout. Inspect Pod events and
+operator conditions before retrying the wait; a slow pull is not a reason to
+reinstall the operator or recreate credentials.
+
+The operator owns the controllers and generated source/root sync. The root
+owns the operator installation, FluxInstance, and database/app reconciliations.
+It reads the Git URL from cluster-settings when applying the FluxInstance from
+Git; missing substitution fails. No second source/root/controller definition
+competes with the operator. Secrets/URL ConfigMap remain human-managed, outside
+Git and root pruning. No placeholder credentials or public hostname is deployed.
+This is a fresh bootstrap; do not apply it as an unreviewed migration of an
+already running directly installed Flux cluster.
+
+## 5. Open Mission Control privately
+
+In a separate workstation terminal:
+
+```bash
+: "${KUBECONFIG:?}" "${PUBLIC_CONTEXT:?}"
+kubectl --context "$PUBLIC_CONTEXT" -n flux-system port-forward --address=127.0.0.1 \
+  service/flux-operator 9080:9080
+```
+
+Open `http://127.0.0.1:9080`. The dashboard is read-only and has no separate login
+in this initial configuration: authorization happens when your kubeconfig opens
+the port-forward. The ClusterIP Service has no public route. Its Pod ingress is
+denied by NetworkPolicy, including from other namespaces; host-origin traffic
+and the Kubernetes port-forward have different policy semantics and are not
+application authentication. Do not add a Caddy route or bind the port-forward
+to all interfaces. SSO/RBAC is a later prerequisite for broader access.
+
+Look for the public FluxInstance, source/root sync, PostgreSQL StatefulSet and
+Kaneo Deployment. Follow their dependency/health views and inspect events/logs
+locally. Missing databases or credentials should remain visible as failures,
+not be hidden by dummy values. See [GitOps ownership](gitops.md) and follow
+[the test walkthrough](testing.md).
 
 ## Backup, rollback and later agents
 
@@ -161,7 +202,11 @@ external inputs/native app recovery set to fresh PVCs. Retained disks from a
 lost API are not an automatic restore. Define backup schedule/retention and
 RPO/RTO before accepting valuable public writes.
 
-For manual maintenance pause root, app and database reconcilers. To retire this
+For manual maintenance first annotate FluxInstance `flux` with
+`fluxcd.controlplane.io/reconcile=disabled`, then pause root, app and database
+reconcilers. Resume children/root and remove the annotation afterwards. This
+prevents the operator from repairing the paused root while you work. The
+[Kaneo backup procedure](kaneo.md) includes cleanup for this pause. To retire this
 new service, disable only its new Caddy route, stop its reconciliation, and preserve
 its state/credentials. All existing Compose services remain independently owned.
 Do not use an old private Kaneo database as rollback for this fresh instance.
@@ -179,14 +224,22 @@ continuity goal without introducing control-plane HA now.
 - K3s configuration: <https://docs.k3s.io/installation/configuration>
 - K3s multicloud: <https://docs.k3s.io/networking/distributed-multicloud>
 - K3s SQLite restore: <https://docs.k3s.io/datastore/backup-restore>
-- Flux bootstrap: <https://fluxcd.io/flux/installation/bootstrap/github/>
+- Flux Operator install: <https://fluxoperator.dev/docs/installation/>
+- FluxInstance sync: <https://fluxoperator.dev/docs/instance/sync/>
+- Mission Control access: <https://fluxoperator.dev/docs/web-ui/user-management/>
 - Flux SOPS: <https://fluxcd.io/flux/guides/mozilla-sops/>
 
-Controller updates use a checksum-verified Flux CLI in a separate dependency
-change; do not hand-edit generated CRDs:
+Operator/chart updates are separate reviewed changes. Update the version,
+verified chart checksum and image digest in the rendering script/values, then
+regenerate the chart. Helm is only needed for regeneration; this installation
+uses no Helm release and adds no Flux Helm controller:
 
 ```bash
-flux install --version=v2.10.0 --components=source-controller,kustomize-controller --export \
-  > kubernetes/infrastructure/flux-system/gotk-components.yaml
+bash scripts/render-flux-operator.sh
 bash scripts/validate-kubernetes.sh
 ```
+
+Flux upgrades change the exact `spec.distribution.version` in the FluxInstance.
+Refresh the validation-only Flux CRD snapshot from that operator-supported
+release and rehearse the generated manifests, patches, dashboard and app/database
+reconciliation. Never edit operator-owned live controllers as an upgrade method.

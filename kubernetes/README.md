@@ -13,13 +13,19 @@ Read the [architecture](../docs/kubernetes/architecture.md), follow
 [bootstrap](../docs/kubernetes/bootstrap.md) and
 [new Kaneo setup](../docs/kubernetes/kaneo.md), then work through the
 [public-cluster tests](../docs/kubernetes/testing.md).
+See [GitOps ownership and dashboard access](../docs/kubernetes/gitops.md) for
+how Flux Operator, Flux and Mission Control fit together.
 
 - `clusters/public-edge`: public Flux root, tracking protected main.
 - `databases/postgres`: PostgreSQL 18 StatefulSet, retained database claim,
   database Services, namespace and baseline/database policies.
 - `apps/kaneo`: Kaneo Deployment, Service and egress policy. Runtime files use
   temporary `emptyDir` storage; its Flux reconciliation depends on postgres.
-- `infrastructure/flux-system`: vendored Flux 2.10.0 source/Kustomize controllers.
+- `infrastructure/flux-operator`: rendered, pinned Flux Operator 0.62.1 chart
+  with its read-only Mission Control UI and private-access policy.
+- `clusters/public-edge/flux-instance.yaml`: Flux 2.10.0 controller selection,
+  generated Git/root sync and controller/policy customizations.
+- `schemas`: validation-only Flux CRD snapshot, never applied to a cluster.
 
 Prepare credentials, storage ownership and the initial local URL before starting
 Git reconciliation. PostgreSQL and Kaneo are enabled in Git; applying the root
@@ -38,3 +44,5 @@ bash scripts/validate-kubernetes.sh
 First access uses loopback-only kubectl port-forward. Public HTTPS is a separate
 operator step through the existing Compose Caddy; claim the administrator and
 prove backups before enabling it.
+Mission Control separately uses `service/flux-operator 9080:9080`; it remains
+an administrative tool accessed through the protected API, with no public route.

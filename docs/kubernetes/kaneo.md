@@ -26,8 +26,8 @@ version migration, and moving manifests alone does not upgrade that data.
 
 ## Prepare the new instance
 
-Complete this after installing Flux controllers but **before applying the root
-Git sync** in [bootstrap](bootstrap.md). All commands below use the workstation's
+Complete this after installing Flux Operator but **before applying the
+FluxInstance** in [bootstrap](bootstrap.md). All commands below use the workstation's
 public kubeconfig and explicitly selected PUBLIC_CONTEXT.
 
 1. Inspect the data disk and local-path provisioner path on the public server
@@ -171,8 +171,12 @@ Treat a failing capture as incomplete and never upload it as a valid backup.
     flux --context "$PUBLIC_CONTEXT" resume kustomization postgres || true
     flux --context "$PUBLIC_CONTEXT" resume kustomization kaneo || true
     flux --context "$PUBLIC_CONTEXT" resume kustomization flux-system || true
+    kubectl --context "$PUBLIC_CONTEXT" -n flux-system annotate fluxinstance/flux \
+      fluxcd.controlplane.io/reconcile- || true
   }
   trap cleanup_capture EXIT
+  kubectl --context "$PUBLIC_CONTEXT" -n flux-system annotate fluxinstance/flux \
+    fluxcd.controlplane.io/reconcile=disabled --overwrite
   flux --context "$PUBLIC_CONTEXT" suspend kustomization flux-system
   flux --context "$PUBLIC_CONTEXT" suspend kustomization kaneo
   flux --context "$PUBLIC_CONTEXT" suspend kustomization postgres
@@ -200,7 +204,8 @@ in bootstrap.md; Git alone does not preserve credentials or application data.
 
 Restore to an isolated fresh candidate with **no public route**, never over the
 running instance or existing Compose Kaneo. Use the same pinned app/PostgreSQL
-release and matching recovery credentials. Suspend root, app and database
+release and matching recovery credentials. Pause FluxInstance reconciliation
+first as in the capture procedure, then suspend root, app and database
 reconciliation, scale candidate Kaneo to zero, and wait for its Pod to disappear. Keep candidate
 PostgreSQL running.
 

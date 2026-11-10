@@ -1,0 +1,82 @@
+# The real Git URL is substituted only at bootstrap and by the generated root
+# Kustomization, using the external cluster-settings Secret.
+apiVersion: fluxcd.controlplane.io/v1
+kind: FluxInstance
+metadata:
+  name: flux
+  namespace: flux-system
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+spec:
+  distribution:
+    version: "2.10.0"
+    registry: ghcr.io/fluxcd
+  components:
+    - source-controller
+    - kustomize-controller
+  wait: true
+  sync:
+    name: flux-system
+    kind: GitRepository
+    url: ${GIT_REPOSITORY_URL}
+    ref: refs/heads/main
+    path: ./kubernetes/clusters/public-edge
+    pullSecret: flux-system
+    interval: 1m
+  kustomize:
+    patches:
+      - target:
+          kind: Deployment
+          name: kustomize-controller
+        patch: |-
+          - op: add
+            path: /spec/template/spec/containers/0/args/-
+            value: --no-cross-namespace-refs=true
+          - op: add
+            path: /spec/template/spec/containers/0/args/-
+            value: --no-remote-bases=true
+          - op: add
+            path: /spec/template/spec/containers/0/args/-
+            value: --feature-gates=StrictPostBuildSubstitutions=true
+      - target:
+          kind: GitRepository
+          name: flux-system
+        patch: |-
+          - op: add
+            path: /spec/sparseCheckout
+            value:
+              - kubernetes/clusters/public-edge
+              - kubernetes/apps/kaneo
+              - kubernetes/databases/postgres
+              - kubernetes/infrastructure/flux-operator
+      - target:
+          kind: Kustomization
+          name: flux-system
+        patch: |-
+          - op: add
+            path: /spec/retryInterval
+            value: 1m
+          - op: add
+            path: /spec/timeout
+            value: 5m
+          - op: add
+            path: /spec/postBuild
+            value:
+              substituteFrom:
+                - kind: Secret
+                  name: cluster-settings
+      # NetworkPolicies are additive. Exclude the operator from the generated
+      # namespace-wide allowances; its own policy denies direct Pod ingress.
+      - target:
+          kind: NetworkPolicy
+          name: allow-egress|allow-scraping
+        patch: |-
+          - op: replace
+            path: /spec/podSelector
+            value:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - source-controller
+                    - kustomize-controller
