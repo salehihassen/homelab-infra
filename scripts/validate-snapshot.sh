@@ -15,6 +15,9 @@ suite="${2:-all}"
 
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
+# Non-root containers (promtool runs as nobody) must read the bind-mounted
+# configs, whatever the caller's umask. $work itself stays 0700.
+umask 022
 
 mkdir "$work/tree"
 if [[ "$source_rev" == --index ]]; then
