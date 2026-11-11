@@ -20,7 +20,18 @@ bash scripts/check-private.sh --commits "${range[@]}"
 command -v gitleaks >/dev/null || { echo "pre-push: gitleaks is not installed" >&2; exit 1; }
 gitleaks detect --config .gitleaks.toml --redact --no-banner --exit-code 1 \
   --log-opts="${range[*]}" .
+# Merges list their changes against the first parent, so merged-in paths count.
+. "$(dirname "$0")/scope.sh"
+changed="$(git log --format= --name-only --diff-merges=first-parent "${range[@]}")"
+suite=all
+if docs_or_kubernetes_only <<<"$changed"; then
+  touches_kubernetes <<<"$changed" && suite=kubernetes || suite=
+fi
 for tip in $(printf '%s\n' "${tips[@]}" | sort -u); do
-  echo "pre-push: validating ${tip:0:12}" >&2
-  bash scripts/validate-snapshot.sh "${tip}" all
+  if [[ -z "$suite" ]]; then
+    echo "pre-push: docs-only change; skipping validation suites" >&2
+    break
+  fi
+  echo "pre-push: validating ${tip:0:12} (${suite})" >&2
+  bash scripts/validate-snapshot.sh "${tip}" "$suite"
 done

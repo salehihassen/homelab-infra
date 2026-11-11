@@ -12,8 +12,14 @@ fi
 # Real hostnames, domains and paths never enter Git (patterns: local/).
 bash scripts/check-private.sh --staged
 # Compose config, stack dependencies and unit tests on the staged snapshot;
-# the full suite runs before push.
-bash scripts/validate-snapshot.sh --index compose
-if git diff --cached --name-only --diff-filter=ACMR | grep -Eq '^(kubernetes/|provisioning/k3s/|scripts/(check-kubernetes\.py|validate-kubernetes\.sh|with-kubernetes-tools\.sh|render-flux-operator\.sh)|\.github/workflows/validate-kubernetes\.yml)'; then
+# the full suite runs before push. Skipped when only docs/Kubernetes changed.
+. "$(dirname "$0")/scope.sh"
+staged="$(git diff --cached --name-only)"
+if docs_or_kubernetes_only <<<"$staged"; then
+  echo "pre-commit: docs/Kubernetes-only change; skipping Compose suite" >&2
+else
+  bash scripts/validate-snapshot.sh --index compose
+fi
+if touches_kubernetes <<<"$staged"; then
   bash scripts/validate-snapshot.sh --index kubernetes
 fi
