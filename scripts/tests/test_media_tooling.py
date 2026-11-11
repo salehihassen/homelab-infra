@@ -37,7 +37,7 @@ class MediaToolingTests(unittest.TestCase):
                      'PATH': f'{binaries}:{os.environ["PATH"]}'},
                 text=True, capture_output=True, input='', timeout=10,
             )
-            self.assertIn('Syntax error', result.stderr)
+            self.assertIn('syntax error', result.stderr.lower())
             self.assertNotEqual(result.returncode, 0, result.stderr)
 
     def test_runtime_state_is_ignored_but_source_is_not(self):

@@ -11,6 +11,30 @@ mounts, Docker networks/listeners, host/provider routes and backup access. Use
 a supported systemd Linux host. Allow capacity for K3s, Flux, Kaneo, PostgreSQL
 and the existing Compose workloads; resource requests are not proof of capacity.
 
+### Memory gate for a shared 4 GiB host
+
+`server-2` has about 1 GiB available with every Compose service running. That
+is not enough headroom for K3s, Flux, PostgreSQL and Kaneo (roughly 0.85–1.4
+GiB idle). For the pilot, temporarily stop the largest standalone stacks (not
+Nextcloud AIO containers, which its master container manages):
+
+```bash
+docker compose --project-directory hosts/server-2 -f hosts/server-2/compose.yaml stop open-webui flowise
+free -m
+```
+
+`restart: unless-stopped` keeps them stopped across reboots until `start`.
+Their Caddy routes return 502 meanwhile. Proceed only with at least ~1.5 GiB
+available. Then install one layer at a time (K3s, then Flux, then PostgreSQL
+and Kaneo). After each layer, record `free -m`, `docker stats --no-stream` and
+Compose health. Stop and uninstall K3s (`/usr/local/bin/k3s-uninstall.sh`, then
+recheck Docker networking and routes) if available memory stays below ~300
+MiB, swap is in constant use, or any Compose service degrades.
+
+The `kubelet-arg` reservations in the example config cap all pods together at
+about 1.2 GiB. They assume the stopped stacks stay stopped. Restarting them
+permanently alongside K3s needs a larger host or moving a service elsewhere.
+
 Record existing Compose health and public URLs before installation. Review the
 Pod/Service CIDRs against all host, Docker, LAN/VPN and provider routes. Reserve
 disjoint ranges for the future private cluster. Confirm IP forwarding and CNI
@@ -71,8 +95,11 @@ is needed. Use K3s containerd, not `--docker`.
    kubectl --context "$PUBLIC_CONTEXT" get storageclass
    ```
 
-Expect one Ready node, CoreDNS/local-path provisioner healthy and no Traefik or
-ServiceLB. Recheck existing Compose health/listeners and public routes. From an
+Expect one Ready node, CoreDNS/local-path provisioner healthy and no Traefik,
+ServiceLB or metrics-server. On the VPS, confirm the pod memory cap took effect
+(`cat /sys/fs/cgroup/kubepods.slice/memory.max` or
+`/sys/fs/cgroup/kubepods/memory.max`, depending on the cgroup driver) and that
+node allocatable memory reflects the reservations. Recheck existing Compose health/listeners and public routes. From an
 untrusted external machine verify that the API is unreachable.
 
 ## 3. Install Flux Operator and prepare inputs
