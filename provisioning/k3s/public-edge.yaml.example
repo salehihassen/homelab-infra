@@ -17,12 +17,11 @@ disable:
   - servicelb
   # Saves memory on the shared Compose host; use host tools instead of kubectl top.
   - metrics-server
-# Sized for server-2 (3.8 GiB RAM, 4 GiB swap) sharing the host with Compose.
-# The scheduler cannot see Docker, so reserve its share: the kubepods cgroup is
-# capped at capacity - system-reserved - kube-reserved (~1.2 GiB here), and
-# pods are evicted before Compose containers when host memory runs low.
+# On a host shared with Compose, the scheduler cannot see Docker, so reserve
+# its share: the kubepods cgroup is capped at capacity - system-reserved -
+# kube-reserved, and pods are evicted before Compose containers when host
+# memory runs low. Size system-reserved from measured Compose usage.
 # Setting eviction-hard replaces all defaults, so the disk thresholds are kept.
-# Revisit after resizing the host or moving Compose services off it.
 kubelet-arg:
   - system-reserved=memory=2Gi
   - kube-reserved=memory=512Mi

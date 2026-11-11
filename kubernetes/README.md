@@ -19,13 +19,18 @@ how Flux Operator, Flux and Mission Control fit together.
 - `clusters/public-edge`: public Flux root, tracking protected main.
 - `databases/postgres`: PostgreSQL 18 StatefulSet, retained database claim,
   database Services, namespace and baseline/database policies.
+  Setup: [postgres.md](../docs/kubernetes/postgres.md).
 - `apps/kaneo`: Kaneo Deployment, Service and egress policy. Runtime files use
   temporary `emptyDir` storage; its Flux reconciliation depends on postgres.
+  Setup: [kaneo.md](../docs/kubernetes/kaneo.md).
 - `infrastructure/flux-operator`: rendered, pinned Flux Operator 0.62.1 chart
   with its read-only Mission Control UI and private-access policy.
 - `clusters/public-edge/flux-instance.yaml`: Flux 2.10.0 controller selection,
   generated Git/root sync and controller/policy customizations.
 - `schemas`: validation-only Flux CRD snapshot, never applied to a cluster.
+
+Each new app or database adds its entry here with a link to its setup doc.
+Bootstrap points to this list instead of naming workloads.
 
 Prepare credentials, storage ownership and the initial local URL before starting
 Git reconciliation. PostgreSQL and Kaneo are enabled in Git; applying the root

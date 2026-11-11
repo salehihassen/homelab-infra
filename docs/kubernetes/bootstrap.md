@@ -8,32 +8,13 @@ cluster is deferred. Nothing here migrates an existing Compose service.
 
 Record OS/init system, CPU architecture, spare CPU/RAM, free disk/inodes,
 mounts, Docker networks/listeners, host/provider routes and backup access. Use
-a supported systemd Linux host. Allow capacity for K3s, Flux, Kaneo, PostgreSQL
-and the existing Compose workloads; resource requests are not proof of capacity.
-
-### Memory gate for a shared 4 GiB host
-
-`server-2` has about 1 GiB available with every Compose service running. That
-is not enough headroom for K3s, Flux, PostgreSQL and Kaneo (roughly 0.85–1.4
-GiB idle). For the pilot, temporarily stop the largest standalone stacks (not
-Nextcloud AIO containers, which its master container manages):
-
-```bash
-docker compose --project-directory hosts/server-2 -f hosts/server-2/compose.yaml stop open-webui flowise
-free -m
-```
-
-`restart: unless-stopped` keeps them stopped across reboots until `start`.
-Their Caddy routes return 502 meanwhile. Proceed only with at least ~1.5 GiB
-available. Then install one layer at a time (K3s, then Flux, then PostgreSQL
-and Kaneo). After each layer, record `free -m`, `docker stats --no-stream` and
-Compose health. Stop and uninstall K3s (`/usr/local/bin/k3s-uninstall.sh`, then
-recheck Docker networking and routes) if available memory stays below ~300
-MiB, swap is in constant use, or any Compose service degrades.
-
-The `kubelet-arg` reservations in the example config cap all pods together at
-about 1.2 GiB. They assume the stopped stacks stay stopped. Restarting them
-permanently alongside K3s needs a larger host or moving a service elsewhere.
+a supported systemd Linux host. Allow capacity for K3s, Flux, the workloads
+enabled under `kubernetes/clusters/public-edge` and the existing Compose
+workloads; resource requests are not proof of capacity. On a host shared with
+Compose, size the `kubelet-arg` memory reservations in the example config from
+measured Compose usage. Bring layers up one at a time (K3s, Flux, then
+workloads), rechecking host memory and Compose health after each, and stop
+before continuing if either degrades.
 
 Record existing Compose health and public URLs before installation. Review the
 Pod/Service CIDRs against all host, Docker, LAN/VPN and provider routes. Reserve
@@ -99,8 +80,9 @@ Expect one Ready node, CoreDNS/local-path provisioner healthy and no Traefik,
 ServiceLB or metrics-server. On the VPS, confirm the pod memory cap took effect
 (`cat /sys/fs/cgroup/kubepods.slice/memory.max` or
 `/sys/fs/cgroup/kubepods/memory.max`, depending on the cgroup driver) and that
-node allocatable memory reflects the reservations. Recheck existing Compose health/listeners and public routes. From an
-untrusted external machine verify that the API is unreachable.
+node allocatable memory reflects the reservations. Recheck existing Compose
+health/listeners and public routes. From an untrusted external machine verify
+that the API is unreachable.
 
 ## 3. Install Flux Operator and prepare inputs
 
@@ -143,16 +125,18 @@ kubectl --context "$PUBLIC_CONTEXT" -n flux-system create secret generic sops-ag
   --from-file=age.agekey="$AGE_KEY_FILE"
 ```
 
-Stop here and complete **Prepare the new instance** in [kaneo.md](kaneo.md):
-select the one storage owner, create the dedicated credentials and local-origin
-ConfigMap, and save recoverable copies. Installing the operator alone does not
-install the Flux controllers or start app sync. For existing
-Secrets, inspect ownership privately; do not overwrite them to force bootstrap.
+Stop here and prepare every workload enabled under
+`kubernetes/clusters/public-edge`. Each workload's setup doc, linked from
+[kubernetes/README.md](../../kubernetes/README.md), lists the inputs kept out
+of Git: storage-owner node labels, Secrets, ConfigMaps and the recoverable
+copies to save. Installing the operator alone does not install the Flux
+controllers or start app sync. For existing Secrets, inspect ownership
+privately; do not overwrite them to force bootstrap.
 
 ## 4. Start Git reconciliation
 
-PostgreSQL and Kaneo are enabled in Git. This step deploys the database first;
-Kaneo waits for its database dependency to become Ready.
+This step deploys every workload enabled in Git. Each Flux Kustomization's
+`dependsOn` orders them, so apps wait for their databases to become Ready.
 The FluxInstance now installs the two selected Flux controllers and creates
 the GitRepository/root Kustomization. From the same workstation shell:
 
@@ -167,8 +151,8 @@ kubectl --context "$PUBLIC_CONTEXT" -n flux-system rollout status deployment/sou
 kubectl --context "$PUBLIC_CONTEXT" -n flux-system rollout status deployment/kustomize-controller --timeout=180s
 flux --context "$PUBLIC_CONTEXT" reconcile source git flux-system
 flux --context "$PUBLIC_CONTEXT" reconcile kustomization flux-system --with-source
-flux --context "$PUBLIC_CONTEXT" reconcile kustomization postgres --with-source
-flux --context "$PUBLIC_CONTEXT" reconcile kustomization kaneo --with-source
+kubectl --context "$PUBLIC_CONTEXT" -n flux-system wait --for=condition=Ready \
+  kustomizations.kustomize.toolkit.fluxcd.io --all --timeout=600s
 flux --context "$PUBLIC_CONTEXT" get all
 ```
 
@@ -203,8 +187,8 @@ and the Kubernetes port-forward have different policy semantics and are not
 application authentication. Do not add a Caddy route or bind the port-forward
 to all interfaces. SSO/RBAC is a later prerequisite for broader access.
 
-Look for the public FluxInstance, source/root sync, PostgreSQL StatefulSet and
-Kaneo Deployment. Follow their dependency/health views and inspect events/logs
+Look for the public FluxInstance, source/root sync and each enabled database
+and app. Follow their dependency/health views and inspect events/logs
 locally. Missing databases or credentials should remain visible as failures,
 not be hidden by dummy values. See [GitOps ownership](gitops.md) and follow
 [the test walkthrough](testing.md).
@@ -217,9 +201,9 @@ Before persistent use, add and rehearse backup of:
   encryption material. For SQLite, stop only K3s and cold-copy its complete
   `/var/lib/rancher/k3s/server` directory plus config; restart even if capture
   fails. Compose stays running. etcd-snapshot is not a SQLite backup method.
-- Native PostgreSQL export and stable credentials/settings from one recovery
-  point; Kaneo runtime files are temporary and need no backup. See
-  [Kaneo recovery](kaneo.md).
+- Each stateful workload's recovery set, as its setup doc defines it: usually
+  a native database export plus the matching credentials/settings from one
+  recovery point.
 - SSH/age keys, kubeconfig and recovery instructions in private recoverable
   storage. Existing Compose backup discovery does not capture these PVCs.
 
@@ -232,17 +216,16 @@ RPO/RTO before accepting valuable public writes.
 For manual maintenance first annotate FluxInstance `flux` with
 `fluxcd.controlplane.io/reconcile=disabled`, then pause root, app and database
 reconcilers. Resume children/root and remove the annotation afterwards. This
-prevents the operator from repairing the paused root while you work. The
-[Kaneo backup procedure](kaneo.md) includes cleanup for this pause. To retire this
-new service, disable only its new Caddy route, stop its reconciliation, and preserve
+prevents the operator from repairing the paused root while you work. Workload
+backup procedures include their own cleanup for this pause. To retire a
+service, disable only its Caddy route, stop its reconciliation, and preserve
 its state/credentials. All existing Compose services remain independently owned.
-Do not use an old private Kaneo database as rollback for this fresh instance.
 K3s uninstall removes local-path data and alters host networking; there is no
 blind uninstall command for a host shared with Compose.
 
 Adding VPS/ARM agents is a later change: validate supported OS/version, routes,
 firewalls, multi-cloud CNI, MTU, DNS, policy enforcement and ARM runtime. Do not
-label a second node as Kaneo's storage owner. Extra agents do not make local data
+label a second node as storage owner for a workload pinned to one node. Extra agents do not make local data
 available after this server fails. The architecture records the later serving
 continuity goal without introducing control-plane HA now.
 
