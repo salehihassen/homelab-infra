@@ -20,15 +20,15 @@ spec:
   healthCheckExprs:
     - apiVersion: postgresql.cnpg.io/v1
       kind: Cluster
-      current: status.conditions.exists(c, c.type == 'Ready' && c.status == 'True')
+      current: has(status.conditions) && status.conditions.exists(c, c.type == 'Ready' && c.status == 'True')
+    # No `failed` expressions: applied=false can be transient (a Database
+    # reconciled before its owner role), so Flux waits until the timeout instead.
     - apiVersion: postgresql.cnpg.io/v1
       kind: DatabaseRole
       current: has(status.applied) && status.applied
-      failed: has(status.applied) && !status.applied
     - apiVersion: postgresql.cnpg.io/v1
       kind: Database
       current: has(status.applied) && status.applied
-      failed: has(status.applied) && !status.applied
   suspend: false
   decryption:
     provider: sops

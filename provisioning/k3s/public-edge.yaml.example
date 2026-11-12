@@ -8,7 +8,8 @@ tls-san:
 # tls-san does not select a public multi-node CNI or restrict the API listener.
 node-label:
   - homelab.example/cluster=public-edge
-# Apply the kaneo-storage label manually only after selecting its data disk.
+# Apply the homelab.example/local-storage=true label manually, to one node,
+# only after selecting its data disk (docs/kubernetes/postgres.md).
 cluster-cidr: 10.144.0.0/16
 service-cidr: 10.145.0.0/16
 cluster-dns: 10.145.0.10

@@ -101,7 +101,7 @@ kubectl --context "$PUBLIC_CONTEXT" -n flux-system port-forward --address=127.0.
 ```
 
 Open `http://127.0.0.1:9080`. Verify the main revision, postgres dependency,
-PostgreSQL StatefulSet and app Deployments agree with the CLI. Inspect workload status,
+PostgreSQL `Cluster` and app Deployments agree with the CLI. Inspect workload status,
 events and Pod logs; reconcile/suspend/restart must be unavailable in read-only
 mode. No separate dashboard login is expected: the protected kubeconfig permits
 the port-forward. There must be no public Caddy route, Ingress, NodePort or
@@ -161,7 +161,7 @@ changes, edit Git and merge; manual scaling is repaired back to Git's state.
 
 ## 6. Prove persistence and policy boundaries
 
-Before real use, restart the PostgreSQL StatefulSet and Kaneo Deployment one at
+Before real use, restart the PostgreSQL primary Pod and Kaneo Deployment one at
 a time:
 
 ```bash

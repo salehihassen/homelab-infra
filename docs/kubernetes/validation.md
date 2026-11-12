@@ -26,12 +26,12 @@ are from the earlier StatefulSet run.
   Kustomize 5.8.1. Kubeconform 0.8.0 reports zero invalid resources/errors against
   Kubernetes 1.37 and the exact vendored Flux custom-resource schemas. Generated
   CRD definitions are excluded from Kubeconform and accepted by the actual API.
-- The contract checker enforces public-only provisioning/root/app scope,
-  active database-first reconciliation after operator preparation, protected persistence,
-  restricted runtime, health/resource settings and no public workload listeners.
-  It also requires a PostgreSQL StatefulSet with one retained data claim
-  template, a matching headless Service, PostgreSQL 18 data layout, separate
-  Flux inventories and only ephemeral Kaneo mounts.
+- The contract checker (`scripts/check-kubernetes.py`) enforces protected
+  persistence, restricted runtime, health/resource settings, default-deny
+  NetworkPolicies and no public workload listeners. For PostgreSQL it requires
+  one CloudNativePG `Cluster` instance with a digest-pinned image, no
+  superuser access, a retained local StorageClass, and app roles and databases
+  that take passwords from Secrets and are retained when removed from Git.
 - Operator and public-root renders are validated against pinned operator and
   Flux schemas. Contracts require the exact two selected Flux controllers,
   operator-only ownership of the source/root/controllers/namespace, retained
