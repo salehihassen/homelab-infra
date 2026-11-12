@@ -143,8 +143,11 @@ def check_workload_folder(path):
     namespaces = {d["metadata"]["namespace"] for d in docs if d["metadata"].get("namespace")}
     for ns in namespaces:
         check(any(p["metadata"]["name"] == "default-deny" and p["metadata"].get("namespace") == ns
-                  and p["spec"]["podSelector"] == {} for p in of_kind(docs, "NetworkPolicy")),
-              f"{path}: namespace {ns} needs a default-deny NetworkPolicy")
+                  and p["spec"]["podSelector"] == {}
+                  and set(p["spec"].get("policyTypes", [])) == {"Ingress", "Egress"}
+                  and not p["spec"].get("ingress") and not p["spec"].get("egress")
+                  for p in of_kind(docs, "NetworkPolicy")),
+              f"{path}: namespace {ns} needs a default-deny NetworkPolicy with no allow rules")
     for doc in docs:
         where = f"{path} {label(doc)}"
         check(doc["kind"] not in {"Secret", "Ingress"}, f"{where}: credentials and public routes stay out of Git")
