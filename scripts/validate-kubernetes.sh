@@ -11,16 +11,19 @@ fi
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 placeholder_git_url='ssh://git@github.com/example/homelab-infra.git'
+# Kubernetes schemas are downloaded once, then reused offline.
+schema_cache="${XDG_CACHE_HOME:-$HOME/.cache}/homelab-infra/kubernetes/schemas"
+mkdir -p "$schema_cache"
 
 render() {
   kustomize build "$1" | sed "s|\${GIT_REPOSITORY_URL}|${placeholder_git_url}|g"
 }
 
 check_schemas() {
-  kubeconform -strict -summary -kubernetes-version 1.37.0 \
+  kubeconform -strict -summary -kubernetes-version 1.37.0 -cache "$schema_cache" \
     -skip CustomResourceDefinition \
-    -schema-location default \
     -schema-location "$work/schemas/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json" \
+    -schema-location default \
     "$1"
 }
 
