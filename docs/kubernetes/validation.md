@@ -4,6 +4,22 @@ Revised 2026-11-10 for Flux Operator, Mission Control and database-first Flux.
 These are local rehearsal results, not deployment evidence for the real fleet.
 No live credentials, host configuration, DNS or ingress changed.
 
+**2026-11-11 layout change:** PostgreSQL now runs as a CloudNativePG 1.30.1
+`Cluster` (PostgreSQL 18.6) in its own `postgres` namespace, with each app's
+role and database declared as `DatabaseRole`/`Database` resources. The layout
+passes offline validation, including kubeconform against CloudNativePG's CRD
+schemas. On a disposable K3s v1.37.2 cluster (manifests applied directly,
+without Flux) under default-deny NetworkPolicies and restricted Pod Security:
+the operator and Cluster became Ready; Kaneo's role and database were applied;
+Kaneo started without restarts and created its schema; a Pod without the
+`postgres-client` label could not reach 5432 while a labelled one could; a row
+survived deleting the instance Pod; and idle memory was about 27 MiB for the
+operator, 86 MiB for PostgreSQL and 186 MiB for Kaneo. Password rotation works
+only once the Secret has the `cnpg.io/reload=true` label, so the setup docs
+apply it. The Flux `healthCheckExprs` for CloudNativePG resources were
+schema-validated but not exercised by a live Flux. Names in the record below
+are from the earlier StatefulSet run.
+
 ## Current scope checks
 
 - The single public root, PostgreSQL database path and Kaneo app path render with

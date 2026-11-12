@@ -3,97 +3,59 @@
 This is an independent, empty instance. Existing private Compose Kaneo and every
 other Compose service keep their current data, credentials and routes. Do not
 import personal projects or reuse private Kaneo's database/auth secret for this
-pilot. This change adds a Kaneo Deployment with ephemeral runtime storage and a
-dedicated PostgreSQL 18 StatefulSet with one retained local PVC. SMTP, OAuth,
-Redis, uploads/S3 integrations and other services are not added.
+pilot. SMTP, OAuth, Redis, uploads/S3 integrations are not added.
 
-Kaneo's pinned release does not need a persistent application-file directory.
-Its `/var/lib/kaneo` and `/tmp` mounts use `emptyDir`, are recreated with each
-Pod and are not backed up. PostgreSQL stores the durable application records.
-The StatefulSet gives its Pod the stable name `kaneo-postgres-0` and allocates
-the 10 GiB claim `data-kaneo-postgres-0` through `volumeClaimTemplates`. A
-governing headless Service provides the Pod's stable network identity; Kaneo
-continues connecting through the regular `kaneo-postgres` ClusterIP Service.
-Claims are retained on StatefulSet deletion and scale-down, and the storage
-class retains the underlying volume after claim deletion. Keep one database
-replica: changing this count does not configure PostgreSQL replication or HA.
-
-PostgreSQL is managed separately in `kubernetes/databases/postgres`, with its
-own Flux Kustomization. Kaneo depends on that reconciliation being Ready.
-See [PostgreSQL ownership and upgrades](postgres.md) before adopting this layout
-on any earlier rehearsal: existing PostgreSQL 16 data needs a tested major
-version migration, and moving manifests alone does not upgrade that data.
+Kaneo runs as a Deployment in the `kaneo` namespace. Its `/var/lib/kaneo` and
+`/tmp` mounts use `emptyDir`: recreated with each Pod and not backed up. Its
+durable records live in the `kaneo` database on the
+[shared PostgreSQL](postgres.md), reached at
+`postgres-rw.postgres.svc.cluster.local`. Its role and database are declared
+in `kubernetes/databases/postgres/app-databases/kaneo.yaml`. Kaneo's Flux Kustomization depends on
+`postgres` being Ready.
 
 ## Prepare the new instance
 
 Complete this after installing Flux Operator but **before applying the
-FluxInstance** in [bootstrap](bootstrap.md). All commands below use the workstation's
-public kubeconfig and explicitly selected PUBLIC_CONTEXT.
+FluxInstance** in [bootstrap](bootstrap.md), and after the PostgreSQL
+[first-time setup](postgres.md#first-time-setup). Commands use the workstation's
+public kubeconfig and PUBLIC_CONTEXT, from the repo root. Nothing is printed.
 
-1. Inspect the data disk and local-path provisioner path on the public server
-   (normally `/var/lib/rancher/k3s/storage`). Configure it before PVC allocation
-   if a different disk is required. Check capacity, inodes, ownership and
-   monitoring. PVC size requests do not enforce local-path disk quotas.
-2. Export PUBLIC_STORAGE_NODE to the inspected public node's name. Confirm the
-   cluster label and apply storage ownership to exactly that one node:
-
-   ```bash
-   : "${KUBECONFIG:?}" "${PUBLIC_CONTEXT:?}" "${PUBLIC_STORAGE_NODE:?}"
-   kubectl --context "$PUBLIC_CONTEXT" get nodes --show-labels
-   kubectl --context "$PUBLIC_CONTEXT" label node "$PUBLIC_STORAGE_NODE" homelab.example/kaneo-storage=true
-   kubectl --context "$PUBLIC_CONTEXT" get nodes -l homelab.example/kaneo-storage=true
-   ```
-
-   Expect exactly one node, also labeled homelab.example/cluster=public-edge.
-   The Kaneo Deployment and PostgreSQL StatefulSet are pinned there. This is
-   one-node persistence: losing the server takes this app and its database
-   offline.
-3. Create fresh inputs in ignored/private storage. The following example uses
-   the repository's ignored local directory, creates mode-0600 files and refuses
-   to overwrite existing inputs. Save recovery copies in private storage too.
-   Run on the workstation from the repo root; it does not print secrets.
+1. **Database password.** Follow [Add an app](postgres.md#add-an-app) step 2
+   with `app=kaneo`. This writes `local/public-edge-inputs/kaneo/db-password`
+   and creates Secret `kaneo-db-password` in the `postgres` namespace.
+2. **Kaneo's own inputs.** Create the namespace, then Kaneo's Secret (the same
+   database password plus a new auth secret) and its settings:
 
    ```bash
    umask 077
-   export KANEO_INPUT_DIR=local/public-edge-inputs
-   python3 - <<'PY'
-   import os
-   from pathlib import Path
-   import secrets
-
-   target = Path(os.environ['KANEO_INPUT_DIR'])
-   target.mkdir(mode=0o700, parents=True, exist_ok=True)
-   credentials = target / 'credentials.env'
-   settings = target / 'settings.env'
-   if credentials.exists() or settings.exists():
-       raise SystemExit('Inputs already exist; inspect privately, do not regenerate.')
-   credentials.write_text(
-       f'POSTGRES_PASSWORD={secrets.token_hex(32)}\n'
-       f'AUTH_SECRET={secrets.token_hex(32)}\n')
-   settings.write_text('KANEO_CLIENT_URL=http://127.0.0.1:8911\n')
-   credentials.chmod(0o600)
-   settings.chmod(0o600)
-   PY
-   export KANEO_CREDENTIALS_FILE="$KANEO_INPUT_DIR/credentials.env"
-   export KANEO_SETTINGS_FILE="$KANEO_INPUT_DIR/settings.env"
-   kubectl --context "$PUBLIC_CONTEXT" apply -f kubernetes/databases/postgres/namespace.yaml
+   dir=local/public-edge-inputs/kaneo
+   export KANEO_CREDENTIALS_FILE="$dir/credentials.env" KANEO_SETTINGS_FILE="$dir/settings.env"
+   if [ -e "$KANEO_CREDENTIALS_FILE" ]; then
+     echo "Inputs exist; inspect them, do not regenerate." >&2
+   else
+     printf 'POSTGRES_PASSWORD=%s\nAUTH_SECRET=%s\n' "$(cat "$dir/db-password")" \
+       "$(openssl rand -hex 32)" > "$KANEO_CREDENTIALS_FILE"
+     printf 'KANEO_CLIENT_URL=http://127.0.0.1:8911\n' > "$KANEO_SETTINGS_FILE"
+   fi
+   kubectl --context "$PUBLIC_CONTEXT" apply -f kubernetes/apps/kaneo/namespace.yaml
    kubectl --context "$PUBLIC_CONTEXT" -n kaneo create secret generic kaneo-credentials \
      --from-env-file="$KANEO_CREDENTIALS_FILE"
    kubectl --context "$PUBLIC_CONTEXT" -n kaneo create configmap kaneo-settings \
      --from-env-file="$KANEO_SETTINGS_FILE"
    ```
 
-   The initial origin deliberately matches the loopback test port. Both
-   workloads use the dedicated password; database/user names are kaneo.
-   Changing a Secret after PostgreSQL initialization does not rotate its stored
-   password. Coordinate SQL rotation and app restart if rotation is needed.
-4. Save these inputs and Flux/age keys in independently recoverable storage.
-   Plan native database backup into the existing Restic/B2 system; prove
-   restore with test data before accepting valuable writes. Existing Compose
-   backup declarations do not automatically capture Kubernetes state.
-5. Return to bootstrap step 4 and start reconciliation. Work through
-   [testing.md](testing.md) to claim the initial administrator, verify auth,
-   CRUD, restart survival and Flux drift repair before public exposure.
+   The initial origin matches the loopback test port. To rotate the database
+   password, change it in both Secrets, then restart Kaneo. Changing
+   `AUTH_SECRET` signs everyone out.
+3. **Save** `local/public-edge-inputs/` and the Flux/age keys in independently
+   recoverable storage. Plan native database backup into the existing
+   Restic/B2 system and prove a restore with test data before accepting
+   valuable writes. Compose backup declarations do not capture Kubernetes state.
+4. **Start reconciliation** (bootstrap §4). Flux installs the CloudNativePG
+   operator, then PostgreSQL with Kaneo's role and database, then Kaneo. Then
+   work through [testing.md](testing.md): claim the administrator,
+   verify auth, CRUD, restart survival and Flux drift repair before public
+   exposure.
 
 Inputs initially stay operator-managed. To adopt SOPS later, add encrypted
 resources to their owning app/database Kustomize path and encrypt only to
@@ -157,7 +119,7 @@ data-directory copy is not a native backup.
 
 Set RECOVERY_DIR to a new private directory **outside tracked source**, and
 export the input file paths from preparation. The following workstation
-subshell stops only the new Kubernetes app, leaving its database and Compose
+subshell stops only Kaneo, leaving PostgreSQL, its other databases and Compose
 services running. Its cleanup resumes reconciliation even if capture fails.
 Treat a failing capture as incomplete and never upload it as a valid backup.
 
@@ -183,10 +145,13 @@ Treat a failing capture as incomplete and never upload it as a valid backup.
   kubectl --context "$PUBLIC_CONTEXT" -n kaneo scale deployment/kaneo --replicas=0
   kubectl --context "$PUBLIC_CONTEXT" -n kaneo wait --for=delete pod \
     -l app.kubernetes.io/name=kaneo --timeout=120s
-  kubectl --context "$PUBLIC_CONTEXT" -n kaneo exec statefulset/kaneo-postgres -- \
-    pg_dump -U kaneo -d kaneo --format=custom > "$RECOVERY_DIR/kaneo.dump"
+  primary="$(kubectl --context "$PUBLIC_CONTEXT" -n postgres get pod -o name \
+    -l cnpg.io/cluster=postgres,cnpg.io/instanceRole=primary)"
+  kubectl --context "$PUBLIC_CONTEXT" -n postgres exec "$primary" -c postgres -- \
+    pg_dump -d kaneo --format=custom > "$RECOVERY_DIR/kaneo.dump"
   cp "$KANEO_CREDENTIALS_FILE" "$RECOVERY_DIR/credentials.env"
   cp "$KANEO_SETTINGS_FILE" "$RECOVERY_DIR/settings.env"
+  cp "$(dirname "$KANEO_CREDENTIALS_FILE")/db-password" "$RECOVERY_DIR/db-password"
 )
 flux --context "$PUBLIC_CONTEXT" reconcile kustomization postgres --with-source
 flux --context "$PUBLIC_CONTEXT" reconcile kustomization kaneo --with-source
@@ -210,12 +175,17 @@ reconciliation, scale candidate Kaneo to zero, and wait for its Pod to disappear
 PostgreSQL running.
 
 Review the dump with pg_restore --list. The target database must be empty:
-Kaneo creates schema on startup. In the isolated candidate only, prepare a fresh
-empty database owned by kaneo, then import the custom-format dump:
+Kaneo creates schema on startup. In the isolated candidate only, create
+`kaneo-db-password` from the recovered `db-password`
+([Add an app](postgres.md#add-an-app) step 2) and let Flux create the empty
+`kaneo` database, then import the custom-format dump as objects owned by
+`kaneo`:
 
 ```bash
-kubectl --context "$RESTORE_CONTEXT" -n kaneo exec -i statefulset/kaneo-postgres -- \
-  pg_restore -U kaneo -d kaneo --no-owner --no-acl --exit-on-error < "$RECOVERY_DIR/kaneo.dump"
+primary="$(kubectl --context "$RESTORE_CONTEXT" -n postgres get pod -o name \
+  -l cnpg.io/cluster=postgres,cnpg.io/instanceRole=primary)"
+kubectl --context "$RESTORE_CONTEXT" -n postgres exec -i "$primary" -c postgres -- \
+  pg_restore -d kaneo --role=kaneo --no-owner --no-acl --exit-on-error < "$RECOVERY_DIR/kaneo.dump"
 ```
 
 There is no application-file archive to restore. Kaneo regenerates its runtime
@@ -223,14 +193,14 @@ files on startup. If S3 uploads are added later, include the object store and
 its matching database records in a revised recovery procedure.
 
 RESTORE_CONTEXT must select an isolated candidate kubeconfig; export its
-KUBECONFIG explicitly. Never mount/edit a live PostgreSQL PVC. Restore the
+KUBECONFIG explicitly. Never mount or edit a live PostgreSQL volume. Restore the
 matching auth secret/password, adapt only the candidate browser origin for
 local access, resume database, app and root reconciliation and verify login,
 test project, task and restart survival. A successful SQL import alone is not an application
 restore drill.
 
 To withdraw the new service, remove only its new Caddy route and preserve its
-database PVC/credentials/recovery set. Keep existing private Compose Kaneo
+`kaneo` database, credentials and recovery set. Keep existing private Compose Kaneo
 running as its own instance. After public writes, any redeployment needs the
 new instance's current data, not an old private database. Never delete PVCs to roll back an
 image; retained PVCs do not survive disk failure or careless K3s uninstall.

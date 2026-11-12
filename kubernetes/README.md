@@ -1,7 +1,7 @@
 # Public K3s / Flux pilot
 
-This first step adds one public cluster and a fresh Kaneo instance with its own
-PostgreSQL database. Existing services stay in Compose. The private cluster
+This first step adds one public cluster, a shared PostgreSQL instance and a
+fresh Kaneo instance with its own database there. Existing services stay in Compose. The private cluster
 and its pilot belong to a later MR.
 
 The [migration roadmap](../docs/kubernetes/roadmap.md) keeps both supplied plans
@@ -17,10 +17,11 @@ See [GitOps ownership and dashboard access](../docs/kubernetes/gitops.md) for
 how Flux Operator, Flux and Mission Control fit together.
 
 - `clusters/public-edge`: public Flux root, tracking protected main.
-- `databases/postgres`: PostgreSQL 18 StatefulSet, retained database claim,
-  database Services, namespace and baseline/database policies.
+- `infrastructure/cloudnative-pg`: rendered, pinned CloudNativePG 1.30.1 operator.
+- `databases/postgres`: shared PostgreSQL 18 `Cluster` in namespace `postgres`,
+  its StorageClass and policies, and one file per app under `app-databases/`.
   Setup: [postgres.md](../docs/kubernetes/postgres.md).
-- `apps/kaneo`: Kaneo Deployment, Service and egress policy. Runtime files use
+- `apps/kaneo`: Kaneo namespace, Deployment, Service and policies. Runtime files use
   temporary `emptyDir` storage; its Flux reconciliation depends on postgres.
   Setup: [kaneo.md](../docs/kubernetes/kaneo.md).
 - `infrastructure/flux-operator`: rendered, pinned Flux Operator 0.62.1 chart

@@ -17,7 +17,8 @@ future private cluster or the single-server public serving-continuity goal.
 | Flux Operator / Mission Control | public-edge | Pinned operator with embedded read-only UI; loopback port-forward access |
 | Flux | public-edge | Operator-managed source/Kustomize controllers; read-only Git deploy identity |
 | Kaneo | public server | One Deployment replica, new credentials and temporary runtime storage |
-| PostgreSQL 18 | public server | One StatefulSet replica and a retained 10 GiB data claim |
+| CloudNativePG | public server, `cnpg-system` namespace | Operator that runs PostgreSQL from `Cluster`, `DatabaseRole` and `Database` resources |
+| PostgreSQL 18 | public server, `postgres` namespace | Shared CloudNativePG `Cluster`: one instance, a retained 10 GiB volume, one role and database per app |
 | Public ingress | Existing Compose Caddy on server-2 | Optional new Kaneo route after local acceptance |
 
 A K3s server already runs the agent components needed to host Pods. Do not
@@ -29,7 +30,8 @@ flowchart TD
   Operator[Flux Operator / private Mission Control UI] --> Flux[Flux / public-edge root]
   Git[Protected Git main branch] --> Flux
   Flux --> K[Kaneo: fresh instance]
-  Flux --> DB[Dedicated PostgreSQL / retained local PVC]
+  Flux --> CNPG[CloudNativePG operator]
+  CNPG --> DB[Shared PostgreSQL / retained local PVC]
   K --> DB
   Internet --> C[Existing Compose Caddy]
   C -. reviewed new route after tests .-> K
@@ -92,24 +94,26 @@ a Helm controller or change application/database manifests.
 ## Runtime, persistence and exposure
 
 Kaneo uses a one-replica Deployment with Recreate rollouts and only `emptyDir`
-runtime mounts. PostgreSQL uses a one-replica StatefulSet, a governing headless
-Service and a retained claim template. Its stable Pod `kaneo-postgres-0` reuses
-`data-kaneo-postgres-0` across replacement. This gives stable identity and
-persistence, not PostgreSQL replication or database HA. Both workloads use
+runtime mounts. PostgreSQL is a one-instance CloudNativePG `Cluster`; the
+operator recreates its Pod on the same retained volume. This gives
+persistence, not replication or database HA. Both workloads use
 non-root restricted runtime settings, health probes and bounded resources.
 Kaneo retains its rehearsed image; PostgreSQL is pinned to 18.6-alpine, both
 using multiarchitecture digests. The database mount follows the official
-PostgreSQL 18 layout. See [database ownership and upgrades](postgres.md).
+PostgreSQL 18 layout. PostgreSQL is shared: each app declares its own
+`DatabaseRole` and `Database` in one file, reviewed through Git like any other
+change. See [shared PostgreSQL](postgres.md).
 This is a new instance, with no import or reuse of existing private Kaneo
 content or secrets.
 
-Both workloads require the public-cluster label and the kaneo-storage label.
-Apply storage ownership to exactly one inspected node. The retained local-path
+Workloads require the public-cluster label; PostgreSQL also requires the
+`local-storage` label. Apply that label to exactly one inspected node. The retained local-path
 database claim with WaitForFirstConsumer binds data to that node. Adding an ARM
 agent provides compute capacity; it does not replicate this data or move Kaneo
 automatically.
 
-Default-deny policies allow Kaneo only cluster DNS and its own PostgreSQL.
+Default-deny policies allow Kaneo only cluster DNS and PostgreSQL. PostgreSQL
+accepts connections only from Pods labelled `homelab.example/postgres-client`.
 SMTP, OAuth, webhooks, object storage and other integrations are out of scope.
 Claim the first administrator through local access before exposing the app;
 DISABLE_REGISTRATION does not prevent first-account bootstrap. Public use also

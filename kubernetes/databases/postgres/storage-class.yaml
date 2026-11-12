@@ -1,7 +1,7 @@
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
-  name: kaneo-local-retain
+  name: local-retain
   annotations:
     kustomize.toolkit.fluxcd.io/prune: disabled
 provisioner: rancher.io/local-path

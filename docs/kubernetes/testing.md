@@ -34,11 +34,11 @@ export KUBECONFIG PUBLIC_CONTEXT
 kubectl --context "$PUBLIC_CONTEXT" cluster-info
 kubectl --context "$PUBLIC_CONTEXT" get nodes -o wide
 kubectl --context "$PUBLIC_CONTEXT" -n kube-system get pods
-kubectl --context "$PUBLIC_CONTEXT" get nodes -l homelab.example/kaneo-storage=true
+kubectl --context "$PUBLIC_CONTEXT" get nodes -l homelab.example/local-storage=true
 ```
 
-Expect exactly one Ready public node, with that same node selected as storage
-owner. CoreDNS/local-path should be healthy, Traefik/ServiceLB absent. On the
+Expect exactly one Ready public node, with that same node labelled for local
+storage. CoreDNS/local-path should be healthy, Traefik/ServiceLB absent. On the
 public VPS, compare `docker ps` and `sudo ss -lntup` with the pre-install baseline.
 Open every existing public service URL and verify normal behavior. The public
 server is also the only worker; a second local agent install is unnecessary.
@@ -52,27 +52,32 @@ kubectl --context "$PUBLIC_CONTEXT" -n flux-system wait --for=condition=Ready \
   fluxinstance/flux --timeout=300s
 flux --context "$PUBLIC_CONTEXT" reconcile source git flux-system
 flux --context "$PUBLIC_CONTEXT" reconcile kustomization flux-system --with-source
-flux --context "$PUBLIC_CONTEXT" reconcile kustomization postgres --with-source
-flux --context "$PUBLIC_CONTEXT" reconcile kustomization kaneo --with-source
+kubectl --context "$PUBLIC_CONTEXT" -n flux-system wait --for=condition=Ready \
+  kustomizations.kustomize.toolkit.fluxcd.io --all --timeout=600s
 flux --context "$PUBLIC_CONTEXT" get sources git
 flux --context "$PUBLIC_CONTEXT" get kustomizations
-kubectl --context "$PUBLIC_CONTEXT" -n kaneo rollout status statefulset/kaneo-postgres --timeout=300s
+kubectl --context "$PUBLIC_CONTEXT" -n cnpg-system rollout status deployment/cnpg-controller-manager --timeout=300s
+kubectl --context "$PUBLIC_CONTEXT" -n postgres wait --for=condition=Ready cluster/postgres --timeout=300s
+kubectl --context "$PUBLIC_CONTEXT" -n postgres get cluster,databaserole,database,pods,svc,pvc -o wide
+primary="$(kubectl --context "$PUBLIC_CONTEXT" -n postgres get pod -o name \
+  -l cnpg.io/cluster=postgres,cnpg.io/instanceRole=primary)"
+kubectl --context "$PUBLIC_CONTEXT" -n postgres exec "$primary" -c postgres -- \
+  psql -tAc 'SHOW server_version; SELECT datname FROM pg_database;'
 kubectl --context "$PUBLIC_CONTEXT" -n kaneo rollout status deployment/kaneo --timeout=300s
-kubectl --context "$PUBLIC_CONTEXT" -n kaneo get deployment,statefulset,pods,svc,pvc -o wide
-kubectl --context "$PUBLIC_CONTEXT" -n kaneo exec statefulset/kaneo-postgres -- \
-  psql -U kaneo -d kaneo -tAc 'SHOW server_version; SHOW data_directory;'
+kubectl --context "$PUBLIC_CONTEXT" -n kaneo get deployment,pods,svc -o wide
 ```
 
-Expect the source and all three Kustomizations (root, postgres and kaneo) Ready,
-not suspended. Kaneo must depend on postgres being Ready. The source revision
-must match the intended main commit. Expect one healthy Kaneo Pod, one healthy
-PostgreSQL Pod named `kaneo-postgres-0`, two regular ClusterIP Services, one
-headless governing Service and one Bound PVC named `data-kaneo-postgres-0`.
-The SQL check must report PostgreSQL 18.6 and `/var/lib/postgresql/18/docker`.
-Kaneo has only temporary runtime mounts and no application PVC. No other
-application is reconciled. Pending Pods generally mean missing storage labels,
-capacity or PVC provisioning; CreateContainerConfigError often means missing
-input keys.
+Expect every Kustomization (root, cloudnative-pg, postgres and each app)
+Ready, not suspended. The source revision must match the intended main commit.
+In `postgres`: the `Cluster` Ready, `DatabaseRole` and `Database` `kaneo`
+applied, one healthy Pod `postgres-1`, Services `postgres-rw`, `postgres-ro`
+and `postgres-r`, and one Bound volume. The SQL check must report PostgreSQL
+18.6 and list a `kaneo` database. In `kaneo`: one healthy Pod with only
+temporary runtime mounts. Pending Pods generally mean a missing
+`local-storage` node label, capacity or volume provisioning;
+CreateContainerConfigError often means missing input keys; a role that is not
+applied usually means `kaneo-db-password` is missing or has the wrong type
+(see [postgres.md](postgres.md#add-an-app)).
 
 The FluxInstance must be Ready and own the two Flux controller Deployments,
 GitRepository and root Kustomization. The root's inventory must contain the
@@ -96,7 +101,7 @@ kubectl --context "$PUBLIC_CONTEXT" -n flux-system port-forward --address=127.0.
 ```
 
 Open `http://127.0.0.1:9080`. Verify the main revision, postgres dependency,
-StatefulSet and Kaneo Deployment agree with the CLI. Inspect workload status,
+PostgreSQL StatefulSet and app Deployments agree with the CLI. Inspect workload status,
 events and Pod logs; reconcile/suspend/restart must be unavailable in read-only
 mode. No separate dashboard login is expected: the protected kubeconfig permits
 the port-forward. There must be no public Caddy route, Ingress, NodePort or
@@ -160,23 +165,25 @@ Before real use, restart the PostgreSQL StatefulSet and Kaneo Deployment one at
 a time:
 
 ```bash
-kubectl --context "$PUBLIC_CONTEXT" -n kaneo rollout restart statefulset/kaneo-postgres
-kubectl --context "$PUBLIC_CONTEXT" -n kaneo rollout status statefulset/kaneo-postgres --timeout=300s
+kubectl --context "$PUBLIC_CONTEXT" -n postgres delete pod -l cnpg.io/cluster=postgres,cnpg.io/instanceRole=primary
+kubectl --context "$PUBLIC_CONTEXT" -n postgres wait --for=condition=Ready cluster/postgres --timeout=300s
 kubectl --context "$PUBLIC_CONTEXT" -n kaneo rollout restart deployment/kaneo
 kubectl --context "$PUBLIC_CONTEXT" -n kaneo rollout status deployment/kaneo --timeout=300s
-kubectl --context "$PUBLIC_CONTEXT" -n kaneo get pvc
-kubectl --context "$PUBLIC_CONTEXT" -n kaneo get networkpolicy
+kubectl --context "$PUBLIC_CONTEXT" -n postgres get pvc
+kubectl --context "$PUBLIC_CONTEXT" get networkpolicy -n postgres
+kubectl --context "$PUBLIC_CONTEXT" get networkpolicy -n kaneo
 ```
 
-Expect the same Bound database PVC, the stable `kaneo-postgres-0` Pod name,
-successful login and the same test project/task. Verify that the replacement
-Pod has a new UID but still mounts `data-kaneo-postgres-0`; Kaneo runtime files
-are temporary and should not be treated as persistent data.
+Expect the same Bound volume, successful login and the same test
+project/task. The operator recreates the instance Pod with a new UID on the
+same volume; Kaneo runtime files are temporary and should not be treated as
+persistent data.
 Restart the port-forward after Pod replacement. A restart proves local
 persistence; it does not prove restore from backup or tolerance of VPS loss.
 
-Verify policy enforcement with a temporary unrelated probe Pod: access to
-Kaneo:5173 and PostgreSQL:5432 must fail. Prove the probe itself works against a
+Verify policy enforcement with a temporary unrelated probe Pod (without the
+`homelab.example/postgres-client` label): access to Kaneo:5173 and
+PostgreSQL:5432 must fail. Prove the probe itself works against a
 known reachable test target before accepting those denials. In an isolated
 rehearsal, temporarily allow only that probe to Kaneo, confirm success, then
 remove the test allowance and confirm denial again. Do not add a permanent
@@ -230,7 +237,9 @@ flux --context "$PUBLIC_CONTEXT" get all
 kubectl --context "$PUBLIC_CONTEXT" -n kaneo get events --sort-by=.lastTimestamp
 kubectl --context "$PUBLIC_CONTEXT" -n kaneo describe pods
 kubectl --context "$PUBLIC_CONTEXT" -n kaneo logs deployment/kaneo --tail=100
-kubectl --context "$PUBLIC_CONTEXT" -n kaneo logs statefulset/kaneo-postgres --tail=100
+kubectl --context "$PUBLIC_CONTEXT" -n postgres logs -l cnpg.io/cluster=postgres --tail=100
+kubectl --context "$PUBLIC_CONTEXT" -n cnpg-system logs deployment/cnpg-controller-manager --tail=100
+kubectl --context "$PUBLIC_CONTEXT" -n postgres get events --sort-by=.lastTimestamp
 ```
 
 Inspect logs locally and redact them before sharing; application logs and event

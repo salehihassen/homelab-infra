@@ -63,8 +63,10 @@ Original private host names and deployment details are deliberately omitted.
 ## Step 1: current MR, new public Kaneo only
 
 One public server hosts a fresh Kaneo Deployment with ephemeral runtime storage
-and a dedicated PostgreSQL 18 StatefulSet with a retained local database claim.
-The database has its own directory/Flux reconciliation, which Kaneo depends on.
+and a shared PostgreSQL 18 instance run by the CloudNativePG operator, with a
+retained local volume;
+Kaneo gets its own role and database there. The database has its own
+directory/Flux reconciliation, which Kaneo depends on.
 No existing private Kaneo data/credentials are imported.
 Flux Operator manages the two Flux controllers and generated Git/root sync;
 its embedded Mission Control UI is read-only with private port-forward access.

@@ -42,6 +42,32 @@ This replaces a proposed direct-install bootstrap that has never run on the
 fleet. A live Flux adoption/migration would require its own inventory/pruning
 review before removing old controller definitions.
 
+## Operators that Flux deploys (CloudNativePG)
+
+Flux and application operators sit at different layers, so they do not compete:
+
+| Layer | Owns | Defined in |
+|---|---|---|
+| Flux Operator | The Flux controllers and the root sync | `FluxInstance` |
+| Flux | Everything in Git, including operators and their custom resources | `kubernetes/clusters/public-edge` |
+| CloudNativePG operator | The Pods, volumes, Services and Secrets it generates for a `Cluster` | `Cluster`, `DatabaseRole`, `Database` in Git |
+
+Flux applies the CloudNativePG operator (Kustomization `cloudnative-pg`), then
+the database resources (`postgres`, which depends on it), then apps. Flux owns
+the custom resources; the operator owns what it generates from them, which
+never appears in Git. Changing PostgreSQL means editing the custom resources
+in Git, never the generated Pods.
+
+Flux cannot tell when a custom resource is healthy, so the `postgres`
+Kustomization declares `healthCheckExprs`: the `Cluster` must report Ready and
+each role and database must report applied. Apps that depend on `postgres`
+therefore start only once their database exists. Mission Control shows the
+custom resources and their conditions alongside everything else.
+
+Both operators' CRDs and the `Cluster` carry `kustomize.toolkit.fluxcd.io/prune:
+disabled`, and every child Kustomization uses `prune: false`, so a bad commit
+cannot delete a database through Flux.
+
 ## Dashboard access and daily use
 
 Use the loopback-only port-forward in [bootstrap](bootstrap.md), then open
@@ -92,3 +118,5 @@ HA, PostgreSQL replication or surviving ingress during a server outage; the
 - Sync ownership: <https://fluxoperator.dev/docs/instance/sync/>
 - Dashboard access: <https://fluxoperator.dev/docs/web-ui/user-management/>
 - SOPS with Flux: <https://fluxcd.io/flux/guides/mozilla-sops/>
+- Custom health checks: <https://fluxcd.io/flux/components/kustomize/kustomizations/#health-check-expressions>
+- CloudNativePG: <https://cloudnative-pg.io/documentation/current/>

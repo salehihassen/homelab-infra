@@ -3,5 +3,6 @@ kind: Kustomization
 resources:
   - ../../infrastructure/flux-operator
   - flux-instance.yaml
+  - operators.yaml
   - databases.yaml
   - apps.yaml

@@ -13,11 +13,11 @@ spec:
     metadata:
       labels:
         app.kubernetes.io/name: kaneo
+        homelab.example/postgres-client: "true"
     spec:
       automountServiceAccountToken: false
       nodeSelector:
         homelab.example/cluster: public-edge
-        homelab.example/kaneo-storage: "true"
       securityContext:
         runAsNonRoot: true
         runAsUser: 1001
@@ -31,7 +31,7 @@ spec:
           image: ghcr.io/usekaneo/kaneo:2.47.1@sha256:880b2df38fe5385032c9772c8989182d45029bc1f1711a3cb9489b94f482848d
           env:
             - name: POSTGRES_HOST
-              value: kaneo-postgres
+              value: postgres-rw.postgres.svc.cluster.local
             - name: POSTGRES_PORT
               value: "5432"
             - name: POSTGRES_DB

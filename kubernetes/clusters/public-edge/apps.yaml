@@ -15,7 +15,7 @@ spec:
     name: flux-system
   prune: false
   wait: true
-  # Prepare credentials, URL, storage ownership and recovery keys before sync.
+  # Create Kaneo's credentials and settings first (docs/kubernetes/kaneo.md).
   suspend: false
   decryption:
     provider: sops

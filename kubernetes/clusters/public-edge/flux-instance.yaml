@@ -49,6 +49,7 @@ spec:
               - kubernetes/apps/kaneo
               - kubernetes/databases/postgres
               - kubernetes/infrastructure/flux-operator
+              - kubernetes/infrastructure/cloudnative-pg
       - target:
           kind: Kustomization
           name: flux-system

@@ -11,5 +11,5 @@ docs_or_kubernetes_only() {
 
 # True when any path feeds the Kubernetes validation.
 touches_kubernetes() {
-  grep -qE '^(kubernetes/|provisioning/k3s/|scripts/(check-kubernetes\.py|validate-kubernetes\.sh|with-kubernetes-tools\.sh|render-flux-operator\.sh)|\.github/workflows/validate-kubernetes\.yml)'
+  grep -qE '^(kubernetes/|provisioning/k3s/|scripts/(check-kubernetes\.py|validate-kubernetes\.sh|with-kubernetes-tools\.sh|render-flux-operator\.sh|render-cloudnative-pg\.sh)|\.github/workflows/validate-kubernetes\.yml)'
 }

@@ -6,19 +6,68 @@ spec:
   podSelector: {}
   policyTypes: [Ingress, Egress]
 ---
+# Clients in any namespace opt in by labelling their Pods
+# homelab.example/postgres-client: "true".
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: postgres-from-app
+  name: postgres-from-clients
 spec:
   podSelector:
     matchLabels:
-      app.kubernetes.io/name: kaneo-postgres
+      cnpg.io/cluster: postgres
   policyTypes: [Ingress]
   ingress:
     - from:
-        - podSelector:
+        - namespaceSelector: {}
+          podSelector:
             matchLabels:
-              app.kubernetes.io/name: kaneo
+              homelab.example/postgres-client: "true"
       ports:
         - {protocol: TCP, port: 5432}
+---
+# The operator reads each instance's status endpoint.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-from-operator
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/cluster: postgres
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: cnpg-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: cloudnative-pg
+      ports:
+        - {protocol: TCP, port: 8000}
+---
+# Instance and initdb Pods run CloudNativePG's instance manager, which
+# watches its Cluster through the Kubernetes API.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-to-dns-and-api
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/cluster: postgres
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}
+    - ports:
+        - {protocol: TCP, port: 6443}

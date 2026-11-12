@@ -6,14 +6,29 @@ metadata:
 spec:
   interval: 10m
   retryInterval: 1m
-  timeout: 5m
+  timeout: 10m
   path: ./kubernetes/databases/postgres
+  dependsOn:
+    - name: cloudnative-pg
   sourceRef:
     kind: GitRepository
     name: flux-system
   prune: false
   wait: true
-  # Prepare the existing Kaneo namespace/credentials and storage owner first.
+  # Flux cannot read CloudNativePG readiness on its own; these tell it when
+  # the database, roles and databases are actually ready.
+  healthCheckExprs:
+    - apiVersion: postgresql.cnpg.io/v1
+      kind: Cluster
+      current: status.conditions.exists(c, c.type == 'Ready' && c.status == 'True')
+    - apiVersion: postgresql.cnpg.io/v1
+      kind: DatabaseRole
+      current: has(status.applied) && status.applied
+      failed: has(status.applied) && !status.applied
+    - apiVersion: postgresql.cnpg.io/v1
+      kind: Database
+      current: has(status.applied) && status.applied
+      failed: has(status.applied) && !status.applied
   suspend: false
   decryption:
     provider: sops
