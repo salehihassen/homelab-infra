@@ -60,7 +60,7 @@ spec:
             capabilities:
               drop: [ALL]
           resources:
-            requests: {cpu: 100m, memory: 256Mi}
+            requests: {cpu: 50m, memory: 256Mi}
             limits: {cpu: "2", memory: 512Mi}
           startupProbe:
             httpGet: {path: /api/health, port: http}
