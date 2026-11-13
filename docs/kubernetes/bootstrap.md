@@ -1,110 +1,130 @@
-# Bootstrap the single-node public cluster
+# Set up the public K3s cluster
 
-These are operator instructions, not evidence of a deployment. Run only on the
-selected public VPS (`server-2`) and an operator workstation. The private
-cluster is deferred. Nothing here migrates an existing Compose service.
+Run everything on the public server (`server-2`), from the repo root, unless a
+step says otherwise. A workstation also works if its kubeconfig reaches the API
+through your admin VPN. Existing Compose services keep running throughout.
 
-## 1. Discover and prepare the public VPS
+Pinned versions: K3s **v1.37.2+k3s1**, Flux **2.10.0**, Flux Operator
+**0.62.1**. Upgrades are separate reviewed changes (see the end of this page).
+The reasoning behind each choice is in [architecture.md](architecture.md) and
+[gitops.md](gitops.md).
 
-Record OS/init system, CPU architecture, spare CPU/RAM, free disk/inodes,
-mounts, Docker networks/listeners, host/provider routes and backup access. Use
-a supported systemd Linux host. Allow capacity for K3s, Flux, the workloads
-enabled under `kubernetes/clusters/public-edge` and the existing Compose
-workloads; resource requests are not proof of capacity. On a host shared with
-Compose, size the `kubelet-arg` memory reservations in the example config from
-measured Compose usage. Bring layers up one at a time (K3s, Flux, then
-workloads), rechecking host memory and Compose health after each, and stop
-before continuing if either degrades.
+Paste each code block whole. A block pasted in pieces can run a `create`
+command half-finished; if that happens, delete what it made and rerun it.
 
-Record existing Compose health and public URLs before installation. Review the
-Pod/Service CIDRs against all host, Docker, LAN/VPN and provider routes. Reserve
-disjoint ranges for the future private cluster. Confirm IP forwarding and CNI
-requirements; do not change Docker or the OS as part of a blind install.
+## 0. Before you start
 
-Before installation, restrict API port 6443 to approved administrator access
-using host/provider firewalls. Keep 6443, 10250 and 8472 inaccessible from the
-public internet. node-ip and tls-san do not restrict the API listener. Preserve
-SSH and existing Compose ingress. An existing admin VPN is acceptable for API
-access; it does not select inter-node networking. Public agents will not use
-Tailscale as their inter-node transport and are not enrolled in this change.
+- [ ] No earlier K3s: `test ! -d /var/lib/rancher/k3s` succeeds.
+- [ ] At least 25% disk free (`df -h /`). K3s evicts every Pod when the disk
+      runs low, and won't run them again until it frees more space.
+- [ ] The host firewall blocks 6443, 10250 and 8472 from the internet. Setting
+      `node-ip` or `tls-san` does not.
+- [ ] The Pod and Service ranges in the config example don't overlap any route
+      in `ip route` or `docker network inspect`.
+- [ ] A baseline to compare against later:
 
-## 2. Install one K3s server
+```bash
+free -m; docker ps --format '{{.Names}}\t{{.Status}}'; sudo ss -lntup > /tmp/ss-before.txt
+```
 
-This branch pins K3s **v1.37.2+k3s1**, Flux **2.10.0**, and Flux Operator
-**0.62.1**, including its Mission Control dashboard.
-Check supported versions before a future installation; upgrades are separate
-reviewed changes. K3s server also runs workloads, so no separate agent install
-is needed. Use K3s containerd, not `--docker`.
+## 1. Install K3s
 
-1. Copy `provisioning/k3s/public-edge.yaml.example` to ignored
-   `local/public-edge.yaml`. Replace every `REPLACE_WITH_...` marker. Select the
-   node's address and a protected administrator API hostname/IP in tls-san;
-   review routes and CIDRs. Do not assume a public IP is a safe admin endpoint.
-2. Confirm there is no prior K3s installation. Privately transfer the reviewed
-   config to the public VPS, then run the following **on that VPS**. The two
-   existence checks must succeed; otherwise stop and inspect the installation.
+```bash
+umask 077; mkdir -p local
+cp provisioning/k3s/public-edge.yaml.example local/public-edge.yaml
+"${EDITOR:-nano}" local/public-edge.yaml   # replace every REPLACE_WITH_...
+```
 
-   ```bash
-   set -euo pipefail
-   test ! -e /etc/systemd/system/k3s.service
-   test ! -d /var/lib/rancher/k3s
-   sudo install -d -m 0700 /etc/rancher/k3s
-   sudo install -m 0600 /path/to/reviewed-config.yaml /etc/rancher/k3s/config.yaml
-   if sudo grep -q REPLACE_WITH /etc/rancher/k3s/config.yaml; then
-     echo 'Unresolved configuration markers; stop and review.' >&2
-     exit 1
-   fi
-   curl -fL 'https://raw.githubusercontent.com/k3s-io/k3s/v1.37.2%2Bk3s1/install.sh' -o /tmp/k3s-install.sh
-   less /tmp/k3s-install.sh
-   sudo env INSTALL_K3S_VERSION='v1.37.2+k3s1' sh /tmp/k3s-install.sh server
-   ```
+Size `system-reserved` from what Compose actually uses (`docker stats`). Then:
 
-   The installer verifies binary checksums. No installer is run by repository
-   validation. Traefik/ServiceLB stay disabled; Caddy keeps ports 80/443.
-3. Retrieve `/etc/rancher/k3s/k3s.yaml` securely into a mode-0600 file on the
-   workstation. Set its API URL to the protected address covered by tls-san.
-   Give the context a unique name such as `public-edge`. Never commit it.
-4. On the **workstation**, export `KUBECONFIG` to that file and `PUBLIC_CONTEXT`
-   to the reviewed context name. A context name alone does not choose a file.
+```bash
+sudo install -d -m 0700 /etc/rancher/k3s
+sudo install -m 0600 local/public-edge.yaml /etc/rancher/k3s/config.yaml
+sudo grep -c REPLACE_WITH /etc/rancher/k3s/config.yaml   # must print 0
+```
 
-   ```bash
-   : "${KUBECONFIG:?}" "${PUBLIC_CONTEXT:?}"
-   export KUBECONFIG PUBLIC_CONTEXT
-   kubectl --context "$PUBLIC_CONTEXT" cluster-info
-   kubectl --context "$PUBLIC_CONTEXT" get nodes -o wide
-   kubectl --context "$PUBLIC_CONTEXT" -n kube-system get pods
-   kubectl --context "$PUBLIC_CONTEXT" get storageclass
-   ```
+```bash
+curl -fL 'https://raw.githubusercontent.com/k3s-io/k3s/v1.37.2%2Bk3s1/install.sh' -o /tmp/k3s-install.sh
+less /tmp/k3s-install.sh                   # read it before running it
+sudo env INSTALL_K3S_VERSION='v1.37.2+k3s1' sh /tmp/k3s-install.sh server
+```
 
-Expect one Ready node, CoreDNS/local-path provisioner healthy and no Traefik,
-ServiceLB or metrics-server. On the VPS, confirm the pod memory cap took effect
-(`cat /sys/fs/cgroup/kubepods.slice/memory.max` or
-`/sys/fs/cgroup/kubepods/memory.max`, depending on the cgroup driver) and that
-node allocatable memory reflects the reservations. Recheck existing Compose
-health/listeners and public routes. From an untrusted external machine verify
-that the API is unreachable.
+The node is named after `node-name` in the config (`public-server` in the
+example), not after the host.
 
-## 3. Install Flux Operator and prepare inputs
+## 2. Tools and kubeconfig
 
-Live sync tracks protected main. Merge/review this change before enabling it.
-For GitOps rehearsal before merge, use a separate disposable repository with
-these files on its main branch. A local-only render cannot prove Git deploy-key
-authentication or continuous reconciliation from GitHub.
+**Flux CLI**, checksum-verified (`uname -m`: x86_64 → amd64, aarch64 → arm64):
 
-Install Flux CLI 2.10.0 and provide these private workstation inputs:
+```bash
+cd /tmp
+v=2.10.0; arch=amd64
+curl -fLO "https://github.com/fluxcd/flux2/releases/download/v$v/flux_${v}_linux_${arch}.tar.gz"
+curl -fLO "https://github.com/fluxcd/flux2/releases/download/v$v/flux_${v}_checksums.txt"
+grep "flux_${v}_linux_${arch}.tar.gz" "flux_${v}_checksums.txt" | sha256sum --check --strict
+tar -xzf "flux_${v}_linux_${arch}.tar.gz" flux && sudo install -m 0755 flux /usr/local/bin/flux
+cd -
+command -v age-keygen || sudo apt install -y age
+```
 
-- `KUBECONFIG`, `PUBLIC_CONTEXT`: the public cluster's file/context.
-- `GIT_REPOSITORY_URL`: SSH clone URL, without an embedded token.
-- `KEY_FILE`: public cluster's SSH private deploy key, mode 0600.
-- `AGE_KEY_FILE`: public cluster's age private key, mode 0600.
+**Optional: the official kubectl.** K3s's built-in `kubectl` warns
+`config.yaml.d: permission denied` for non-root users. The warning is harmless.
+To silence it, install the official one under another name; the K3s installer
+owns `/usr/local/bin/kubectl`:
 
-Generate new SSH/age keys with ssh-keygen/age-keygen in private storage. Register
-the SSH public key as a read-only repository deploy key. Verify the Git SSH host
-fingerprint against GitHub's published fingerprints. Back up both private keys
-independently. The later private cluster must use different identities/keys.
-No GitHub PAT or Git write credential is placed in Kubernetes.
+```bash
+cd /tmp
+v=v1.37.2
+curl -fLO "https://dl.k8s.io/release/$v/bin/linux/amd64/kubectl"
+curl -fLO "https://dl.k8s.io/release/$v/bin/linux/amd64/kubectl.sha256"
+echo "$(cat kubectl.sha256)  kubectl" | sha256sum --check --strict
+sudo install -m 0755 kubectl /usr/local/bin/kubectl.upstream
+cd -
+```
 
-From the repo root on the workstation:
+**Kubeconfig** as your own user, so you don't need `sudo kubectl`:
+
+```bash
+umask 077; mkdir -p ~/.kube
+sudo install -m 0600 -o "$USER" /etc/rancher/k3s/k3s.yaml ~/.kube/public-edge.yaml
+cat >> ~/.bashrc <<'EOF'
+alias kubectl=kubectl.upstream      # drop this line if you skipped the official kubectl
+export KUBECONFIG=~/.kube/public-edge.yaml PUBLIC_CONTEXT=public-edge
+EOF
+source ~/.bashrc
+kubectl config rename-context default public-edge
+kubectl --context "$PUBLIC_CONTEXT" get nodes -o wide
+kubectl --context "$PUBLIC_CONTEXT" -n kube-system get pods
+```
+
+Expect one Ready node, healthy CoreDNS and local-path, and no Traefik,
+ServiceLB or metrics-server. Check `free -m` and `docker ps` against the
+baseline.
+
+## 3. Create Flux's keys
+
+```bash
+umask 077; mkdir -p local/public-edge-keys
+ssh-keygen -t ed25519 -N '' -C public-edge-flux -f local/public-edge-keys/flux-deploy
+age-keygen -o local/public-edge-keys/age.agekey
+cat local/public-edge-keys/flux-deploy.pub
+```
+
+**Add the deploy key on GitHub now:** the repo's **Settings → Deploy keys →
+Add deploy key**. Paste the `.pub` line and leave **Allow write access**
+unchecked. Without it, Flux fails later with "Source artifact not found".
+
+```bash
+export KEY_FILE=local/public-edge-keys/flux-deploy AGE_KEY_FILE=local/public-edge-keys/age.agekey
+export GIT_REPOSITORY_URL=ssh://git@github.com/<owner>/homelab-infra.git
+```
+
+Copy both private keys **off the server** (password manager or another
+machine). A copy that only exists on the server is lost with the server.
+
+## 4. Install Flux Operator and Flux's Secrets
+
+This installs the operator only; nothing deploys yet.
 
 ```bash
 : "${KUBECONFIG:?}" "${PUBLIC_CONTEXT:?}" "${GIT_REPOSITORY_URL:?}" "${KEY_FILE:?}" "${AGE_KEY_FILE:?}"
@@ -125,133 +145,142 @@ kubectl --context "$PUBLIC_CONTEXT" -n flux-system create secret generic sops-ag
   --from-file=age.agekey="$AGE_KEY_FILE"
 ```
 
-Stop here and prepare every workload enabled under
-`kubernetes/clusters/public-edge`. Each workload's setup doc, linked from
-[kubernetes/README.md](../../kubernetes/README.md), lists the inputs kept out
-of Git: storage-owner node labels, Secrets, ConfigMaps and the recoverable
-copies to save. Installing the operator alone does not install the Flux
-controllers or start app sync. For existing Secrets, inspect ownership
-privately; do not overwrite them to force bootstrap.
-
-## 4. Start Git reconciliation
-
-This step deploys every workload enabled in Git. Each Flux Kustomization's
-`dependsOn` orders them, so apps wait for their databases to become Ready.
-The FluxInstance now installs the two selected Flux controllers and creates
-the GitRepository/root Kustomization. From the same workstation shell:
+**Check GitHub's host key.** This prints only public fingerprints; compare
+them with GitHub's "SSH key fingerprints" page and stop if they differ:
 
 ```bash
+kubectl --context "$PUBLIC_CONTEXT" -n flux-system get secret flux-system \
+  -o jsonpath='{.data.known_hosts}' | base64 -d | ssh-keygen -lf -
+```
+
+If a Secret already exists, find out who made it before replacing it.
+
+## 5. Create the database and app inputs
+
+Everything Flux deploys in step 6 needs these inputs, which stay out of Git:
+
+1. **Pick the database node:** label exactly one node (use its name from
+   step 2, `public-server` in the example):
+
+   ```bash
+   kubectl --context "$PUBLIC_CONTEXT" label node public-server homelab.example/local-storage=true
+   ```
+
+2. **Each app's database password:** [postgres.md, Add an app](postgres.md#add-an-app),
+   step 2.
+3. **Each app's own inputs:** for Kaneo, [kaneo.md, Prepare](kaneo.md#prepare-the-new-instance).
+4. **Copy `local/public-edge-inputs/` off the server**, with the keys.
+
+## 6. Turn on GitOps
+
+This deploys everything enabled under `kubernetes/clusters/public-edge`, in
+dependency order. In a **second session**, watch:
+
+```bash
+flux --context public-edge get kustomizations --watch
+```
+
+In the first session:
+
+```bash
+: "${GIT_REPOSITORY_URL:?}" "${PUBLIC_CONTEXT:?}"
 set -o pipefail
-cat kubernetes/clusters/public-edge/flux-instance.yaml \
-  | flux envsubst --strict \
+flux envsubst --strict < kubernetes/clusters/public-edge/flux-instance.yaml \
   | kubectl --context "$PUBLIC_CONTEXT" apply --server-side --field-manager=kustomize-controller -f -
-kubectl --context "$PUBLIC_CONTEXT" -n flux-system wait --for=condition=Ready \
-  fluxinstance/flux --timeout=600s
-kubectl --context "$PUBLIC_CONTEXT" -n flux-system rollout status deployment/source-controller --timeout=180s
-kubectl --context "$PUBLIC_CONTEXT" -n flux-system rollout status deployment/kustomize-controller --timeout=180s
-flux --context "$PUBLIC_CONTEXT" reconcile source git flux-system
+kubectl --context "$PUBLIC_CONTEXT" -n flux-system wait --for=condition=Ready fluxinstance/flux --timeout=600s
 flux --context "$PUBLIC_CONTEXT" reconcile kustomization flux-system --with-source
 kubectl --context "$PUBLIC_CONTEXT" -n flux-system wait --for=condition=Ready \
   kustomizations.kustomize.toolkit.fluxcd.io --all --timeout=600s
-flux --context "$PUBLIC_CONTEXT" get all
 ```
 
-Cold image downloads can exceed a readiness timeout. Inspect Pod events and
-operator conditions before retrying the wait; a slow pull is not a reason to
-reinstall the operator or recreate credentials.
+**What the watch should show:**
 
-The operator owns the controllers and generated source/root sync. The root
-owns the operator installation, FluxInstance, and database/app reconciliations.
-It reads the Git URL from cluster-settings when applying the FluxInstance from
-Git; missing substitution fails. No second source/root/controller definition
-competes with the operator. Secrets/URL ConfigMap remain human-managed, outside
-Git and root pruning. No placeholder credentials or public hostname is deployed.
-This is a fresh bootstrap; do not apply it as an unreviewed migration of an
-already running directly installed Flux cluster.
+1. `flux-system` Ready: Flux pulled `main` with the deploy key.
+2. `cloudnative-pg`, then `postgres`. `postgres` stays not-ready for a minute
+   or two while the database starts and the app roles are created.
+3. Each app (`kaneo`) Ready last.
 
-## 5. Open Mission Control privately
+The first run pulls several images, so a slow first wait is normal. If a wait
+times out, don't reinstall or recreate anything; see
+[troubleshooting](testing.md#if-something-is-stuck). Then check `free -m` and
+`docker ps` again.
 
-In a separate workstation terminal:
+## 7. Test it and open the dashboard
+
+Work through [testing.md](testing.md). Mission Control, the read-only Flux
+dashboard, is at `http://<server-2 Tailscale address>:9081` from your tailnet
+once the [Caddy route](gitops.md#dashboard-access-and-daily-use) is set up.
+Without it, use a port-forward:
 
 ```bash
-: "${KUBECONFIG:?}" "${PUBLIC_CONTEXT:?}"
 kubectl --context "$PUBLIC_CONTEXT" -n flux-system port-forward --address=127.0.0.1 \
   service/flux-operator 9080:9080
 ```
 
-Open `http://127.0.0.1:9080`. For everyday tailnet access without port-forward,
-see [dashboard access](gitops.md#dashboard-access-and-daily-use). The dashboard
-is read-only and has no separate login in this initial configuration:
-authorization happens when your kubeconfig opens the port-forward. The ClusterIP
-Service has no public route. Its Pod ingress is denied by NetworkPolicy,
-including from other namespaces; host-origin traffic and the Kubernetes
-port-forward have different policy semantics and are not application
-authentication. Do not add a public Caddy route or bind the port-forward to all
-interfaces. SSO/RBAC is a later prerequisite for broader access.
+Then open `http://127.0.0.1:9080` (from a laptop, tunnel first:
+`ssh -N -L 9080:127.0.0.1:9080 <server-2>`). Never bind it to all interfaces
+or add a public route.
 
-Look for the public FluxInstance, source/root sync and each enabled database
-and app. Follow their dependency/health views and inspect events/logs
-locally. Missing databases or credentials should remain visible as failures,
-not be hidden by dummy values. See [GitOps ownership](gitops.md) and follow
-[the test walkthrough](testing.md).
+## Maintenance
 
-## Backup, rollback and later agents
-
-Before persistent use, add and rehearse backup of:
-
-- K3s config, server token (`/var/lib/rancher/k3s/server/token`) and secrets
-  encryption material. For SQLite, stop only K3s and cold-copy its complete
-  `/var/lib/rancher/k3s/server` directory plus config; restart even if capture
-  fails. Compose stays running. etcd-snapshot is not a SQLite backup method.
-- Each stateful workload's recovery set, as its setup doc defines it: usually
-  a native database export plus the matching credentials/settings from one
-  recovery point.
-- SSH/age keys, kubeconfig and recovery instructions in private recoverable
-  storage. Existing Compose backup discovery does not capture these PVCs.
-
-Restore K3s to an isolated matching-version server with original config/token,
-then verify the application. Alternatively rebuild from Git and restore the
-external inputs/native app recovery set to fresh PVCs. Retained disks from a
-lost API are not an automatic restore. Define backup schedule/retention and
-RPO/RTO before accepting valuable public writes.
-
-For manual maintenance first annotate FluxInstance `flux` with
-`fluxcd.controlplane.io/reconcile=disabled`, then pause root, app and database
-reconcilers. Resume children/root and remove the annotation afterwards. This
-prevents the operator from repairing the paused root while you work. Workload
-backup procedures include their own cleanup for this pause. To retire a
-service, disable only its Caddy route, stop its reconciliation, and preserve
-its state/credentials. All existing Compose services remain independently owned.
-K3s uninstall removes local-path data and alters host networking; there is no
-blind uninstall command for a host shared with Compose.
-
-Adding VPS/ARM agents is a later change: validate supported OS/version, routes,
-firewalls, multi-cloud CNI, MTU, DNS, policy enforcement and ARM runtime. Do not
-label a second node as storage owner for a workload pinned to one node. Extra agents do not make local data
-available after this server fails. The architecture records the later serving
-continuity goal without introducing control-plane HA now.
-
-## References and controller updates
-
-- K3s configuration: <https://docs.k3s.io/installation/configuration>
-- K3s multicloud: <https://docs.k3s.io/networking/distributed-multicloud>
-- K3s SQLite restore: <https://docs.k3s.io/datastore/backup-restore>
-- Flux Operator install: <https://fluxoperator.dev/docs/installation/>
-- FluxInstance sync: <https://fluxoperator.dev/docs/instance/sync/>
-- Mission Control access: <https://fluxoperator.dev/docs/web-ui/user-management/>
-- Flux SOPS: <https://fluxcd.io/flux/guides/mozilla-sops/>
-
-Operator/chart updates are separate reviewed changes. Update the version,
-verified chart checksum and image digest in the rendering script/values, then
-regenerate the chart. Helm is only needed for regeneration; this installation
-uses no Helm release and adds no Flux Helm controller:
+**Pause Flux** before manual work, so it doesn't undo your changes. The
+operator would otherwise repair the paused root:
 
 ```bash
-bash scripts/render-flux-operator.sh
-bash scripts/validate-kubernetes.sh
+kubectl --context "$PUBLIC_CONTEXT" -n flux-system annotate fluxinstance/flux \
+  fluxcd.controlplane.io/reconcile=disabled --overwrite
+flux --context "$PUBLIC_CONTEXT" suspend kustomization flux-system
+flux --context "$PUBLIC_CONTEXT" suspend kustomization <app-or-postgres>
+# ... your work ...
+flux --context "$PUBLIC_CONTEXT" resume kustomization <app-or-postgres>
+flux --context "$PUBLIC_CONTEXT" resume kustomization flux-system
+kubectl --context "$PUBLIC_CONTEXT" -n flux-system annotate fluxinstance/flux \
+  fluxcd.controlplane.io/reconcile-
 ```
 
-Flux upgrades change the exact `spec.distribution.version` in the FluxInstance.
-Refresh the validation-only Flux CRD snapshot from that operator-supported
-release and rehearse the generated manifests, patches, dashboard and app/database
-reconciliation. Never edit operator-owned live controllers as an upgrade method.
+**Back up**, before valuable data goes in:
+
+- K3s: `/etc/rancher/k3s/config.yaml` and the whole
+  `/var/lib/rancher/k3s/server` directory (token and secrets-encryption keys),
+  cold-copied with only K3s stopped. Restart K3s even if the copy fails.
+- Each app's recovery set: a native database dump plus its matching
+  credentials (see [kaneo.md](kaneo.md#capture-one-coherent-recovery-set)).
+- `local/public-edge-keys/`, `local/public-edge-inputs/` and the kubeconfig.
+
+Compose backups do not cover any of this. To restore, either restore K3s to a
+matching-version server with the original config and token, or rebuild from
+Git and restore each app's recovery set.
+
+**Retire an app:** remove only its Caddy route, stop its reconciliation, and
+keep its database and credentials. **Never** delete a PVC to fix a startup
+problem, and never blind-run the K3s uninstall script: it deletes local-path
+data and changes host networking on a host shared with Compose.
+
+**More nodes** are a later change. Adding agents needs a tested multi-cloud
+network (not Tailscale), firewall and MTU checks, and does not keep the
+database available if this server fails. See [roadmap.md](roadmap.md).
+
+## Upgrades
+
+- **Flux Operator:** update the version, chart checksum and image digest in
+  `scripts/render-flux-operator.sh` and its values, then:
+
+  ```bash
+  bash scripts/render-flux-operator.sh
+  bash scripts/validate-kubernetes.sh
+  ```
+
+- **Flux:** change `spec.distribution.version` in the FluxInstance and refresh
+  the validation-only Flux CRD snapshot from that release.
+- **K3s:** rerun the installer with the new `INSTALL_K3S_VERSION` after
+  reading the release notes.
+
+Merge the change, then watch it roll out. Never edit operator-owned
+controllers directly.
+
+References: [K3s configuration](https://docs.k3s.io/installation/configuration),
+[K3s backup and restore](https://docs.k3s.io/datastore/backup-restore),
+[Flux Operator](https://fluxoperator.dev/docs/installation/),
+[FluxInstance sync](https://fluxoperator.dev/docs/instance/sync/),
+[Mission Control access](https://fluxoperator.dev/docs/web-ui/user-management/),
+[Flux SOPS](https://fluxcd.io/flux/guides/mozilla-sops/).

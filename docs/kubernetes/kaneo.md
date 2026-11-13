@@ -1,30 +1,21 @@
-# New public Kaneo: inputs, HTTPS and recovery
+# Kaneo on the public cluster
 
-This is an independent, empty instance. Existing private Compose Kaneo and every
-other Compose service keep their current data, credentials and routes. Do not
-import personal projects or reuse private Kaneo's database/auth secret for this
-pilot. SMTP, OAuth, Redis, uploads/S3 integrations are not added.
-
-Kaneo runs as a Deployment in the `kaneo` namespace. Its `/var/lib/kaneo` and
-`/tmp` mounts use `emptyDir`: recreated with each Pod and not backed up. Its
-durable records live in the `kaneo` database on the
-[shared PostgreSQL](postgres.md), reached at
-`postgres-rw.postgres.svc.cluster.local`. Its role and database are declared
-in `kubernetes/databases/postgres/app-databases/kaneo.yaml`. Kaneo's Flux Kustomization depends on
-`postgres` being Ready.
+A new, empty Kaneo instance, separate from the private Compose Kaneo: it shares
+no data or secrets with it. It runs as Deployment `kaneo` in namespace `kaneo`
+and keeps everything durable in the `kaneo` database on the
+[shared PostgreSQL](postgres.md) (`postgres-rw.postgres.svc.cluster.local`).
+Its `/var/lib/kaneo` and `/tmp` are temporary and not backed up. Flux starts it
+only after `postgres` is Ready. SMTP, OAuth, Redis and S3 uploads are not set
+up.
 
 ## Prepare the new instance
 
-Complete this after installing Flux Operator but **before applying the
-FluxInstance** in [bootstrap](bootstrap.md), and after the PostgreSQL
-[first-time setup](postgres.md#first-time-setup). Commands use the workstation's
-public kubeconfig and PUBLIC_CONTEXT, from the repo root. Nothing is printed.
+Do this during [setup](bootstrap.md) step 5, before turning on GitOps.
 
-1. **Database password.** Follow [Add an app](postgres.md#add-an-app) step 2
-   with `app=kaneo`. This writes `local/public-edge-inputs/kaneo/db-password`
-   and creates Secret `kaneo-db-password` in the `postgres` namespace.
-2. **Kaneo's own inputs.** Create the namespace, then Kaneo's Secret (the same
-   database password plus a new auth secret) and its settings:
+1. **Database password:** [Add an app](postgres.md#add-an-app) step 2 with
+   `app=kaneo`. This writes `local/public-edge-inputs/kaneo/db-password`.
+2. **Kaneo's Secret and settings:** the same database password, a new auth
+   secret, and the login address for the first, local test:
 
    ```bash
    umask 077
@@ -44,71 +35,75 @@ public kubeconfig and PUBLIC_CONTEXT, from the repo root. Nothing is printed.
      --from-env-file="$KANEO_SETTINGS_FILE"
    ```
 
-   The initial origin matches the loopback test port. To rotate the database
-   password, change it in both Secrets, then restart Kaneo. Changing
-   `AUTH_SECRET` signs everyone out.
-3. **Save** `local/public-edge-inputs/` and the Flux/age keys in independently
-   recoverable storage. Plan native database backup into the existing
-   Restic/B2 system and prove a restore with test data before accepting
-   valuable writes. Compose backup declarations do not capture Kubernetes state.
-4. **Start reconciliation** (bootstrap §4). Flux installs the CloudNativePG
-   operator, then PostgreSQL with Kaneo's role and database, then Kaneo. Then
-   work through [testing.md](testing.md): claim the administrator,
-   verify auth, CRUD, restart survival and Flux drift repair before public
-   exposure.
-
-Inputs initially stay operator-managed. To adopt SOPS later, add encrypted
-resources to their owning app/database Kustomize path and encrypt only to
-the public cluster age recipient. Both reconcilers reference sops-age. Protect
-both data/stringData; ConfigMap hostnames are private deployment inputs too.
-Never commit private keys or plaintext runtime resources.
-
-## Add only the new public HTTPS route
-
-After local acceptance and a restore drill:
-
-1. Select a new public hostname. Set KANEO_CLIENT_URL in the private settings
-   file to its final HTTPS origin (no trailing slash). Apply the updated
-   ConfigMap and restart Kaneo so the new origin takes effect:
+3. **Check** the key names, without printing values:
 
    ```bash
+   kubectl --context "$PUBLIC_CONTEXT" -n kaneo get secret kaneo-credentials \
+     -o go-template='{{range $k, $v := .data}}{{$k}} {{end}}{{"\n"}}'   # AUTH_SECRET POSTGRES_PASSWORD
+   kubectl --context "$PUBLIC_CONTEXT" -n kaneo get configmap kaneo-settings -o jsonpath='{.data}{"\n"}'
+   ```
+
+4. **Copy `local/public-edge-inputs/` off the server.**
+
+Don't edit these files in an editor: the password must not end in a newline.
+To rotate the database password, change it in both Secrets, then restart
+Kaneo. Changing `AUTH_SECRET` signs everyone out.
+
+Later, to keep these inputs in Git, encrypt them with SOPS to the public
+cluster's age key only. Never commit plaintext Secrets or private keys.
+
+## Add the public HTTPS route
+
+Only after the admin account is claimed ([testing.md](testing.md) step 3) and
+a restore drill passed. The site is already in
+`hosts/server-2/caddy/Caddyfile`; Compose Caddy (host network) reaches Kaneo's
+ClusterIP directly, so no Kubernetes policy changes.
+
+1. **Point Kaneo at its public address** (`https://`, no trailing slash) in
+   the settings file, then apply it and restart:
+
+   ```bash
+   "${EDITOR:-nano}" "$KANEO_SETTINGS_FILE"     # KANEO_CLIENT_URL=https://<kaneo domain>
    kubectl --context "$PUBLIC_CONTEXT" -n kaneo create configmap kaneo-settings \
      --from-env-file="$KANEO_SETTINGS_FILE" --dry-run=client -o yaml \
      | kubectl --context "$PUBLIC_CONTEXT" apply -f -
    kubectl --context "$PUBLIC_CONTEXT" -n kaneo rollout restart deployment/kaneo
    kubectl --context "$PUBLIC_CONTEXT" -n kaneo rollout status deployment/kaneo --timeout=300s
-   kubectl --context "$PUBLIC_CONTEXT" -n kaneo get service kaneo
    ```
 
-   Login now needs that HTTPS origin. Loopback remains useful for health checks.
-2. The public Caddy container uses host networking. On this same public node it
-   can reach Kaneo's actual ClusterIP:5173 through K3s service rules. Set private
-   KANEO_K3S_UPSTREAM to that address/port and KANEO_PUBLIC_DOMAIN to the chosen
-   hostname in `/opt/caddy/routing.env`, already loaded by Compose Caddy.
-   From the VPS and the actual Caddy container, request the upstream's
-   `/api/health` before changing routes. The node-to-local-Pod path is permitted
-   by Kubernetes policy semantics; this host remains an administrative trust
-   boundary. Do not add an allow-all policy to mask a failed path test.
-3. The Kaneo site is already in `hosts/server-2/caddy/Caddyfile`. Add both
-   variables to `/opt/caddy/routing.env` **before** recreating Caddy: with an
-   empty KANEO_PUBLIC_DOMAIN the Caddyfile is invalid and Caddy, with every
-   public site, fails to start. Point DNS at the host so Caddy can obtain the
-   certificate.
-4. Recreate **only Caddy** to load added environment values; reload alone does
-   not refresh its process environment. Follow the existing server-2 playbook.
-   From the repository root on that host, the targeted Compose operation is:
+   From now on, login only works at the public address.
+2. **Tell Caddy where Kaneo is.** Add both lines to `/opt/caddy/routing.env`
+   **before** recreating Caddy. With an empty domain the Caddyfile is invalid,
+   and Caddy, with every public site, fails to start:
+
+   ```bash
+   kubectl --context "$PUBLIC_CONTEXT" -n kaneo get service kaneo -o jsonpath='{.spec.clusterIP}{"\n"}'
+   # in /opt/caddy/routing.env:
+   #   KANEO_PUBLIC_DOMAIN=<kaneo domain>
+   #   KANEO_K3S_UPSTREAM=<that ClusterIP>:5173
+   ```
+
+3. **Check Caddy can reach it:**
+
+   ```bash
+   upstream=<that ClusterIP>:5173
+   curl --fail "http://$upstream/api/health"
+   docker exec caddy wget -qO- "http://$upstream/api/health"
+   ```
+
+4. **Point DNS** for the domain at the server, so Caddy can get a certificate.
+5. **Recreate only Caddy** (a reload doesn't pick up new env values):
 
    ```bash
    docker compose --project-directory hosts/server-2 -f hosts/server-2/compose.yaml up -d --no-deps caddy
    ```
 
-   Run the checks in testing.md against public HTTPS and every pre-existing
-   public service. No direct 5173/5432 listener should be exposed.
+Then run the public checks at the end of [testing.md](testing.md).
 
-Do not assume the ClusterIP stays constant after deleting/recreating its Service
-or cluster. Update the private upstream during recovery. This same-host bridge
-is for the single-node pilot. Redundant ingress and external traffic failover
-belong to a later change; Caddy here is a single entry point.
+The ClusterIP changes if the Service or cluster is recreated: update
+`KANEO_K3S_UPSTREAM` after any rebuild. To take Kaneo offline publicly, remove
+only its two routing lines and recreate Caddy; keep its database, credentials
+and recovery set.
 
 ## Capture one coherent recovery set
 
