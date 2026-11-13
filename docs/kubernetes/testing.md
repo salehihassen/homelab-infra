@@ -2,8 +2,9 @@
 
 Run these after [setup](bootstrap.md), on the public server, from the repo
 root, with `KUBECONFIG` and `PUBLIC_CONTEXT` exported. Each step lists what
-good looks like. Steps 4–9 briefly interrupt only the new app; Compose services
-are never touched.
+good looks like. Steps 4–8 briefly interrupt only the new app. Step 9 reboots
+the host and briefly interrupts every Compose service too, so schedule it
+accordingly.
 
 Flux deploys `main` only: a local edit or an unmerged branch changes nothing
 live.
@@ -150,6 +151,9 @@ own, on loopback or the cluster ranges, and Caddy's tailnet-only 9081. Open
 every existing public site and check it still works.
 
 ## 9. Survives a reboot
+
+This takes down every service on the host, Compose and public Caddy included,
+until it is back up.
 
 ```bash
 sudo reboot
