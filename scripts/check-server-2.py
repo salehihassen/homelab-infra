@@ -53,12 +53,14 @@ def routing(doc):
         examples.update(l.split("=", 1) for l in p.read_text().splitlines() if l and not l.startswith("#"))
     routes = [n for n in nodes(doc) if any("host" in m for m in n.get("match", []))]
     actual = {h for route in routes for m in route["match"] for h in m.get("host", [])}
-    expected = {examples[k] for k in UPSTREAMS} | {examples[k] for k in ["PROFILE_DOMAIN", "PROFILE_ALIAS_DOMAIN", "RESOURCES_DOMAIN"]}
+    # Kaneo runs on K3s; its private upstream is the Service ClusterIP:5173.
+    upstreams = UPSTREAMS | {"KANEO_PUBLIC_DOMAIN": examples["KANEO_K3S_UPSTREAM"]}
+    expected = {examples[k] for k in upstreams} | {examples[k] for k in ["PROFILE_DOMAIN", "PROFILE_ALIAS_DOMAIN", "RESOURCES_DOMAIN"]}
     assert actual == expected, "Only explicitly configured active app and redirect hosts may be served"
-    for key, upstream in UPSTREAMS.items():
+    for key, upstream in upstreams.items():
         route = next(r for r in routes if any(examples[key] in m.get("host", []) for m in r["match"]))
         proxies = [n for n in nodes(route) if n.get("handler") == "reverse_proxy"]
-        assert len(proxies) == 1 and proxies[0].get("upstreams") == [{"dial": upstream}], key + ": exact loopback backend"
+        assert len(proxies) == 1 and proxies[0].get("upstreams") == [{"dial": upstream}], key + ": exact backend"
         proxy = proxies[0]
         assert proxy.get("headers", {}).get("request", {}).get("delete") == ["Tailscale-*"], key + ": strip identity headers"
         skip = proxy.get("transport", {}).get("tls", {}).get("insecure_skip_verify", False)

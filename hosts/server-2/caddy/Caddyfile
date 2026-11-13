@@ -44,3 +44,9 @@ https://{$PROFILE_DOMAIN}, https://{$PROFILE_ALIAS_DOMAIN} {
 https://{$RESOURCES_DOMAIN} {
 	redir {$RESOURCES_REDIRECT_URL} temporary
 }
+# Kaneo on the public K3s cluster: its Service ClusterIP:5173 on this host.
+https://{$KANEO_PUBLIC_DOMAIN} {
+	reverse_proxy {$KANEO_K3S_UPSTREAM} {
+		header_up -Tailscale-*
+	}
+}

@@ -22,11 +22,14 @@ disable:
 # its share: the kubepods cgroup is capped at capacity - system-reserved -
 # kube-reserved, and pods are evicted before Compose containers when host
 # memory runs low. Size system-reserved from measured Compose usage.
-# Setting eviction-hard replaces all defaults, so the disk thresholds are kept.
+# Setting eviction-hard replaces all defaults, so the disk thresholds are set
+# too. Compose shares this disk: K3s's default minimum reclaim (10%) would keep
+# every Pod evicted until 25% of the disk is free again.
 kubelet-arg:
   - system-reserved=memory=2Gi
   - kube-reserved=memory=512Mi
-  - eviction-hard=memory.available<200Mi,nodefs.available<10%,imagefs.available<15%,nodefs.inodesFree<5%
+  - eviction-hard=memory.available<200Mi,nodefs.available<10%,imagefs.available<10%,nodefs.inodesFree<5%
+  - eviction-minimum-reclaim=nodefs.available=1Gi,imagefs.available=1Gi
 flannel-backend: vxlan
 secrets-encryption: true
 write-kubeconfig-mode: "0600"
