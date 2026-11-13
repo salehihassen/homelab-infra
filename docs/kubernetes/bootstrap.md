@@ -179,13 +179,15 @@ kubectl --context "$PUBLIC_CONTEXT" -n flux-system port-forward --address=127.0.
   service/flux-operator 9080:9080
 ```
 
-Open `http://127.0.0.1:9080`. The dashboard is read-only and has no separate login
-in this initial configuration: authorization happens when your kubeconfig opens
-the port-forward. The ClusterIP Service has no public route. Its Pod ingress is
-denied by NetworkPolicy, including from other namespaces; host-origin traffic
-and the Kubernetes port-forward have different policy semantics and are not
-application authentication. Do not add a Caddy route or bind the port-forward
-to all interfaces. SSO/RBAC is a later prerequisite for broader access.
+Open `http://127.0.0.1:9080`. For everyday tailnet access without port-forward,
+see [dashboard access](gitops.md#dashboard-access-and-daily-use). The dashboard
+is read-only and has no separate login in this initial configuration:
+authorization happens when your kubeconfig opens the port-forward. The ClusterIP
+Service has no public route. Its Pod ingress is denied by NetworkPolicy,
+including from other namespaces; host-origin traffic and the Kubernetes
+port-forward have different policy semantics and are not application
+authentication. Do not add a public Caddy route or bind the port-forward to all
+interfaces. SSO/RBAC is a later prerequisite for broader access.
 
 Look for the public FluxInstance, source/root sync and each enabled database
 and app. Follow their dependency/health views and inspect events/logs

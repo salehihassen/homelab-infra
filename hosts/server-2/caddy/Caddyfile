@@ -50,3 +50,14 @@ https://{$KANEO_PUBLIC_DOMAIN} {
 		header_up -Tailscale-*
 	}
 }
+# Flux Operator's read-only Mission Control, for tailnet clients only: its
+# Service ClusterIP:9080 on this host. Filtered by source rather than bound to
+# the Tailscale address, so a late tailscaled cannot stop Caddy, and with it
+# every public site, from starting.
+http://:9081 {
+	@outside not remote_ip 100.64.0.0/10 fd7a:115c:a1e0::/48
+	respond @outside 403
+	reverse_proxy {$FLUX_UI_K3S_UPSTREAM} {
+		header_up -Tailscale-*
+	}
+}

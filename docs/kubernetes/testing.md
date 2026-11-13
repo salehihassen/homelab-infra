@@ -105,7 +105,9 @@ PostgreSQL `Cluster` and app Deployments agree with the CLI. Inspect workload st
 events and Pod logs; reconcile/suspend/restart must be unavailable in read-only
 mode. No separate dashboard login is expected: the protected kubeconfig permits
 the port-forward. There must be no public Caddy route, Ingress, NodePort or
-host listener for 9080. Stop port-forward and confirm local access ends.
+host listener for 9080. Stop port-forward and confirm local access ends. The
+tailnet route must load the same dashboard from a tailnet device at port 9081,
+and the host's public address must not answer on 9081.
 
 In the disposable rehearsal, verify an otherwise reachable probe in both
 flux-system and an unrelated namespace cannot connect to the operator Pod on

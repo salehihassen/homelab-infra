@@ -70,21 +70,26 @@ cannot delete a database through Flux.
 
 ## Dashboard access and daily use
 
-Use the loopback-only port-forward in [bootstrap](bootstrap.md), then open
+From a tailnet device, open `http://<server-2 Tailscale address>:9081`, or use
+the loopback-only port-forward in [bootstrap](bootstrap.md) and open
 `http://127.0.0.1:9080`. The upstream default UI provides read-only inspection:
 resource health, dependencies, rollout details, events and Pod logs. It does
 not display Secret/ConfigMap contents or permit reconcile/suspend/restart
 actions in this mode. Use the CLI for those operations and keep changes in Git.
 
-The UI has no separate login. The kubeconfig authorizes starting port-forward;
-the default UI endpoint itself is anonymous. Its Service is ClusterIP with no
-Ingress, NodePort or Caddy route. A deny-ingress policy selects the operator,
-and patches narrow Flux's additive namespace policies to its two controllers
-so they cannot accidentally allow dashboard access from other Pods. Host/node
-traffic is not protected by Pod ingress policy in the same way; private API
-access and host firewalls remain required. SSO/RBAC must precede shared or
-external dashboard access. This dashboard is an administrator tool, not a new
-internet-facing application.
+The UI has no separate login: the default UI endpoint is anonymous. The
+kubeconfig authorizes starting port-forward. The tailnet route is server-2's
+Compose Caddy on port 9081, proxying to the dashboard's ClusterIP; Caddy answers
+403 to any source outside the Tailscale ranges, and the host firewall keeps the
+port closed publicly. Set `FLUX_UI_K3S_UPSTREAM` in `/opt/caddy/routing.env` to
+the `flux-operator` Service ClusterIP:9080, then recreate Caddy. The Service has
+no Ingress, NodePort or public route. A deny-ingress policy selects the
+operator, and patches narrow Flux's additive namespace policies to its two
+controllers so they cannot accidentally allow dashboard access from other Pods.
+Host/node traffic is not protected by Pod ingress policy in the same way;
+private API access and host firewalls remain required. SSO/RBAC must precede
+shared or external dashboard access. This dashboard is an administrator tool,
+not a new internet-facing application.
 
 For a deployment, check the Git revision, postgres readiness and Kaneo readiness.
 Follow the database dependency when Kaneo is waiting; inspect events for missing

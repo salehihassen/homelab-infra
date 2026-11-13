@@ -14,7 +14,7 @@ future private cluster or the single-server public serving-continuity goal.
 | Component | Initial placement | State |
 | --- | --- | --- |
 | public-edge | server-2, existing public VPS | One K3s server, also running workloads; SQLite datastore |
-| Flux Operator / Mission Control | public-edge | Pinned operator with embedded read-only UI; loopback port-forward access |
+| Flux Operator / Mission Control | public-edge | Pinned operator with embedded read-only UI; port-forward or tailnet-only Caddy access |
 | Flux | public-edge | Operator-managed source/Kustomize controllers; read-only Git deploy identity |
 | Kaneo | public server | One Deployment replica, new credentials and temporary runtime storage |
 | CloudNativePG | public server, `cnpg-system` namespace | Operator that runs PostgreSQL from `Cluster`, `DatabaseRole` and `Database` resources |
@@ -84,12 +84,13 @@ use separate identities, keys, tokens, kubeconfigs and backups.
 
 Mission Control is embedded in the operator, uses its upstream read-only mode
 and has no separate login in this pilot. Access is by loopback port-forward
-authorized through the protected Kubernetes API. Its ClusterIP has no public
-route, and direct Pod ingress is denied; generated Flux allowance policies are
-narrowed so they do not reopen it. Host-origin traffic remains a separate
-firewall concern. Shared/public dashboard access requires SSO/RBAC first. See
-[GitOps ownership and maintenance](gitops.md). Adding the operator does not add
-a Helm controller or change application/database manifests.
+authorized through the protected Kubernetes API, or through server-2 Caddy's
+port that answers only Tailscale sources. Its ClusterIP has no public route, and
+direct Pod ingress is denied; generated Flux allowance policies are narrowed so
+they do not reopen it. Host-origin traffic remains a separate firewall concern.
+Shared/public dashboard access requires SSO/RBAC first. See [GitOps ownership
+and maintenance](gitops.md). Adding the operator does not add a Helm controller
+or change application/database manifests.
 
 ## Runtime, persistence and exposure
 
