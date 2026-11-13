@@ -1,0 +1,32 @@
+# Copy to local/public-edge.yaml; fill in after host/network discovery.
+# Install as /etc/rancher/k3s/config.yaml on the PUBLIC server only.
+node-name: public-server
+node-ip: REPLACE_WITH_PUBLIC_SERVER_NODE_IPV4
+tls-san:
+  - REPLACE_WITH_PROTECTED_ADMIN_API_HOST_OR_IPV4
+# Select the node's own address after route discovery. An admin VPN address in
+# tls-san does not select a public multi-node CNI or restrict the API listener.
+node-label:
+  - homelab.example/cluster=public-edge
+# Apply the homelab.example/local-storage=true label manually, to one node,
+# only after selecting its data disk (docs/kubernetes/postgres.md).
+cluster-cidr: 10.144.0.0/16
+service-cidr: 10.145.0.0/16
+cluster-dns: 10.145.0.10
+disable:
+  - traefik
+  - servicelb
+  # Saves memory on the shared Compose host; use host tools instead of kubectl top.
+  - metrics-server
+# On a host shared with Compose, the scheduler cannot see Docker, so reserve
+# its share: the kubepods cgroup is capped at capacity - system-reserved -
+# kube-reserved, and pods are evicted before Compose containers when host
+# memory runs low. Size system-reserved from measured Compose usage.
+# Setting eviction-hard replaces all defaults, so the disk thresholds are kept.
+kubelet-arg:
+  - system-reserved=memory=2Gi
+  - kube-reserved=memory=512Mi
+  - eviction-hard=memory.available<200Mi,nodefs.available<10%,imagefs.available<15%,nodefs.inodesFree<5%
+flannel-backend: vxlan
+secrets-encryption: true
+write-kubeconfig-mode: "0600"

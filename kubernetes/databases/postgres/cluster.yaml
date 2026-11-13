@@ -1,0 +1,27 @@
+# Shared PostgreSQL for the public cluster's apps, run by the CloudNativePG
+# operator. Apps get their roles and databases from app-databases/.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: postgres
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: disabled
+spec:
+  # One writer; more instances add streaming replicas on other nodes.
+  instances: 1
+  imageName: ghcr.io/cloudnative-pg/postgresql:18.6-minimal-trixie@sha256:ec2ed3404e89fff99643901b58a2a34c46a46345fe69a3d96500b82f995c327b
+  enableSuperuserAccess: false
+  storage:
+    storageClass: local-retain
+    size: 10Gi
+  affinity:
+    nodeSelector:
+      homelab.example/cluster: public-edge
+      homelab.example/local-storage: "true"
+  resources:
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {cpu: "1", memory: 512Mi}
+  postgresql:
+    parameters:
+      shared_buffers: 64MB
+      max_connections: "50"

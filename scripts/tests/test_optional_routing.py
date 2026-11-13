@@ -3,6 +3,7 @@
 import importlib.util
 import json
 import os
+import shutil
 from pathlib import Path
 import subprocess
 import tempfile
@@ -69,7 +70,7 @@ class RoutingSelectionTests(unittest.TestCase):
                            "AVAILABLE_DOMAIN": "available.example",
                            "CADDY_BIND_ADDRESSES": "100.64.0.10"}
             result = subprocess.run(
-                ["sh", str(REPO / "hosts/server-1/caddy/render-sites.sh"), "/bin/true"],
+                ["sh", str(REPO / "hosts/server-1/caddy/render-sites.sh"), shutil.which("true")],
                 env=environment, text=True, capture_output=True, check=True,
             )
             self.assertEqual(imports.read_text(), f'import "{root}/available/site.caddy"\n')
@@ -81,7 +82,7 @@ class RoutingSelectionTests(unittest.TestCase):
             root = Path(temporary)
             imports = root / "imports.caddy"
             subprocess.run(
-                ["sh", str(REPO / "hosts/server-1/caddy/render-sites.sh"), "/bin/true"],
+                ["sh", str(REPO / "hosts/server-1/caddy/render-sites.sh"), shutil.which("true")],
                 env={"PATH": os.environ["PATH"], "CADDY_SITE_ROOT": str(root),
                      "CADDY_SITE_IMPORTS": str(imports)}, check=True,
             )

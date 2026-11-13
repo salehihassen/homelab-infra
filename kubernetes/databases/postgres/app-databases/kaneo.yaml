@@ -1,0 +1,22 @@
+# The password comes from Secret kaneo-db-password in this namespace
+# (type kubernetes.io/basic-auth, username kaneo). See docs/kubernetes/postgres.md.
+apiVersion: postgresql.cnpg.io/v1
+kind: DatabaseRole
+metadata:
+  name: kaneo
+spec:
+  cluster: {name: postgres}
+  name: kaneo
+  login: true
+  passwordSecret: {name: kaneo-db-password}
+  databaseRoleReclaimPolicy: retain
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: kaneo
+spec:
+  cluster: {name: postgres}
+  name: kaneo
+  owner: kaneo
+  databaseReclaimPolicy: retain

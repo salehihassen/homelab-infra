@@ -1,0 +1,25 @@
+name: Validate Kubernetes foundation
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  manifests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install YAML parser
+        run: |
+          python3 -m venv "$RUNNER_TEMP/kubernetes-validation"
+          "$RUNNER_TEMP/kubernetes-validation/bin/pip" install 'PyYAML==6.0.3'
+          echo "$RUNNER_TEMP/kubernetes-validation/bin" >> "$GITHUB_PATH"
+      - name: Render roots and workloads; check schemas and migration contracts
+        run: bash scripts/validate-kubernetes.sh
