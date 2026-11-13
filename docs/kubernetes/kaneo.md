@@ -89,11 +89,11 @@ After local acceptance and a restore drill:
    `/api/health` before changing routes. The node-to-local-Pod path is permitted
    by Kubernetes policy semantics; this host remains an administrative trust
    boundary. Do not add an allow-all policy to mask a failed path test.
-3. Review the opt-in `provisioning/k3s/caddy-kaneo.caddy.example` block and add
-   only that new site to the public host's Caddyfile. Do not replace existing
-   routes. Arrange DNS and certificate issuance. Validate the full config and
-   existing routes using the server-2 playbook/tooling before applying it.
-   The template is not imported by this branch's active Compose configuration.
+3. The Kaneo site is already in `hosts/server-2/caddy/Caddyfile`. Add both
+   variables to `/opt/caddy/routing.env` **before** recreating Caddy: with an
+   empty KANEO_PUBLIC_DOMAIN the Caddyfile is invalid and Caddy, with every
+   public site, fails to start. Point DNS at the host so Caddy can obtain the
+   certificate.
 4. Recreate **only Caddy** to load added environment values; reload alone does
    not refresh its process environment. Follow the existing server-2 playbook.
    From the repository root on that host, the targeted Compose operation is:
