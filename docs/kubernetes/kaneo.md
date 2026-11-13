@@ -107,16 +107,27 @@ and recovery set.
 
 ## Capture one coherent recovery set
 
-Use test content for the first rehearsal. Before public use, define RPO/RTO,
-retention, backup scheduling and failure alerts. Keep the matching database,
-stable auth secret, password and origin settings together. A raw live PostgreSQL
-data-directory copy is not a native backup.
+A recovery set is a native database dump plus the credentials and settings
+that match it, taken together. A copy of PostgreSQL's data directory is not
+one. Captures are manual: nothing schedules them or copies them off the
+server yet, and server-2's nightly Restic backup covers Compose only.
 
-Set RECOVERY_DIR to a new private directory **outside tracked source**, and
-export the input file paths from preparation. The following workstation
-subshell stops only Kaneo, leaving PostgreSQL, its other databases and Compose
-services running. Its cleanup resumes reconciliation even if capture fails.
-Treat a failing capture as incomplete and never upload it as a valid backup.
+Run this on the server, from the repo root, with `KUBECONFIG` and
+`PUBLIC_CONTEXT` exported. If you ever changed a Secret or ConfigMap by hand,
+update the input files to match first. Then point at the inputs and a new
+private directory outside the repo:
+
+```bash
+dir=local/public-edge-inputs/kaneo
+export KANEO_CREDENTIALS_FILE="$dir/credentials.env" KANEO_SETTINGS_FILE="$dir/settings.env"
+mkdir -p -m 0700 ~/k3s-recovery
+export RECOVERY_DIR=~/k3s-recovery/kaneo-$(date +%F)   # must not exist yet
+```
+
+The capture stops only Kaneo, for about 30 seconds; the public site answers
+502 meanwhile. PostgreSQL, its other databases and Compose keep running. If
+any step fails, the cleanup still resumes Flux, and the capture is incomplete:
+never keep it as a backup.
 
 ```bash
 (
@@ -153,49 +164,123 @@ flux --context "$PUBLIC_CONTEXT" reconcile kustomization kaneo --with-source
 kubectl --context "$PUBLIC_CONTEXT" -n kaneo rollout status deployment/kaneo --timeout=300s
 ```
 
-Keep the private input files synchronized with any credential/origin changes
-before capture. Check capture success and resumed application health explicitly; cleanup errors
-must be repaired. Include the complete set in encrypted Restic storage using a
-separately configured host capture/transfer job. No scheduler or backup account
-is silently installed by this branch. Capture K3s state separately as described
-in bootstrap.md; Git alone does not preserve credentials or application data.
+**Good looks like:** the last line says `successfully rolled out`;
+`ls -l "$RECOVERY_DIR"` lists `kaneo.dump`, `credentials.env`,
+`settings.env` and `db-password`, all `-rw-------`; and
+`flux --context "$PUBLIC_CONTEXT" get kustomizations` shows every one Ready and
+none suspended.
 
-## Restore drill and retirement
+Then **copy the directory off the server**, to encrypted storage you control:
+`scp -r <server-2>:k3s-recovery/kaneo-<date> .` from your laptop.
 
-Restore to an isolated fresh candidate with **no public route**, never over the
-running instance or existing Compose Kaneo. Use the same pinned app/PostgreSQL
-release and matching recovery credentials. Pause FluxInstance reconciliation
-first as in the capture procedure, then suspend root, app and database
-reconciliation, scale candidate Kaneo to zero, and wait for its Pod to disappear. Keep candidate
-PostgreSQL running.
+K3s's own state is captured separately; see [setup](bootstrap.md),
+Maintenance.
 
-Review the dump with pg_restore --list. The target database must be empty:
-Kaneo creates schema on startup. In the isolated candidate only, create
-`kaneo-db-password` from the recovered `db-password`
-([Add an app](postgres.md#add-an-app) step 2) and let Flux create the empty
-`kaneo` database, then import the custom-format dump as objects owned by
-`kaneo`:
+## Restore drill
 
-```bash
-primary="$(kubectl --context "$RESTORE_CONTEXT" -n postgres get pod -o name \
-  -l cnpg.io/cluster=postgres,cnpg.io/instanceRole=primary)"
-kubectl --context "$RESTORE_CONTEXT" -n postgres exec -i "$primary" -c postgres -- \
-  pg_restore -d kaneo --role=kaneo --no-owner --no-acl --exit-on-error < "$RECOVERY_DIR/kaneo.dump"
-```
+Last drill: 2026-11-13. The restored tables matched live row for row, and
+login, reads, writes and restarts all worked.
 
-There is no application-file archive to restore. Kaneo regenerates its runtime
-files on startup. If S3 uploads are added later, include the object store and
-its matching database records in a revised recovery procedure.
+Restore into a throwaway cluster on another machine, never over the live
+instance. That machine needs Docker, [k3d](https://k3d.io) and kubectl, the
+repo at the commit the live cluster runs, and the recovery set in a private
+directory. The candidate has no Flux and no public route.
 
-RESTORE_CONTEXT must select an isolated candidate kubeconfig; export its
-KUBECONFIG explicitly. Never mount or edit a live PostgreSQL volume. Restore the
-matching auth secret/password, adapt only the candidate browser origin for
-local access, resume database, app and root reconciliation and verify login,
-test project, task and restart survival. A successful SQL import alone is not an application
-restore drill.
+1. **Create the candidate**, on the server's K3s version, with its own
+   kubeconfig:
 
-To withdraw the new service, remove only its new Caddy route and preserve its
-`kaneo` database, credentials and recovery set. Keep existing private Compose Kaneo
-running as its own instance. After public writes, any redeployment needs the
-new instance's current data, not an old private database. Never delete PVCs to roll back an
-image; retained PVCs do not survive disk failure or careless K3s uninstall.
+   ```bash
+   export RECOVERY_DIR=<the recovery set> RESTORE_CONTEXT=k3d-kaneo-restore
+   export KUBECONFIG=~/kaneo-restore.kubeconfig
+   k3d cluster create kaneo-restore --image rancher/k3s:v1.37.2-k3s1 --no-lb \
+     --api-port 127.0.0.1:6550 --kubeconfig-update-default=false \
+     --k3s-arg '--disable=traefik@server:0' --k3s-arg '--disable=servicelb@server:0' \
+     --k3s-arg '--node-label=homelab.example/cluster=public-edge@server:0'
+   (umask 077; k3d kubeconfig get kaneo-restore > "$KUBECONFIG")
+   k() { kubectl --context "$RESTORE_CONTEXT" "$@"; }
+   k label node k3d-kaneo-restore-server-0 homelab.example/local-storage=true
+   ```
+
+2. **Install the database** from the repo, with the recovered password. The
+   operator needs `--server-side`: its CRDs are too large for a normal apply.
+
+   ```bash
+   k apply --server-side -k kubernetes/infrastructure/cloudnative-pg
+   k -n cnpg-system rollout status deployment/cnpg-controller-manager --timeout=300s
+   k apply -f kubernetes/databases/postgres/namespace.yaml
+   k -n postgres create secret generic kaneo-db-password --type=kubernetes.io/basic-auth \
+     --from-literal=username=kaneo --from-file=password="$RECOVERY_DIR/db-password"
+   k apply -k kubernetes/databases/postgres
+   k -n postgres wait --for=condition=Ready cluster/postgres --timeout=600s
+   k -n postgres wait --for=jsonpath='{.status.applied}'=true \
+     databaserole/kaneo database/kaneo --timeout=120s
+   ```
+
+3. **Import the dump** before Kaneo starts: the database must be empty, or
+   Kaneo creates its own schema first.
+
+   ```bash
+   primary="$(k -n postgres get pod -o name -l cnpg.io/cluster=postgres,cnpg.io/instanceRole=primary)"
+   k -n postgres exec -i "$primary" -c postgres -- pg_restore --list < "$RECOVERY_DIR/kaneo.dump" | head -8
+   k -n postgres exec -i "$primary" -c postgres -- \
+     pg_restore -d kaneo --role=kaneo --no-owner --no-acl --exit-on-error < "$RECOVERY_DIR/kaneo.dump"
+   ```
+
+4. **Compare row counts** with the live database. Define `counts` on both
+   machines, run `counts "$RESTORE_CONTEXT"` here and
+   `counts "$PUBLIC_CONTEXT"` on the server, and compare. Only tables the live
+   site changed since the capture may differ.
+
+   ```bash
+   counts() {
+     local p q="select table_name, (xpath('/row/c/text()', query_to_xml(format(
+       'select count(*) as c from public.%I', table_name), false, true, '')))[1]
+       from information_schema.tables
+       where table_schema = 'public' and table_type = 'BASE TABLE' order by 1"
+     p="$(kubectl --context "$1" -n postgres get pod -o name \
+       -l cnpg.io/cluster=postgres,cnpg.io/instanceRole=primary)"
+     kubectl --context "$1" -n postgres exec "$p" -c postgres -- psql -d kaneo -tAc "$q"
+   }
+   ```
+
+5. **Start Kaneo** with the recovered credentials and a local address:
+
+   ```bash
+   k apply -f kubernetes/apps/kaneo/namespace.yaml
+   k -n kaneo create secret generic kaneo-credentials --from-env-file="$RECOVERY_DIR/credentials.env"
+   k -n kaneo create configmap kaneo-settings --from-literal=KANEO_CLIENT_URL=http://127.0.0.1:8912
+   k apply -k kubernetes/apps/kaneo
+   k -n kaneo rollout status deployment/kaneo --timeout=600s
+   k -n kaneo port-forward --address=127.0.0.1 service/kaneo 8912:5173 &
+   ```
+
+6. **Use it** at `http://127.0.0.1:8912`:
+
+   - [ ] Log in with your normal account.
+   - [ ] Your workspaces, projects and tasks are all there.
+   - [ ] Create a task.
+   - [ ] Restart everything, then check the task is still there:
+
+     ```bash
+     kill %1
+     k -n postgres delete pod -l cnpg.io/cluster=postgres,cnpg.io/instanceRole=primary
+     k -n postgres wait --for=condition=Ready cluster/postgres --timeout=300s
+     k -n kaneo rollout restart deployment/kaneo
+     k -n kaneo rollout status deployment/kaneo --timeout=300s
+     k -n kaneo port-forward --address=127.0.0.1 service/kaneo 8912:5173 &
+     ```
+
+7. **Clean up:** `kill %1`, `k3d cluster delete kaneo-restore` and
+   `rm "$KUBECONFIG"`. Keep the recovery set only on encrypted storage.
+
+A successful import alone is not a passed drill; the app must work on it.
+Kaneo regenerates its runtime files on startup, so there is no file archive.
+If S3 uploads are added later, the object store must join the recovery set.
+
+## Take it offline
+
+To withdraw the public site, remove only its Caddy route (see above) and keep
+its database, credentials and recovery sets. The private Compose Kaneo is a
+separate instance: never restore its database over this one. Never delete a
+PVC to roll back an image; retained PVCs don't survive disk failure or a K3s
+uninstall.
