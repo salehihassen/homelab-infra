@@ -28,20 +28,17 @@ Secret `postgres-app`. Nothing uses them.
 
 ## First-time setup
 
-Before Flux first reconciles `postgres` (bootstrap §3), pick the storage node.
-PostgreSQL's data lives on one node's disk (local-path, normally
-`/var/lib/rancher/k3s/storage`). Check its free space, inodes and monitoring;
-volume sizes are not enforced as quotas. Label exactly one node:
+During [setup](bootstrap.md) step 5, label the one node whose disk holds the
+data (`/var/lib/rancher/k3s/storage`). Volume sizes are not quotas, so watch
+that disk's free space:
 
 ```bash
-: "${KUBECONFIG:?}" "${PUBLIC_CONTEXT:?}" "${PUBLIC_STORAGE_NODE:?}"
-kubectl --context "$PUBLIC_CONTEXT" label node "$PUBLIC_STORAGE_NODE" homelab.example/local-storage=true
+kubectl --context "$PUBLIC_CONTEXT" label node public-server homelab.example/local-storage=true
 kubectl --context "$PUBLIC_CONTEXT" get nodes -l homelab.example/local-storage=true
 ```
 
 Losing that node takes the database, and every app using it, offline. There is
-no superuser password to create: administration uses `kubectl exec` into the
-primary Pod.
+no superuser password: administer through `kubectl exec` into the primary Pod.
 
 ## Add an app
 

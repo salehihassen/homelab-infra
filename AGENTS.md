@@ -52,5 +52,5 @@ rewriting history and force-pushing.
 - When something sensitive was already committed, stop and tell the owner.
   Only rewrite history or force-push when they ask.
 
-See `README.md` (layout, validation), `RUNBOOK.md` (operations) and
-`docs/backups.md` (what gets backed up).
+See `docs/repository.md` (layout), `docs/validation.md` (validation),
+`RUNBOOK.md` (operations) and `docs/backups.md` (what gets backed up).

@@ -1,136 +1,34 @@
 # Homelab infra
 
 > [!IMPORTANT]
-> **An incremental K3s migration is being prepared.** The public-cluster
-> [foundation](kubernetes/README.md) adds a fresh Kaneo instance with dedicated
-> PostgreSQL. Existing services stay in Compose; the private cluster is deferred.
-> Merging these files does not install K3s or expose Kaneo. Deployment definitions,
-> repository layout and operating instructions may change as plans develop.
-> If you use this repository, pin a known-good commit and review changes before
-> updating your own deployment.
+> **This repo is migrating from Docker Compose to K3s, one service at a time.**
+> Most services still run in Compose. The public cluster on server-2 runs Flux,
+> PostgreSQL and a new Kaneo instance; the private cluster comes later. Layout
+> and instructions will keep changing. If you use this repo, pin a known-good
+> commit and review changes before updating your own deployment.
 
-Deployment source of truth for a small self-hosted fleet: Docker Compose,
-Caddy, DNS-01 certificates, and Tailscale. Server-1 routed services use tailnet HTTPS
-at `https://<name>.<PRIVATE_ZONE>`; the zone and each service's hostname are
-set in env files, never in Git. Intentional LAN and loopback-only listeners
-are recorded in `inventory.yaml`; the media stack preserves Jellyfin's LAN HTTP.
+Deployment source of truth for a small self-hosted fleet. Hosts appear under
+neutral aliases (`server-1`, `server-2`); real names, domains and secrets live
+only on the hosts, never in Git.
 
-Hosts appear under neutral aliases (`server-1`, ...). Application source lives
-in its own repositories; images are referenced through each stack's env file.
-Runtime state and secrets stay on each host (under `/opt`), never in Git; the
-encrypted Restic backups protect runtime state. Server-2 also serves public
-HTTPS integrations; its [operations playbook](hosts/server-2/PLAYBOOK.md)
-describes adoption, Nextcloud AIO ownership, logging and recovery.
+## Where to look
 
-## Layout
-
-```
-hosts/server-1/
-  compose.yaml            # name: opt; includes every stack below
-  .env -> /opt/.env       # shared TZ only; template: .env.example
-  <stack>/
-    .env -> /opt/...      # local interpolation settings; template: .env.example
-    routing.env -> /opt/...  # optional Caddy routing/auth inputs, when applicable
-    compose.yaml          # services, networks, secrets; x-stack.requires
-    site.caddy            # the stack's Caddy sites (if any)
-    backup.yaml           # what the nightly backup captures
-    README.md             # purpose, dependencies, data, restore notes
-  caddy/Caddyfile         # global options, wildcard cert, host-level sites
-  backup/                 # backup declaration, runner scripts, systemd units
-  env-files.tsv           # which repo symlink points at which /opt env file
-hosts/server-2/            # independent project; active apps and AIO controller only
-  PLAYBOOK.md             # deployment, checks, backups, restore and rollback
-inventory.yaml            # service -> host alias, URL variable, data, backup, exposure
-RUNBOOK.md                # rebuild, restore, secrets, day-to-day operations
-docs/                     # backups format, agent telemetry, archived services
-scripts/                  # validation, dependency/backup/private-identifier checks
-kubernetes/               # public Flux root, new Kaneo instance and PostgreSQL
-provisioning/k3s/          # reviewed-by-operator host examples; no remote installer
-local/                    # untracked: real host names, domains, scan patterns
-```
-
-## Deploying your own copy
-
-Copy `hosts/server-1/.env.example` to `.env`, each stack's `.env.example` to
-`.env`, and each `routing.env.example` to `routing.env`. Replace placeholder
-domains, IPs, image references, source paths, devices, secrets and the Loki
-ingress auth hash with your own values. Provision the runtime data and
-application credentials described in each stack's README and `backup.yaml`;
-the example env files describe interpolation/routing settings, not restored
-application data. Existing deployment files must not be overwritten with
-examples. On a running host the env files are symlinks into `/opt`, mapped in
-`hosts/server-1/env-files.tsv` (`bash scripts/env-files.sh link` recreates them).
-
-## Keeping a deployment's identity out of Git
-
-Anything that identifies a real deployment stays in untracked files:
-
-- Env files under `/opt`: domains, image references, source paths, secrets.
-- `hosts/<host>/backup/host.local.yaml`: personal backup paths.
-- `/etc/infra-backup/backup.env`: restic repository and host tag.
-- `local/site.md`: which alias is which real machine, DNS and backup details.
-- `local/private-patterns.txt`: extended regexes for real host names, domains,
-  usernames and addresses. `scripts/check-private.sh` (run by the pre-commit
-  hook and `validate-stack.sh`) fails if any tracked file or path matches.
-
-## Everyday commands
-
-```bash
-cd hosts/server-1
-docker compose ps
-docker compose up -d <service>          # apply a change to one service
-docker compose up -d --build <service>  # rebuild a locally built image
-docker compose logs --tail=100 <service>
-```
-
-Never run `docker compose down` for the whole project, and never add `-v`.
-
-## Stack dependencies
-
-Stacks share infrastructure only through declared contracts. A stack that uses
-Postgres joins the `postgres_network`, waits for `postgres` to be healthy, and
-lists `postgres` under `x-stack.requires`; the same pattern applies to the AI
-gateway (`cpa_policy_model` + `ai-policy-proxy`). `scripts/check-stacks.py`
-fails if a stack uses another stack's network, service, or secret without
-requiring it, or requires a stack it does not use. Current graph:
-
-| Stack | Requires |
+| I want to… | Read |
 | --- | --- |
-| postgres, ai-gateway, caddy, komodo, home-automation, protonmail-bridge, countdown, metube, job-sentinel, media-extract, kaneo | - |
-| quotes, forgejo, langfuse | postgres |
-| observability | langfuse |
-| jobsmith, condenseit, speakable | ai-gateway |
-| email-assist | postgres, ai-gateway, protonmail-bridge |
+| Understand the layout or deploy my own copy | [docs/repository.md](docs/repository.md) |
+| Run, change or restore a Compose service | [RUNBOOK.md](RUNBOOK.md) |
+| Operate the public host (server-2) | [hosts/server-2/PLAYBOOK.md](hosts/server-2/PLAYBOOK.md) |
+| Validate changes and set up the Git hooks | [docs/validation.md](docs/validation.md) |
+| Know what is backed up | [docs/backups.md](docs/backups.md) |
+| Set up the K3s cluster | [docs/kubernetes/bootstrap.md](docs/kubernetes/bootstrap.md) |
+| Test it, or add an app | [testing.md](docs/kubernetes/testing.md), [postgres.md](docs/kubernetes/postgres.md), [kaneo.md](docs/kubernetes/kaneo.md) |
+| Understand the K3s design | [kubernetes/README.md](kubernetes/README.md), [architecture.md](docs/kubernetes/architecture.md) |
 
-## Validation
+## Before your first commit
 
 ```bash
-bash scripts/validate-stack.sh           # compose + deps, Caddy, Alloy, Prometheus rules/tests, Loki, private identifiers
-bash scripts/validate-stack.sh compose   # fast: Compose config + stack dependency check
-bash scripts/check-private.sh            # no real host names, domains or paths in tracked files
-bash scripts/validate-kubernetes.sh      # render roots/children, schemas and migration safety contracts
-INFRA_HOST=server-2 bash scripts/validate-stack.sh all  # independent host contracts
-python3 backup/infra-backup-declared.py --host server-1 check --live   # backup coverage (on the host)
+git config core.hooksPath .githooks   # gitleaks + private-identifier checks
 ```
 
-Validation uses Docker Compose **v5.5.1**, matching CI. If your installed version
-differs, `validate-stack.sh` automatically uses a checksum-verified copy cached
-under `~/.cache/homelab-infra/` for that command only (Linux x86_64). It never
-replaces the host's Compose plugin; ordinary `docker compose up` keeps using
-your installed version. The pin makes example-only rendering reproducible and
-avoids older versions reading private env files despite `--no-env-resolution`.
-The Caddy check enforces
-tailnet-only proxy listeners, Loki's authenticated push-only boundary, and the
-CPA management denial. Gitleaks runs in CI and in the Git hooks. Enable the
-hooks once per clone with `git config core.hooksPath .githooks`:
-
-- **pre-commit**: Gitleaks, env files and private identifiers on the staged
-  files, then `validate-stack.sh compose` on the staged snapshot; Kubernetes
-  changes also run the manifest suite on that exact snapshot.
-- **pre-push**: private identifiers and Gitleaks on every commit being pushed
-  (a later fix does not unpublish an earlier commit), then the full
-  `validate-stack.sh` on each pushed tip.
-
-The hooks run `scripts/validate-snapshot.sh`, which validates exactly what is
-staged or pushed. It shares the automatic test-tool selection in
-`scripts/with-validation-compose.sh` with working-tree validation.
+This repo is public. See [AGENTS.md](AGENTS.md) for what must never be
+committed.

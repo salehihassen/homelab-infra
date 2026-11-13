@@ -14,7 +14,7 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 patterns=local/private-patterns.txt
 if [[ ! -r "${patterns}" ]]; then
-  echo "check-private: no ${patterns}; skipping (see README.md)" >&2
+  echo "check-private: no ${patterns}; skipping (see docs/repository.md)" >&2
   exit 0
 fi
 active="$(grep -vE '^\s*(#|$)' "${patterns}" || true)"
