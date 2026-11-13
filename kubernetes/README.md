@@ -50,5 +50,5 @@ bash scripts/validate-kubernetes.sh
 First access uses loopback-only kubectl port-forward. Public HTTPS is a separate
 operator step through the existing Compose Caddy; claim the administrator and
 prove backups before enabling it.
-Mission Control separately uses `service/flux-operator 9080:9080`; it remains
-an administrative tool accessed through the protected API, with no public route.
+Mission Control separately uses `service/flux-operator 9080:9080`, or the
+tailnet-only Caddy port; it remains an administrative tool with no public route.

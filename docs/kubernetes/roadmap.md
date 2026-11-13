@@ -69,7 +69,7 @@ Kaneo gets its own role and database there. The database has its own
 directory/Flux reconciliation, which Kaneo depends on.
 No existing private Kaneo data/credentials are imported.
 Flux Operator manages the two Flux controllers and generated Git/root sync;
-its embedded Mission Control UI is read-only with private port-forward access.
+its read-only Mission Control UI is reached by port-forward or the tailnet.
 No extra GitOps engine or public dashboard route is introduced. See
 [GitOps ownership](gitops.md).
 Prepare external inputs before starting active Flux reconciliation. Claim the

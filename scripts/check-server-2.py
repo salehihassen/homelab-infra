@@ -65,6 +65,14 @@ def routing(doc):
         assert proxy.get("headers", {}).get("request", {}).get("delete") == ["Tailscale-*"], key + ": strip identity headers"
         skip = proxy.get("transport", {}).get("tls", {}).get("insecure_skip_verify", False)
         assert skip == (key == "NEXTCLOUD_AIO_DOMAIN"), key + ": TLS verification exception is controller-only"
+    # Mission Control: tailnet sources are proxied; every other source gets 403 first.
+    servers = {tuple(s["listen"]): s for s in doc["apps"]["http"]["servers"].values()}
+    assert set(servers) == {(":443",), (":9081",)}, "Only HTTPS sites and the tailnet dashboard listen"
+    deny, proxy = servers[(":9081",)]["routes"]
+    tailnet = [{"not": [{"remote_ip": {"ranges": ["100.64.0.0/10", "fd7a:115c:a1e0::/48"]}}]}]
+    assert deny["match"] == tailnet and deny["handle"] == [{"handler": "static_response", "status_code": 403}], "FLUX_UI: tailnet sources only"
+    assert "match" not in proxy and proxy["handle"][0].get("upstreams") == [{"dial": examples["FLUX_UI_K3S_UPSTREAM"]}], "FLUX_UI: exact backend"
+    assert proxy["handle"][0].get("headers", {}).get("request", {}).get("delete") == ["Tailscale-*"], "FLUX_UI: strip identity headers"
 
 
 if __name__ == "__main__":

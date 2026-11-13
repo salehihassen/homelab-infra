@@ -110,7 +110,7 @@ def check_flux_root(cluster):
     dashboard = next(p for p in of_kind(docs, "NetworkPolicy")
                      if p["spec"]["podSelector"].get("matchLabels", {}).get("app.kubernetes.io/name") == "flux-operator")
     check(dashboard["spec"].get("ingress") == [],
-          f"{where}: the Mission Control dashboard takes no Pod ingress (use port-forward)")
+          f"{where}: the Mission Control dashboard takes no Pod ingress (port-forward or host Caddy only)")
     shared = patch["NetworkPolicy"][0]["value"]["matchExpressions"][0]["values"]
     check(set(shared) == {"source-controller", "kustomize-controller"},
           f"{where}: Flux's shared network allowances must not include the dashboard")

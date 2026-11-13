@@ -10,7 +10,8 @@ rbac:
 web:
   enabled: true
   # Default anonymous mode is read-only. Access is through the authenticated
-  # Kubernetes port-forward only; do not expose this Service through Caddy.
+  # Kubernetes port-forward, or server-2 Caddy's tailnet-only port; never a
+  # public route.
   config: {}
   networkPolicy:
     create: false
