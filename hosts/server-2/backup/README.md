@@ -11,3 +11,6 @@ Use the common
 `backup/run.py --settings /opt/infra-backup/backup.env` interface for `check`,
 `backup`, `maintenance`, `status` and `restic` operations. No credentials are
 tracked. Existing NAS and gateway snapshots remain recovery sources.
+
+The `K3S_*` settings add the public K3s cluster's database dumps and inputs to
+each snapshot; see "The public K3s cluster" in the backup playbook.

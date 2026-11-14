@@ -1,6 +1,8 @@
 paths:
 - /opt/server-2
 - /opt/infra-backup
+# The public K3s cluster's database dumps and inputs (backup/infra-backup-k3s).
+- /opt/k3s-backup
 exclude:
   /opt/infra-backup-state: temporary exports and cache; consistent exports are captured
     explicitly

@@ -1,16 +1,23 @@
+# Nextcloud's database and app volumes are left out for now. Their coordinated
+# capture first copies about 14 GiB to the root disk, which it can no longer
+# spare next to K3s. Re-include them once the backup's state directory has its
+# own volume, by restoring the commented declaration below.
 paths:
 - /opt/nextcloud-aio
+# Required: the Compose service mounts it. AIO's own settings, read live.
 volumes:
 - nextcloud_aio_mastercontainer
-- nextcloud_aio_apache
-- nextcloud_aio_nextcloud
-- nextcloud_aio_database
-- nextcloud_aio_database_dump
-- nextcloud_aio_redis
-adapter: nextcloud-aio
-quiesce:
-  services:
-  - nextcloud-aio-mastercontainer
-  - nextcloud-aio-nextcloud
-  method: stop
-  copy: []
+# volumes:
+# - nextcloud_aio_mastercontainer
+# - nextcloud_aio_apache
+# - nextcloud_aio_nextcloud
+# - nextcloud_aio_database
+# - nextcloud_aio_database_dump
+# - nextcloud_aio_redis
+# adapter: nextcloud-aio
+# quiesce:
+#   services:
+#   - nextcloud-aio-mastercontainer
+#   - nextcloud-aio-nextcloud
+#   method: stop
+#   copy: []
