@@ -30,18 +30,20 @@ flux --context "$PUBLIC_CONTEXT" get kustomizations
 k -n postgres get cluster,databaserole,database,pods,svc,pvc
 primary="$(k -n postgres get pod -o name -l cnpg.io/cluster=postgres,cnpg.io/instanceRole=primary)"
 k -n postgres exec "$primary" -c postgres -- psql -tAc 'SHOW server_version; SELECT datname FROM pg_database;'
+k -n garage get statefulset,pods,svc,pvc
 k -n kaneo get deployment,pods,svc
 ```
 
 **Good looks like:**
 
 - **Source:** revision `main@sha1:<latest merge>`.
-- **Kustomizations:** `flux-system`, `cloudnative-pg`, `postgres` and each app
-  Ready=True.
+- **Kustomizations:** `flux-system`, `cloudnative-pg`, `postgres`, `garage`
+  and each app Ready=True.
 - **Postgres:** "Cluster in healthy state"; each app's role and database
   APPLIED=true; Pod `postgres-1` 1/1 Running; Services `postgres-rw`,
   `postgres-ro` and `postgres-r`; one PVC, Bound.
 - **SQL:** PostgreSQL `18.6`, and the list includes `kaneo`.
+- **Garage:** Pod `garage-0` 1/1 Running; Service `garage`; one PVC, Bound.
 - **Kaneo:** 1/1 Running, 0 restarts.
 
 ## 3. Open Kaneo and claim the admin account
@@ -113,11 +115,12 @@ probe() { k run "probe-$RANDOM" -q --rm -i --restart=Never --image=busybox:1.37 
 probe kubernetes.default.svc 443                                    # OPEN: control, the probe works
 probe postgres-rw.postgres.svc.cluster.local 5432                   # BLOCKED: no client label
 probe kaneo.kaneo.svc.cluster.local 5173                            # BLOCKED
+probe garage.garage.svc.cluster.local 3900                          # BLOCKED
 probe postgres-rw.postgres.svc.cluster.local 5432 --labels=homelab.example/postgres-client=true   # OPEN
 probe kaneo.kaneo.svc.cluster.local 5173 --labels=homelab.example/postgres-client=true            # BLOCKED
 ```
 
-From inside Kaneo, only the database is reachable:
+From inside Kaneo, only the database and public HTTPS are reachable:
 
 ```bash
 k -n kaneo exec deploy/kaneo -- node -e '
@@ -129,12 +132,14 @@ const t = (h, p) => new Promise(r => {
 });
 (async () => {
   for (const [h, p] of [["postgres-rw.postgres.svc.cluster.local", 5432],
-                        ["kubernetes.default.svc", 443], ["1.1.1.1", 443]])
+                        ["kubernetes.default.svc", 443], ["garage.garage.svc.cluster.local", 3900],
+                        ["1.1.1.1", 443], ["1.1.1.1", 80]])
     console.log(h, p, await t(h, p));
 })();'
 ```
 
-Expect `5432 OPEN`, then `443 BLOCKED` twice. Never add an allow-all policy to
+Expect `5432 OPEN`, the cluster API and Garage `BLOCKED`, `1.1.1.1 443 OPEN`
+(Kaneo reaches its bucket through its public address) and `1.1.1.1 80 BLOCKED`. Never add an allow-all policy to
 make a probe pass. Check no probe Pods are left: `k get pods -A | grep probe`.
 
 ## 8. Nothing new is public
@@ -142,7 +147,7 @@ make a probe pass. Check no probe Pods are left: `k get pods -A | grep probe`.
 From **another machine** (not the server), against the server's public IP:
 
 ```bash
-for p in 6443 10250 5432 5173 9080 9081 8911; do nc -zvw3 <server-2-public-ip> $p; done   # all must fail
+for p in 6443 10250 5432 5173 3900 3903 9080 9081 8911; do nc -zvw3 <server-2-public-ip> $p; done   # all must fail
 ```
 
 On the server, compare listeners with the setup baseline:
@@ -183,8 +188,9 @@ free.
 
 1. Do the backup and restore drill in [kaneo.md](kaneo.md#capture-one-coherent-recovery-set).
 2. Add the public route ([kaneo.md](kaneo.md#add-the-public-https-route)).
-   Check from outside: valid certificate, login, project/task CRUD,
-   `/api/health` 200, and every old public site unchanged.
+   Check from outside: valid certificate, login, project/task CRUD, an
+   attachment uploads and opens, `/api/health` 200, and every old public site
+   unchanged.
 
 If the new route fails, remove only that route and troubleshoot through the
 port-forward. Leave Compose and Kaneo's data alone.

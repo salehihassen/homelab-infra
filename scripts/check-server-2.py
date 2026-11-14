@@ -60,11 +60,17 @@ def routing(doc):
     for key, upstream in upstreams.items():
         route = next(r for r in routes if any(examples[key] in m.get("host", []) for m in r["match"]))
         proxies = [n for n in nodes(route) if n.get("handler") == "reverse_proxy"]
-        assert len(proxies) == 1 and proxies[0].get("upstreams") == [{"dial": upstream}], key + ": exact backend"
-        proxy = proxies[0]
-        assert proxy.get("headers", {}).get("request", {}).get("delete") == ["Tailscale-*"], key + ": strip identity headers"
-        skip = proxy.get("transport", {}).get("tls", {}).get("insecure_skip_verify", False)
-        assert skip == (key == "NEXTCLOUD_AIO_DOMAIN"), key + ": TLS verification exception is controller-only"
+        if key == "KANEO_PUBLIC_DOMAIN":
+            # Kaneo's uploads bucket shares its origin: only that path reaches Garage.
+            branches = route["handle"][0]["routes"]
+            assert [b.get("match") for b in branches] == [[{"path": ["/kaneo-uploads/*"]}], None], key + ": only the uploads path reaches storage"
+            assert [p.get("upstreams") for p in proxies] == [[{"dial": examples["KANEO_STORAGE_K3S_UPSTREAM"]}], [{"dial": upstream}]], key + ": exact backends"
+        else:
+            assert len(proxies) == 1 and proxies[0].get("upstreams") == [{"dial": upstream}], key + ": exact backend"
+        for proxy in proxies:
+            assert proxy.get("headers", {}).get("request", {}).get("delete") == ["Tailscale-*"], key + ": strip identity headers"
+            skip = proxy.get("transport", {}).get("tls", {}).get("insecure_skip_verify", False)
+            assert skip == (key == "NEXTCLOUD_AIO_DOMAIN"), key + ": TLS verification exception is controller-only"
     # Mission Control: tailnet sources are proxied; every other source gets 403 first.
     servers = {tuple(s["listen"]): s for s in doc["apps"]["http"]["servers"].values()}
     assert set(servers) == {(":443",), (":9081",)}, "Only HTTPS sites and the tailnet dashboard listen"

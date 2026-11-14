@@ -10,6 +10,7 @@ spec:
   path: ./kubernetes/apps/kaneo
   dependsOn:
     - name: postgres
+    - name: garage
   sourceRef:
     kind: GitRepository
     name: flux-system

@@ -113,9 +113,11 @@ database claim with WaitForFirstConsumer binds data to that node. Adding an ARM
 agent provides compute capacity; it does not replicate this data or move Kaneo
 automatically.
 
-Default-deny policies allow Kaneo only cluster DNS and PostgreSQL. PostgreSQL
-accepts connections only from Pods labelled `homelab.example/postgres-client`.
-SMTP, OAuth, webhooks, object storage and other integrations are out of scope.
+Default-deny policies allow Kaneo only cluster DNS, PostgreSQL and outbound
+HTTPS to public addresses, which it needs to reach its attachments bucket
+through Caddy. PostgreSQL accepts connections only from Pods labelled
+`homelab.example/postgres-client`; no Pod connects to Garage, only host Caddy.
+SMTP, OAuth, webhooks and other integrations are out of scope.
 Claim the first administrator through local access before exposing the app;
 DISABLE_REGISTRATION does not prevent first-account bootstrap. Public use also
 requires tested authentication, a coherent backup/restore and reviewed DNS/TLS.

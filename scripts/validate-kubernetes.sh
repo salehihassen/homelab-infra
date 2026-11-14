@@ -30,7 +30,7 @@ check_schemas() {
 mkdir "$work/schemas"
 python3 scripts/check-kubernetes.py --export-schemas "$work/schemas"
 
-for folder in kubernetes/infrastructure/* kubernetes/clusters/* kubernetes/databases/* kubernetes/apps/*; do
+for folder in kubernetes/infrastructure/* kubernetes/clusters/* kubernetes/databases/* kubernetes/storage/* kubernetes/apps/*; do
   rendered="$work/$(basename "$folder").yaml"
   render "$folder" > "$rendered"
   check_schemas "$rendered"

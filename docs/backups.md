@@ -120,14 +120,19 @@ helper container lacks. It replaces `/opt/k3s-backup/latest` with:
 
 ```
 databases/<db>.dump   # pg_dump --format=custom of every CloudNativePG Database
+objects/<bucket>/     # every Garage bucket an inputs/<app>/storage.env key can read
 inputs/, keys/        # INFRA_DIR's local/public-edge-inputs and -keys
 kubeconfig            # admin access to the cluster
 git-revision.txt      # the commit Flux had applied
 captured-at.txt
 ```
 
-Apps keep running: `pg_dump` reads one consistent snapshot. If any step
-fails, the whole run fails before uploading and the previous capture stays.
+Apps keep running: `pg_dump` reads one consistent snapshot. Buckets are
+copied after the dumps, so every object a dump refers to is there. rclone
+(`rclone_binary` in `tool.json`) keeps a mirror in `/opt/k3s-backup/objects`
+and fetches only new objects; the capture hard-links it, so the files take
+their space on disk once. If any step fails, the whole run fails before
+uploading and the previous capture stays.
 K3s's own state (`/var/lib/rancher/k3s/server`) is not included: rebuild the
 cluster from Git ([setup](kubernetes/bootstrap.md)), then restore each app.
 
@@ -140,7 +145,8 @@ sudo install -d -m 0700 -o "$USER" -g "$USER" /opt/k3s-backup
 ```
 
 To recover an app, restore the capture from a snapshot, then follow its
-restore drill (for Kaneo, [kaneo.md](kubernetes/kaneo.md#restore-drill)):
+restore drill (for Kaneo, [kaneo.md](kubernetes/kaneo.md#restore-drill); for
+a lost Garage volume alone, [garage.md](kubernetes/garage.md#backups-and-recovery)):
 
 ```bash
 python3 backup/run.py --settings /opt/infra-backup/backup.env restic restore latest \

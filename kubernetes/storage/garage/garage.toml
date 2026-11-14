@@ -1,0 +1,19 @@
+# One node keeps one copy, on the local-storage node like PostgreSQL's data.
+metadata_dir = "/var/lib/garage/meta"
+data_dir = "/var/lib/garage/data"
+db_engine = "sqlite"
+replication_factor = 1
+# Writes are small and rare: sync them to disk before acknowledging.
+metadata_fsync = true
+data_fsync = true
+# A single node talks only to itself.
+rpc_bind_addr = "127.0.0.1:3901"
+
+[s3_api]
+# Clients sign requests for this region (Kaneo's S3_REGION).
+s3_region = "garage"
+api_bind_addr = "0.0.0.0:3900"
+
+# For the probes: with no admin_token, every other admin endpoint refuses.
+[admin]
+api_bind_addr = "0.0.0.0:3903"
