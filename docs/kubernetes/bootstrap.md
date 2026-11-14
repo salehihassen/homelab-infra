@@ -168,8 +168,10 @@ Everything Flux deploys in step 6 needs these inputs, which stay out of Git:
 
 2. **Each app's database password:** [postgres.md, Add an app](postgres.md#add-an-app),
    step 2.
-3. **Each app's own inputs:** for Kaneo, [kaneo.md, Prepare](kaneo.md#prepare-the-new-instance).
-4. **Copy `local/public-edge-inputs/` off the server**, with the keys.
+3. **Object storage:** [garage.md, First-time setup](garage.md#first-time-setup),
+   steps 1 and 2. Do step 3 once Garage runs, after step 6.
+4. **Each app's own inputs:** for Kaneo, [kaneo.md, Prepare](kaneo.md#prepare-the-new-instance).
+5. **Copy `local/public-edge-inputs/` off the server**, with the keys.
 
 ## 6. Turn on GitOps
 
@@ -197,7 +199,8 @@ kubectl --context "$PUBLIC_CONTEXT" -n flux-system wait --for=condition=Ready \
 
 1. `flux-system` Ready: Flux pulled `main` with the deploy key.
 2. `cloudnative-pg`, then `postgres`. `postgres` stays not-ready for a minute
-   or two while the database starts and the app roles are created.
+   or two while the database starts and the app roles are created. `garage`
+   becomes Ready alongside them.
 3. Each app (`kaneo`) Ready last.
 
 The first run pulls several images, so a slow first wait is normal. If a wait
@@ -241,8 +244,8 @@ kubectl --context "$PUBLIC_CONTEXT" -n flux-system annotate fluxinstance/flux \
 **Back up**, before valuable data goes in. Turn on the nightly K3s capture in
 server-2's encrypted B2 backup
 ([backups.md](../backups.md#the-public-k3s-cluster-server-2)). It holds every
-app's database dump, `local/public-edge-inputs/`, `local/public-edge-keys/` and
-the kubeconfig.
+app's database dump and Garage bucket, `local/public-edge-inputs/`,
+`local/public-edge-keys/` and the kubeconfig.
 
 It does not hold K3s's own state. To restore, rebuild from Git and restore each
 app ([kaneo.md](kaneo.md#restore-drill)). To restore K3s itself instead, you

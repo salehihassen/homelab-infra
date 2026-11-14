@@ -131,8 +131,8 @@ Implement this in later reviewed changes:
    and certificates as applicable. Choose an explicit data-availability design
    per app. Kaneo's app replicas can use shared PostgreSQL, but its single
    PostgreSQL writer still has node-bound data. Add shared Redis for realtime
-   broadcasts when scaling Kaneo, and shared S3-compatible storage if uploads
-   are enabled. Some apps may intentionally remain single-node.
+   broadcasts when scaling Kaneo. Its uploads already use S3 (Garage), but
+   Garage's single node is node-bound too. Some apps may intentionally remain single-node.
 4. Test stale Service endpoints and ingress behavior with the API unavailable.
    Keep ordinary ClusterIP Services by default. Use internalTrafficPolicy:
    Local only for selected apps with ready local replicas and a verified

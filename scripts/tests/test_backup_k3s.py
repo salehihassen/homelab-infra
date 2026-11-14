@@ -22,7 +22,19 @@ case "$*" in
   *pg_dump*) [[ -z ${FAIL_DUMP:-} ]] || exit 1; echo "dump of ${*: -2:1}" ;;
   *pg_restore*) cat >/dev/null ;;
   *gitrepository*) echo 'refs/heads/main@sha1:abc' ;;
+  *"service garage"*) echo 10.145.0.9 ;;
   *) echo "unexpected: $*" >&2; exit 2 ;;
+esac
+'''
+
+# Lists one bucket and mirrors it; records how it received the key.
+# FAIL_SYNC breaks the mirror.
+FAKE_RCLONE = r'''#!/usr/bin/env bash
+echo "args: $* key: ${RCLONE_CONFIG_GARAGE_SECRET_ACCESS_KEY:-} at: ${RCLONE_CONFIG_GARAGE_ENDPOINT:-}" >>"${RCLONE_LOG}"
+case "$*" in
+  *lsf*) echo kaneo-uploads/ ;;
+  *sync*) [[ -z ${FAIL_SYNC:-} ]] || exit 1
+    mkdir -p "${*: -1}/workspace"; echo "object" >"${*: -1}/workspace/file.png" ;;
 esac
 '''
 
@@ -31,7 +43,8 @@ class CaptureScript(unittest.TestCase):
     def capture(self, root, **extra):
         env = {'PATH': str(root / 'bin') + os.pathsep + os.environ['PATH'],
                'K3S_BACKUP_DIR': str(root / 'k3s'), 'K3S_KUBECONFIG': str(root / 'kubeconfig'),
-               'INFRA_DIR': str(root / 'repo'), **extra}
+               'INFRA_DIR': str(root / 'repo'), 'BACKUP_TOOL_CONFIG': str(root / 'tool.json'),
+               'RCLONE_LOG': str(root / 'rclone.log'), **extra}
         return subprocess.run([str(ROOT / 'backup/infra-backup-k3s')], env=env,
                               capture_output=True, text=True)
 
@@ -47,6 +60,13 @@ class CaptureScript(unittest.TestCase):
             path.write_text('secret')
         (root / 'kubeconfig').write_text('config')
         (root / 'k3s').mkdir()
+        (root / 'bin/rclone').write_text(FAKE_RCLONE)
+        (root / 'bin/rclone').chmod(0o755)
+        (root / 'tool.json').write_text(json.dumps({'rclone_binary': str(root / 'bin/rclone')}))
+
+    def add_storage_key(self):
+        (self.root / 'repo/local/public-edge-inputs/kaneo/storage.env').write_text(
+            'S3_ACCESS_KEY_ID=GKexample\nS3_SECRET_ACCESS_KEY=storage-secret\n')
 
     def tearDown(self):
         self.directory.cleanup()
@@ -67,6 +87,31 @@ class CaptureScript(unittest.TestCase):
         result = self.capture(self.root, FAIL_DUMP='1')
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual((self.root / 'k3s/latest/databases/kaneo.dump').read_text(), 'dump of kaneo\n')
+
+    def test_buckets_are_mirrored_into_the_set(self):
+        self.add_storage_key()
+        result = self.capture(self.root)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        copy = self.root / 'k3s/latest/objects/kaneo-uploads/workspace/file.png'
+        self.assertEqual(copy.read_text(), 'object\n')
+        # A hard link to the persistent mirror, not a second copy.
+        self.assertEqual(copy.stat().st_ino,
+                         (self.root / 'k3s/objects/kaneo-uploads/workspace/file.png').stat().st_ino)
+        log = (self.root / 'rclone.log').read_text()
+        self.assertIn('key: storage-secret at: http://10.145.0.9:3900', log)
+        self.assertNotIn('storage-secret', ''.join(line.split(' key: ')[0] for line in log.splitlines()))
+
+    def test_failed_mirror_keeps_the_previous_capture(self):
+        self.add_storage_key()
+        self.assertEqual(self.capture(self.root).returncode, 0)
+        result = self.capture(self.root, FAIL_SYNC='1')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertTrue((self.root / 'k3s/latest/objects/kaneo-uploads/workspace/file.png').exists())
+
+    def test_apps_without_storage_skip_the_mirror(self):
+        self.assertEqual(self.capture(self.root).returncode, 0)
+        self.assertFalse((self.root / 'rclone.log').exists())
+        self.assertFalse((self.root / 'k3s/latest/objects').exists())
 
     def test_interrupted_swap_is_recovered(self):
         self.assertEqual(self.capture(self.root).returncode, 0)

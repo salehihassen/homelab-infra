@@ -222,7 +222,7 @@ def main():
         return
 
     clusters = folders("kubernetes/clusters")
-    workloads = folders("kubernetes/apps") + folders("kubernetes/databases")
+    workloads = folders("kubernetes/apps") + folders("kubernetes/databases") + folders("kubernetes/storage")
     check_k3s_configs()
     for cluster in clusters:
         check_flux_root(cluster)
