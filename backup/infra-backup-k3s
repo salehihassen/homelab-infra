@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# Captures the public K3s cluster before each snapshot: a pg_dump of every
+# CloudNativePG Database, plus the private inputs, keys and kubeconfig that
+# match them, into K3S_BACKUP_DIR/latest. backup/run.py calls it on the host,
+# where the kubeconfig lives. pg_dump reads one consistent snapshot, so apps
+# keep running.
+set -Eeuo pipefail
+umask 077
+
+: "${K3S_BACKUP_DIR:?Set K3S_BACKUP_DIR in backup.env}"
+: "${K3S_KUBECONFIG:?Set K3S_KUBECONFIG in backup.env}"
+: "${K3S_CONTEXT:=public-edge}"
+: "${INFRA_DIR:?Set INFRA_DIR in backup.env}"
+[[ ${K3S_BACKUP_DIR} == /?* ]] || { echo "K3S_BACKUP_DIR must be an absolute path" >&2; exit 1; }
+[[ -d ${K3S_BACKUP_DIR} ]] || { echo "Missing directory: ${K3S_BACKUP_DIR}" >&2; exit 1; }
+readonly inputs="${INFRA_DIR}/local/public-edge-inputs" keys="${INFRA_DIR}/local/public-edge-keys"
+for path in "${inputs}" "${keys}" "${K3S_KUBECONFIG}"; do
+  [[ -r ${path} ]] || { echo "Unreadable: ${path}" >&2; exit 1; }
+done
+# The official kubectl when installed; K3s's own warns about root-only config.
+kubectl_bin="$(command -v kubectl.upstream || command -v kubectl)"
+k() { "${kubectl_bin}" --kubeconfig "${K3S_KUBECONFIG}" --context "${K3S_CONTEXT}" "$@"; }
+
+exec 9>"${K3S_BACKUP_DIR}/.lock"
+flock -n 9 || { echo "Another K3s capture is running." >&2; exit 1; }
+cd "${K3S_BACKUP_DIR}"
+# A capture interrupted while swapping directories leaves only `previous`.
+if [[ ! -e latest && -d previous ]]; then mv previous latest; fi
+rm -rf -- incoming previous
+mkdir -m 700 incoming incoming/databases
+
+primary="$(k -n postgres get pod -o name -l cnpg.io/cluster=postgres,cnpg.io/instanceRole=primary)"
+[[ ${primary} == pod/* && ${primary} != *$'\n'* ]] || { echo "Expected one PostgreSQL primary" >&2; exit 1; }
+mapfile -t databases < <(k -n postgres get databases.postgresql.cnpg.io \
+  -o jsonpath='{range .items[*]}{.spec.name}{"\n"}{end}')
+((${#databases[@]})) || { echo "No CloudNativePG Database resources" >&2; exit 1; }
+for db in "${databases[@]}"; do
+  [[ ${db} =~ ^[a-z_][a-z0-9_]*$ ]] || { echo "Unexpected database name: ${db}" >&2; exit 1; }
+  echo "Dumping K3s PostgreSQL database ${db}"
+  k -n postgres exec "${primary}" -c postgres -- pg_dump -d "${db}" --format=custom >"incoming/databases/${db}.dump"
+  # pg_restore reads the whole table of contents, so a truncated dump fails here.
+  k -n postgres exec -i "${primary}" -c postgres -- pg_restore --list <"incoming/databases/${db}.dump" >/dev/null
+done
+cp -a -- "${inputs}" incoming/inputs
+cp -a -- "${keys}" incoming/keys
+cp -- "${K3S_KUBECONFIG}" incoming/kubeconfig
+k -n flux-system get gitrepository flux-system -o jsonpath='{.status.artifact.revision}{"\n"}' >incoming/git-revision.txt
+date --iso-8601=seconds >incoming/captured-at.txt
+
+# Replace the last capture only once this one is complete; Restic keeps history.
+if [[ -e latest ]]; then mv latest previous; fi
+mv incoming latest
+rm -rf -- previous
+echo "K3s capture complete: ${#databases[@]} database(s)"

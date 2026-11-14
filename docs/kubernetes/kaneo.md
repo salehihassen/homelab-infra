@@ -109,10 +109,14 @@ and recovery set.
 
 A recovery set is a native database dump plus the credentials and settings
 that match it, taken together. A copy of PostgreSQL's data directory is not
-one. Captures are manual: nothing schedules them or copies them off the
-server yet, and server-2's nightly Restic backup covers Compose only.
+one.
 
-Run this on the server, from the repo root, with `KUBECONFIG` and
+**Every night**, server-2's encrypted B2 backup captures one automatically,
+without stopping Kaneo: the dump in `databases/kaneo.dump` and the inputs in
+`inputs/kaneo/` under `/opt/k3s-backup/latest` (see
+[backups.md](../backups.md#the-public-k3s-cluster-server-2)).
+
+**By hand**, before a risky change, run this on the server, from the repo root, with `KUBECONFIG` and
 `PUBLIC_CONTEXT` exported. If you ever changed a Secret or ConfigMap by hand,
 update the input files to match first. Then point at the inputs and a new
 private directory outside the repo:
@@ -185,6 +189,17 @@ Restore into a throwaway cluster on another machine, never over the live
 instance. That machine needs Docker, [k3d](https://k3d.io) and kubectl, the
 repo at the commit the live cluster runs, and the recovery set in a private
 directory. The candidate has no Flux and no public route.
+
+To use a nightly capture, restore it from B2 (see
+[backups.md](../backups.md#the-public-k3s-cluster-server-2)), then gather the
+recovery set:
+
+```bash
+src=<restore target>/opt/k3s-backup/latest
+mkdir -m 0700 <recovery set>
+cp "$src/databases/kaneo.dump" "$src/inputs/kaneo/credentials.env" \
+  "$src/inputs/kaneo/db-password" <recovery set>/
+```
 
 1. **Create the candidate**, on the server's K3s version, with its own
    kubeconfig:

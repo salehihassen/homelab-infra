@@ -238,18 +238,17 @@ kubectl --context "$PUBLIC_CONTEXT" -n flux-system annotate fluxinstance/flux \
   fluxcd.controlplane.io/reconcile-
 ```
 
-**Back up**, before valuable data goes in:
+**Back up**, before valuable data goes in. Turn on the nightly K3s capture in
+server-2's encrypted B2 backup
+([backups.md](../backups.md#the-public-k3s-cluster-server-2)). It holds every
+app's database dump, `local/public-edge-inputs/`, `local/public-edge-keys/` and
+the kubeconfig.
 
-- K3s: `/etc/rancher/k3s/config.yaml` and the whole
-  `/var/lib/rancher/k3s/server` directory (token and secrets-encryption keys),
-  cold-copied with only K3s stopped. Restart K3s even if the copy fails.
-- Each app's recovery set: a native database dump plus its matching
-  credentials (see [kaneo.md](kaneo.md#capture-one-coherent-recovery-set)).
-- `local/public-edge-keys/`, `local/public-edge-inputs/` and the kubeconfig.
-
-Compose backups do not cover any of this. To restore, either restore K3s to a
-matching-version server with the original config and token, or rebuild from
-Git and restore each app's recovery set.
+It does not hold K3s's own state. To restore, rebuild from Git and restore each
+app ([kaneo.md](kaneo.md#restore-drill)). To restore K3s itself instead, you
+would also need `/etc/rancher/k3s/config.yaml` and the whole
+`/var/lib/rancher/k3s/server` directory (token and secrets-encryption keys),
+cold-copied with only K3s stopped, onto a server with the same K3s version.
 
 **Retire an app:** remove only its Caddy route, stop its reconciliation, and
 keep its database and credentials. **Never** delete a PVC to fix a startup

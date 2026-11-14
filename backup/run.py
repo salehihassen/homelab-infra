@@ -49,6 +49,15 @@ def main():
             p = state / name
             print(name + ': ' + (p.read_text().strip() if p.exists() else 'not recorded'))
         return
+    if args.operation == 'backup' and env.get('K3S_BACKUP_DIR'):
+        # K3s is reached through the host's kubeconfig, so capture it here,
+        # before the snapshot that includes K3S_BACKUP_DIR.
+        try:
+            subprocess.run([str(ROOT / 'infra-backup-k3s')], env=env, check=True)
+        except BaseException:
+            state.mkdir(mode=0o700, parents=True, exist_ok=True)
+            (state / 'last-result').write_text(json.dumps({'result': 'failed', 'operation': 'k3s-capture'}))
+            raise
     target = [str(ROOT / ('infra-backup-maintenance' if args.operation == 'maintenance' else 'infra-backup'))]
     if args.operation == 'check':
         target = ['python3', str(ROOT / 'infra-backup-declared.py'), 'check', '--live']
