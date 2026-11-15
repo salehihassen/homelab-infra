@@ -24,7 +24,9 @@ in `hosts/server-2/caddy/Caddyfile`). Browsers upload straight there with
 short-lived presigned URLs from Kaneo, on Kaneo's own origin, so there is no
 CORS to configure. Kaneo itself uses the same address, through Caddy, so it
 needs outbound HTTPS rather than a path to Garage. Downloads go through Kaneo,
-which checks who may see them. Garage refuses unsigned requests.
+which checks who may see them. Garage refuses unsigned requests. Kaneo
+accepts any file type, up to 10 MiB each (its `S3_MAX_IMAGE_UPLOAD_BYTES`
+default).
 
 The data lives on the local-storage node's disk, like PostgreSQL's. The volume
 size is not a quota; the bucket quota below is.
@@ -105,7 +107,10 @@ g bucket set-quotas <bucket> --max-size <size>
 Write the key's ID and secret to `local/public-edge-inputs/<app>/storage.env`
 as `S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY`, which also adds the bucket
 to the nightly backup, and create the app's Secret from that file. If browsers
-upload directly, the bucket also needs a Caddy route on the app's origin.
+upload directly, the bucket also needs a Caddy route on the app's origin. An
+app that calls Garage from inside the cluster also needs an ingress rule in
+`kubernetes/storage/garage/network-policy.yaml` admitting its Pods on 3900,
+and a matching egress rule in its own namespace; the default deny blocks it.
 
 ## Backups and recovery
 
