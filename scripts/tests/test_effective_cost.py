@@ -3,6 +3,7 @@
 import importlib.util
 import json
 import sqlite3
+import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -45,47 +46,87 @@ def make_db():
     return db, now
 
 
-def test_event_cost_math_and_tiers():
-    db, now = make_db()
-    prices, tiers, _ = ec.load_prices(db)
-    evs = ec.load_events(db, 0, now + 10)
-    c0, _ = ec.event_cost(evs[0], prices, tiers)
-    c1, _ = ec.event_cost(evs[1], prices, tiers)
-    assert abs(c0 - 0.00093) < 1e-9, c0
-    assert abs(c1 - 0.0075) < 1e-9, c1
-    c2, used = ec.event_cost(evs[2], prices, tiers)
-    assert used == "unknown-model" and abs(c2 - 0.0012) < 1e-9  # billed via requested fallback
-    db.close()
+class EffectiveCostTests(unittest.TestCase):
+    def test_event_cost_math_and_tiers(self):
+        db, now = make_db()
+        self.addCleanup(db.close)
+        prices, tiers, _ = ec.load_prices(db)
+        evs = ec.load_events(db, 0, now + 10)
+        c0, _ = ec.event_cost(evs[0], prices, tiers)
+        c1, _ = ec.event_cost(evs[1], prices, tiers)
+        assert abs(c0 - 0.00093) < 1e-9, c0
+        assert abs(c1 - 0.0075) < 1e-9, c1
+        c2, used = ec.event_cost(evs[2], prices, tiers)
+        assert used == "unknown-model" and abs(c2 - 0.0012) < 1e-9  # billed via requested fallback
 
+    def test_pool_allocation_sums_to_fee(self):
+        db, now = make_db()
+        self.addCleanup(db.close)
+        prices, tiers, book_hash = ec.load_prices(db)
+        evs = ec.load_events(db, 0, now + 10)
+        pool = {"id": "p", "billing": "subscription", "match": {"auth_provider_snapshot": ["sub"]}}
+        rep = ec.report_pool(pool, evs, prices, tiers, 0, now + 10, book_hash, fee=20.0, now_ms=now + 5)
+        assert rep["events"] == 3 and abs(rep["effective_usd"] - 20.0) < 1e-6, rep["effective_usd"]
+        assert abs(rep["api_equivalent_usd"] - 0.00963) < 1e-6, rep["api_equivalent_usd"]
+        assert rep["status"] == "provisional"
 
-def test_pool_allocation_sums_to_fee():
-    db, now = make_db()
-    prices, tiers, book_hash = ec.load_prices(db)
-    evs = ec.load_events(db, 0, now + 10)
-    pool = {"id": "p", "billing": "subscription", "match": {"auth_provider_snapshot": ["sub"]}}
-    rep = ec.report_pool(pool, evs, prices, tiers, 0, now + 10, book_hash, fee=20.0, now_ms=now + 5)
-    assert rep["events"] == 3 and abs(rep["effective_usd"] - 20.0) < 1e-6, rep["effective_usd"]
-    assert abs(rep["api_equivalent_usd"] - 0.00963) < 1e-6, rep["api_equivalent_usd"]
-    assert rep["status"] == "provisional"
-    db.close()
+    def test_metered_effective_equals_api_and_free_is_zero(self):
+        db, now = make_db()
+        self.addCleanup(db.close)
+        prices, tiers, book_hash = ec.load_prices(db)
+        evs = ec.load_events(db, 0, now + 10)
+        metered = {"id": "m", "billing": "metered", "match": {"auth_provider_snapshot": ["sub"]}}
+        rep = ec.report_pool(metered, evs, prices, tiers, 0, now + 10, book_hash, fee=None, now_ms=now + 10_000)
+        assert abs(rep["effective_usd"] - rep["api_equivalent_usd"]) < 1e-12
+        free = {"id": "f", "billing": "free", "match": {"auth_provider_snapshot": ["sub"]}}
+        rep = ec.report_pool(free, evs, prices, tiers, 0, now + 10, book_hash, fee=None, now_ms=now + 10_000)
+        assert rep["effective_usd"] == 0
+        assert rep["status"] == "closed"
 
-
-def test_metered_effective_equals_api_and_free_is_zero():
-    db, now = make_db()
-    prices, tiers, book_hash = ec.load_prices(db)
-    evs = ec.load_events(db, 0, now + 10)
-    metered = {"id": "m", "billing": "metered", "match": {"auth_provider_snapshot": ["sub"]}}
-    rep = ec.report_pool(metered, evs, prices, tiers, 0, now + 10, book_hash, fee=None, now_ms=now + 10_000)
-    assert abs(rep["effective_usd"] - rep["api_equivalent_usd"]) < 1e-12
-    free = {"id": "f", "billing": "free", "match": {"auth_provider_snapshot": ["sub"]}}
-    rep = ec.report_pool(free, evs, prices, tiers, 0, now + 10, book_hash, fee=None, now_ms=now + 10_000)
-    assert rep["effective_usd"] == 0
-    assert rep["status"] == "closed"
-    db.close()
+    def test_requested_price_fallback_uses_its_context_tiers(self):
+        db, now = make_db()
+        self.addCleanup(db.close)
+        prices, tiers, _ = ec.load_prices(db)
+        event = ec.load_events(db, 0, now + 10)[1]
+        event["resolved_model"] = "unknown-model"
+        for total_in, expected in ((1000, 0.003), (1001, 0.005504), (1500, 0.0075)):
+            with self.subTest(total_in=total_in):
+                event["input_tokens"] = event["normalized_total_input_tokens"] = total_in
+                cost, model = ec.event_cost(event, prices, tiers)
+                self.assertAlmostEqual(cost, expected)
+                self.assertEqual(model, "unknown-model")
+        # Every segment must use the selected tier, including legacy cache
+        # tokens and cache-creation tokens whose rate falls back to prompt.
+        event.update(normalized_cache_read_tokens=300, normalized_cache_creation_tokens=100,
+                     cached_tokens=600)
+        cost, _ = ec.event_cost(event, prices, tiers)
+        self.assertAlmostEqual(cost, 0.0056)
+    def test_fallback_tier_cost_weights_subscription_allocation(self):
+        db, now = make_db()
+        self.addCleanup(db.close)
+        prices, tiers, book_hash = ec.load_prices(db)
+        events = ec.load_events(db, 0, now + 10)[:2]
+        events[1]["resolved_model"] = "unknown-model"
+        pool = {"id": "p", "billing": "subscription"}
+        report = ec.report_pool(pool, events, prices, tiers, 0, now + 10,
+                                book_hash, fee=20.0, now_ms=now + 10_000)
+        self.assertAlmostEqual(report["api_equivalent_usd"], 0.00843)
+        self.assertAlmostEqual(report["by_model"]["unknown-model"]["effective"],
+                               20.0 * 0.0075 / 0.00843)
+        self.assertAlmostEqual(report["effective_usd"], 20.0)
+    def test_resolved_model_price_and_tiers_take_precedence(self):
+        db, now = make_db()
+        self.addCleanup(db.close)
+        prices, tiers, _ = ec.load_prices(db)
+        prices["resolved-model"] = dict(prices["m"], prompt_per_1m=3.0)
+        tiers["resolved-model"] = [dict(tiers["m"][0], prompt_per_1m=6.0,
+                                        completion_per_1m=20.0)]
+        event = ec.load_events(db, 0, now + 10)[1]
+        event["resolved_model"] = "resolved-model"
+        cost, model = ec.event_cost(event, prices, tiers)
+        self.assertAlmostEqual(cost, 0.011)
+        self.assertEqual(model, "resolved-model")
 
 
 if __name__ == "__main__":
-    test_event_cost_math_and_tiers()
-    test_pool_allocation_sums_to_fee()
-    test_metered_effective_equals_api_and_free_is_zero()
-    print("ok")
+    unittest.main()

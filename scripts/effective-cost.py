@@ -67,9 +67,11 @@ def v(row, key):
 def event_cost(row, prices, tiers):
     """Dollar cost of one event under CPAMP segment rules; None if unpriced."""
     model = row["resolved_model"] or row["requested_model"]
-    price = prices.get(model)
+    priced_model = model
+    price = prices.get(priced_model)
     if price is None:
-        price = prices.get(row["requested_model"])
+        priced_model = row["requested_model"]
+        price = prices.get(priced_model)
     if price is None or not price.get("prompt_configured"):
         return None, model
     total_in = v(row, "normalized_total_input_tokens") or v(row, "input_tokens")
@@ -77,7 +79,7 @@ def event_cost(row, prices, tiers):
     cc = v(row, "normalized_cache_creation_tokens") or v(row, "cache_creation_tokens")
     compat = max(max(v(row, "cached_tokens"), v(row, "cache_tokens")) - cr - cc, 0)
     out = v(row, "output_tokens")
-    price = tier_price(price, tiers.get(model, []), total_in)
+    price = tier_price(price, tiers.get(priced_model, []), total_in)
     cr_rate = price["cache_read_per_1m"] if price.get("cache_read_configured") else (
         price.get("cache_per_1m") or price["prompt_per_1m"] * 0.1)
     cc_rate = price["cache_creation_per_1m"] if price.get("cache_creation_configured") else price["prompt_per_1m"]
