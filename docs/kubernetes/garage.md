@@ -70,6 +70,9 @@ first applies `kubernetes/storage/garage`.
      -o go-template='{{range $k, $v := .data}}{{$k}} {{end}}{{"\n"}}'   # S3_ACCESS_KEY_ID S3_SECRET_ACCESS_KEY
    ```
 
+   An empty list means the `create secret` command was cut off when pasted:
+   delete that Secret and create it again.
+
 3. **Once Garage runs**, stop Kaneo's key from creating buckets (each would
    sit outside any quota) and cap its bucket. Both are stored in Garage and
    survive restarts:
