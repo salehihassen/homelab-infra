@@ -35,6 +35,9 @@ how Flux Operator, Flux and Mission Control fit together.
 - `schemas`: validation-only Flux CRD snapshot, never applied to a cluster.
 
 Each new app or database adds its entry here with a link to its setup doc.
+A new folder also goes in the sparse checkout list in `flux-instance.yaml`.
+Right after the merge, its Kustomization can report "path not found" until
+Flux fetches again; `flux reconcile source git flux-system` speeds that up.
 Bootstrap points to this list instead of naming workloads.
 
 Prepare credentials, storage ownership and the initial local URL before starting

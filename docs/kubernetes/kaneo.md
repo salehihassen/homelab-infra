@@ -92,6 +92,8 @@ ClusterIP directly, so no Kubernetes policy changes.
    #   KANEO_STORAGE_K3S_UPSTREAM=<Garage's ClusterIP>:3900
    ```
 
+   Had the route before attachments? Add only the third line.
+
 3. **Check Caddy can reach both.** Garage answers 403 to unsigned requests:
 
    ```bash
@@ -102,13 +104,16 @@ ClusterIP directly, so no Kubernetes policy changes.
    ```
 
 4. **Point DNS** for the domain at the server, so Caddy can get a certificate.
-5. **Recreate only Caddy** (a reload doesn't pick up new env values):
+5. **Recreate only Caddy** (a reload doesn't pick up new env values, and
+   `--force-recreate` also picks up a pulled Caddyfile):
 
    ```bash
-   docker compose --project-directory hosts/server-2 -f hosts/server-2/compose.yaml up -d --no-deps caddy
+   docker compose --project-directory hosts/server-2 -f hosts/server-2/compose.yaml up -d --no-deps --force-recreate caddy
    ```
 
-Then run the public checks at the end of [testing.md](testing.md).
+Then run the public checks at the end of [testing.md](testing.md). If an
+upload fails with 405, Caddy still runs the old Caddyfile: redo step 5. A 503
+means `KANEO_STORAGE_K3S_UPSTREAM` is missing: redo step 2, then step 5.
 
 ClusterIPs change if a Service or the cluster is recreated: update both
 upstreams after any rebuild. To take Kaneo offline publicly, remove only its
