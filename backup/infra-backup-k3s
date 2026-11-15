@@ -29,23 +29,9 @@ if [[ ! -e latest && -d previous ]]; then mv previous latest; fi
 rm -rf -- incoming previous
 mkdir -m 700 incoming incoming/databases
 
-primary="$(k -n postgres get pod -o name -l cnpg.io/cluster=postgres,cnpg.io/instanceRole=primary)"
-[[ ${primary} == pod/* && ${primary} != *$'\n'* ]] || { echo "Expected one PostgreSQL primary" >&2; exit 1; }
-mapfile -t databases < <(k -n postgres get databases.postgresql.cnpg.io \
-  -o jsonpath='{range .items[*]}{.spec.name}{"\n"}{end}')
-((${#databases[@]})) || { echo "No CloudNativePG Database resources" >&2; exit 1; }
-for db in "${databases[@]}"; do
-  [[ ${db} =~ ^[a-z_][a-z0-9_]*$ ]] || { echo "Unexpected database name: ${db}" >&2; exit 1; }
-  echo "Dumping K3s PostgreSQL database ${db}"
-  k -n postgres exec "${primary}" -c postgres -- pg_dump -d "${db}" --format=custom >"incoming/databases/${db}.dump"
-  # pg_restore reads the whole table of contents, so a truncated dump fails here.
-  k -n postgres exec -i "${primary}" -c postgres -- pg_restore --list <"incoming/databases/${db}.dump" >/dev/null
-done
-
-# Object storage, after the dumps so every object they reference is present:
-# mirror each Garage bucket that an app's storage.env key can read. The mirror
-# persists between runs, so only new objects are fetched, and hard links give
-# the capture a complete copy without using the space twice.
+# Object storage: mirror each Garage bucket that an app's storage.env key can
+# read. The mirror persists between runs, so only new objects are fetched, and
+# hard links give the capture a complete copy without using the space twice.
 shopt -s nullglob
 storage_keys=("${inputs}"/*/storage.env)
 shopt -u nullglob
@@ -55,6 +41,10 @@ if ((${#storage_keys[@]})); then
   garage="$(k -n garage get service garage -o jsonpath='{.spec.clusterIP}')"
   [[ ${garage} =~ ^[0-9.]+$ ]] || { echo "Expected Garage's ClusterIP" >&2; exit 1; }
   mkdir -p -m 700 objects
+fi
+# mirror sync|copy: sync also drops objects deleted from the bucket; copy only adds.
+mirror() {
+  local storage_key
   for storage_key in "${storage_keys[@]}"; do
     (
       # The key reaches rclone through its environment, never its arguments.
@@ -72,13 +62,31 @@ if ((${#storage_keys[@]})); then
       for bucket in "${buckets[@]%/}"; do
         [[ -n ${bucket} ]] || continue
         [[ ${bucket} =~ ^[a-z0-9][a-z0-9.-]{1,62}$ ]] || { echo "Unexpected bucket name: ${bucket}" >&2; exit 1; }
-        echo "Mirroring Garage bucket ${bucket}"
-        "${rclone_bin}" --config /dev/null sync "garage:${bucket}" "objects/${bucket}"
+        echo "Mirroring Garage bucket ${bucket} (${1})"
+        "${rclone_bin}" --config /dev/null "$1" "garage:${bucket}" "objects/${bucket}"
       done
     )
   done
-  cp -al -- objects incoming/objects
-fi
+}
+# Deletions are applied before the dumps and additions after them, so every
+# object a dump refers to is in the set, even one deleted while it was taken.
+mirror sync
+
+primary="$(k -n postgres get pod -o name -l cnpg.io/cluster=postgres,cnpg.io/instanceRole=primary)"
+[[ ${primary} == pod/* && ${primary} != *$'\n'* ]] || { echo "Expected one PostgreSQL primary" >&2; exit 1; }
+mapfile -t databases < <(k -n postgres get databases.postgresql.cnpg.io \
+  -o jsonpath='{range .items[*]}{.spec.name}{"\n"}{end}')
+((${#databases[@]})) || { echo "No CloudNativePG Database resources" >&2; exit 1; }
+for db in "${databases[@]}"; do
+  [[ ${db} =~ ^[a-z_][a-z0-9_]*$ ]] || { echo "Unexpected database name: ${db}" >&2; exit 1; }
+  echo "Dumping K3s PostgreSQL database ${db}"
+  k -n postgres exec "${primary}" -c postgres -- pg_dump -d "${db}" --format=custom >"incoming/databases/${db}.dump"
+  # pg_restore reads the whole table of contents, so a truncated dump fails here.
+  k -n postgres exec -i "${primary}" -c postgres -- pg_restore --list <"incoming/databases/${db}.dump" >/dev/null
+done
+
+mirror copy
+if ((${#storage_keys[@]})); then cp -al -- objects incoming/objects; fi
 cp -a -- "${inputs}" incoming/inputs
 cp -a -- "${keys}" incoming/keys
 cp -- "${K3S_KUBECONFIG}" incoming/kubeconfig

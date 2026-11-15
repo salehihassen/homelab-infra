@@ -111,15 +111,24 @@ upload directly, the bucket also needs a Caddy route on the app's origin.
 
 Every night, server-2's backup copies each bucket an app's `storage.env` key
 can read into `objects/<bucket>/` of the K3s capture (see
-[backups.md](../backups.md#the-public-k3s-cluster-server-2)), after the
-database dumps, so each dump's attachments are there.
+[backups.md](../backups.md#the-public-k3s-cluster-server-2)): deletions
+before the database dumps, new objects after them, so each dump's
+attachments are there.
 
 If Garage's volume is lost, the apps stay up but their files are gone until
 restored:
 
-1. Recreate `garage-credentials` from the recovered
-   `inputs/garage/credentials.env` (step 1 above, with that file). Flux starts
-   Garage, which creates an empty `kaneo-uploads` and its key. Redo step 3.
+1. Keep Secret `garage-credentials` if it still exists; recreate it from the
+   recovered `inputs/garage/credentials.env` only if it is gone:
+
+   ```bash
+   kubectl --context "$PUBLIC_CONTEXT" -n garage get secret garage-credentials ||
+     kubectl --context "$PUBLIC_CONTEXT" -n garage create secret generic garage-credentials \
+       --from-env-file=<restore target>/opt/k3s-backup/latest/inputs/garage/credentials.env
+   ```
+
+   Flux starts Garage, which creates an empty `kaneo-uploads` and its key.
+   Redo step 3.
 2. Copy the objects back, with rclone (on server-2, the backup's own:
    `rclone_binary` in `/opt/infra-backup/tool.json`). The key goes through the
    environment, not the command line:

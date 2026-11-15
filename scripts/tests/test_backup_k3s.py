@@ -14,12 +14,14 @@ spec = importlib.util.spec_from_file_location('backup_launcher_k3s', ROOT / 'bac
 launcher = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(launcher)
 
-# Answers the few kubectl calls the capture makes; FAIL_DUMP breaks pg_dump.
+# Answers the few kubectl calls the capture makes; FAIL_DUMP breaks pg_dump and
+# DELETE_AFTER_DUMP removes an object as soon as the dump is taken.
 FAKE_KUBECTL = r'''#!/usr/bin/env bash
 case "$*" in
   *"get pod"*) echo pod/postgres-1 ;;
   *"get databases"*) printf 'kaneo\nother_app\n' ;;
-  *pg_dump*) [[ -z ${FAIL_DUMP:-} ]] || exit 1; echo "dump of ${*: -2:1}" ;;
+  *pg_dump*) [[ -z ${FAIL_DUMP:-} ]] || exit 1; echo "dump of ${*: -2:1}"
+    [[ -z ${DELETE_AFTER_DUMP:-} ]] || rm -f "${DELETE_AFTER_DUMP}" ;;
   *pg_restore*) cat >/dev/null ;;
   *gitrepository*) echo 'refs/heads/main@sha1:abc' ;;
   *"service garage"*) echo 10.145.0.9 ;;
@@ -27,14 +29,15 @@ case "$*" in
 esac
 '''
 
-# Lists one bucket and mirrors it; records how it received the key.
-# FAIL_SYNC breaks the mirror.
+# Lists one bucket, the FAKE_GARAGE directory, and mirrors it; records how it
+# received the key. FAIL_SYNC breaks the mirror.
 FAKE_RCLONE = r'''#!/usr/bin/env bash
 echo "args: $* key: ${RCLONE_CONFIG_GARAGE_SECRET_ACCESS_KEY:-} at: ${RCLONE_CONFIG_GARAGE_ENDPOINT:-}" >>"${RCLONE_LOG}"
 case "$*" in
   *lsf*) echo kaneo-uploads/ ;;
   *sync*) [[ -z ${FAIL_SYNC:-} ]] || exit 1
-    mkdir -p "${*: -1}/workspace"; echo "object" >"${*: -1}/workspace/file.png" ;;
+    rm -rf "${*: -1}"; cp -a "${FAKE_GARAGE}" "${*: -1}" ;;
+  *copy*) cp -a "${FAKE_GARAGE}/." "${*: -1}/" ;;
 esac
 '''
 
@@ -44,7 +47,7 @@ class CaptureScript(unittest.TestCase):
         env = {'PATH': str(root / 'bin') + os.pathsep + os.environ['PATH'],
                'K3S_BACKUP_DIR': str(root / 'k3s'), 'K3S_KUBECONFIG': str(root / 'kubeconfig'),
                'INFRA_DIR': str(root / 'repo'), 'BACKUP_TOOL_CONFIG': str(root / 'tool.json'),
-               'RCLONE_LOG': str(root / 'rclone.log'), **extra}
+               'RCLONE_LOG': str(root / 'rclone.log'), 'FAKE_GARAGE': str(root / 'garage'), **extra}
         return subprocess.run([str(ROOT / 'backup/infra-backup-k3s')], env=env,
                               capture_output=True, text=True)
 
@@ -63,6 +66,8 @@ class CaptureScript(unittest.TestCase):
         (root / 'bin/rclone').write_text(FAKE_RCLONE)
         (root / 'bin/rclone').chmod(0o755)
         (root / 'tool.json').write_text(json.dumps({'rclone_binary': str(root / 'bin/rclone')}))
+        (root / 'garage/workspace').mkdir(parents=True)
+        (root / 'garage/workspace/file.png').write_text('object\n')
 
     def add_storage_key(self):
         (self.root / 'repo/local/public-edge-inputs/kaneo/storage.env').write_text(
@@ -100,6 +105,17 @@ class CaptureScript(unittest.TestCase):
         log = (self.root / 'rclone.log').read_text()
         self.assertIn('key: storage-secret at: http://10.145.0.9:3900', log)
         self.assertNotIn('storage-secret', ''.join(line.split(' key: ')[0] for line in log.splitlines()))
+
+    def test_objects_deleted_after_the_dump_stay_in_the_set(self):
+        self.add_storage_key()
+        self.assertEqual(self.capture(self.root).returncode, 0)
+        (self.root / 'garage/workspace/new.png').write_text('new\n')
+        result = self.capture(self.root, DELETE_AFTER_DUMP=str(self.root / 'garage/workspace/new.png'))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.root / 'k3s/latest/objects/kaneo-uploads/workspace/new.png').read_text(), 'new\n')
+        # The next run drops it.
+        self.assertEqual(self.capture(self.root).returncode, 0)
+        self.assertFalse((self.root / 'k3s/latest/objects/kaneo-uploads/workspace/new.png').exists())
 
     def test_failed_mirror_keeps_the_previous_capture(self):
         self.add_storage_key()

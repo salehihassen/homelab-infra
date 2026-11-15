@@ -128,7 +128,9 @@ captured-at.txt
 ```
 
 Apps keep running: `pg_dump` reads one consistent snapshot. Buckets are
-copied after the dumps, so every object a dump refers to is there. rclone
+mirrored in two passes, deletions before the dumps and new objects after
+them, so every object a dump refers to is there, even one deleted while the
+dumps ran (the next night drops it). rclone
 (`rclone_binary` in `tool.json`) keeps a mirror in `/opt/k3s-backup/objects`
 and fetches only new objects; the capture hard-links it, so the files take
 their space on disk once. If any step fails, the whole run fails before
