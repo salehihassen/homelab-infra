@@ -6,8 +6,8 @@ stopped 12.3 cluster kept for reference (`--profile deprecated`).
 - **Provides:** network `postgres_network` (`opt_postgres_network`) and service
   `postgres`. Clients join the network, depend on `postgres` being healthy, and
   connect to `postgres:5432` with their own role and database.
-- **Consumers:** quotes (`ductape`), email-assist (`email_assist`), forgejo
-  (`forgejo`). pgAdmin joins the same network.
+- **Consumers:** quotes (`ductape`), email-assist (`email_assist`) and Langfuse
+  (`langfuse`). pgAdmin joins the same network.
 - **Data:** `/opt/postgresql/data18` (live cluster, never copied raw),
   `/opt/postgresql/initdb18`, `/opt/postgresql/*.env`, `/opt/postgres.env`,
   `/opt/pgadmin`.

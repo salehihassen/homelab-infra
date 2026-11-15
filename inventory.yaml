@@ -167,12 +167,6 @@ stacks:
       data: [/opt/komodo]
       backup: Komodo's dated database exports + keys and secrets
       exposure: [tailnet, loopback]
-    forgejo:
-      services: [forgejo, forgejo-docker, forgejo-runner]
-      urls: [FORGEJO_DOMAIN]
-      data: [postgres:forgejo, /opt/forgejo, /opt/forgejo-runner]
-      backup: paused pg_dump + repository copy
-      exposure: [tailnet, lan]   # git over SSH on 2222
 
   server-2:
     caddy:

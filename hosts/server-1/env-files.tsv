@@ -12,7 +12,6 @@ observability/.env	/opt/observability/.env
 -	/opt/postgresql/postgres18.env
 -	/opt/postgres.env
 -	/opt/postgresql/quotes.env
--	/opt/forgejo/forgejo.env
 -	/opt/komodo/komodo.env
 -	/opt/condenseit/telemetry.env
 -	/opt/langfuse/langfuse.env
@@ -24,7 +23,6 @@ postgres/.env	/opt/postgresql/compose.env
 komodo/.env	/opt/komodo/compose.env
 condenseit/.env	/opt/condenseit/compose.env
 countdown/.env	/opt/countdown/compose.env
-forgejo/.env	/opt/forgejo/compose.env
 job-sentinel/.env	/opt/job-sentinel/compose.env
 jobsmith/.env	/opt/jobsmith/compose.env
 metube/.env	/opt/metube/compose.env
@@ -37,7 +35,6 @@ postgres/routing.env	/opt/postgresql/routing.env
 komodo/routing.env	/opt/komodo/routing.env
 condenseit/routing.env	/opt/condenseit/routing.env
 countdown/routing.env	/opt/countdown/routing.env
-forgejo/routing.env	/opt/forgejo/routing.env
 job-sentinel/routing.env	/opt/job-sentinel/routing.env
 jobsmith/routing.env	/opt/jobsmith/routing.env
 metube/routing.env	/opt/metube/routing.env

@@ -1,7 +1,7 @@
 # One revision supplies core scripts, the production Web UI and workspace seed.
 FROM node:24.18.0-bookworm-slim
 ARG CAREER_OPS_REV=b5e4c26f21efee31559296495d794c9a9564a714
-ARG CODEX_VERSION=0.164.0
+ARG CODEX_VERSION=0.169.0
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git ca-certificates curl bash ripgrep python3 util-linux \
     && rm -rf /var/lib/apt/lists/* \
@@ -21,6 +21,9 @@ RUN npm ci --no-audit --no-fund && npm --prefix web ci --no-audit --no-fund \
 USER root
 RUN cd /app && npx playwright install --with-deps chromium \
     && chmod -R a+rX /ms-playwright && rm -rf /var/lib/apt/lists/*
+# Codex's PID-managed app server uses ps to record and verify process identity.
+RUN apt-get update && apt-get install -y --no-install-recommends procps \
+    && rm -rf /var/lib/apt/lists/*
 COPY --chmod=755 entrypoint.sh scheduler.sh /usr/local/libexec/career-ops/
 ENV NODE_ENV=production HOME=/home/node CODEX_HOME=/home/node/.codex \
     CAREER_OPS_ROOT=/workspace CAREER_OPS_CODE_ROOT=/workspace
