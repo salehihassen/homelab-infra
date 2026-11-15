@@ -45,9 +45,20 @@ https://{$RESOURCES_DOMAIN} {
 	redir {$RESOURCES_REDIRECT_URL} temporary
 }
 # Kaneo on the public K3s cluster: its Service ClusterIP:5173 on this host.
+# Its uploads bucket is served on the same origin, so browsers can PUT to
+# presigned URLs without CORS: Garage's Service ClusterIP:3900. Garage accepts
+# only signed requests, and the Host header passes through unchanged as the
+# signatures require.
 https://{$KANEO_PUBLIC_DOMAIN} {
-	reverse_proxy {$KANEO_K3S_UPSTREAM} {
-		header_up -Tailscale-*
+	handle /kaneo-uploads/* {
+		reverse_proxy {$KANEO_STORAGE_K3S_UPSTREAM} {
+			header_up -Tailscale-*
+		}
+	}
+	handle {
+		reverse_proxy {$KANEO_K3S_UPSTREAM} {
+			header_up -Tailscale-*
+		}
 	}
 }
 # Flux Operator's read-only Mission Control, for tailnet clients only: its

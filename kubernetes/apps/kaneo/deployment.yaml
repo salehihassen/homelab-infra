@@ -47,6 +47,23 @@ spec:
             - name: KANEO_CLIENT_URL
               valueFrom:
                 configMapKeyRef: {name: kaneo-settings, key: KANEO_CLIENT_URL}
+            # Attachments live in Garage's kaneo-uploads bucket, served by
+            # Caddy on Kaneo's own origin (path-style), so browsers can PUT
+            # to presigned URLs without CORS. Kaneo uses the same URL itself.
+            - name: S3_ENDPOINT
+              value: $(KANEO_CLIENT_URL)
+            - name: S3_FORCE_PATH_STYLE
+              value: "true"
+            - name: S3_BUCKET
+              value: kaneo-uploads
+            - name: S3_REGION
+              value: garage
+            - name: S3_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef: {name: kaneo-storage, key: S3_ACCESS_KEY_ID}
+            - name: S3_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef: {name: kaneo-storage, key: S3_SECRET_ACCESS_KEY}
             - name: DISABLE_GUEST_ACCESS
               value: "true"
             - name: DISABLE_REGISTRATION

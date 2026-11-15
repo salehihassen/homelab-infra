@@ -21,8 +21,12 @@ how Flux Operator, Flux and Mission Control fit together.
 - `databases/postgres`: shared PostgreSQL 18 `Cluster` in namespace `postgres`,
   its StorageClass and policies, and one file per app under `app-databases/`.
   Setup: [postgres.md](../docs/kubernetes/postgres.md).
+- `storage/garage`: shared Garage object store in namespace `garage`, one node
+  with one bucket per app (today Kaneo's attachments).
+  Setup: [garage.md](../docs/kubernetes/garage.md).
 - `apps/kaneo`: Kaneo namespace, Deployment, Service and policies. Runtime files use
-  temporary `emptyDir` storage; its Flux reconciliation depends on postgres.
+  temporary `emptyDir` storage and attachments live in Garage; its Flux
+  reconciliation depends on postgres and garage.
   Setup: [kaneo.md](../docs/kubernetes/kaneo.md).
 - `infrastructure/flux-operator`: rendered, pinned Flux Operator 0.62.1 chart
   with its read-only Mission Control UI and private-access policy.

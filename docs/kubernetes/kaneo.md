@@ -4,9 +4,11 @@ A new, empty Kaneo instance, separate from the private Compose Kaneo: it shares
 no data or secrets with it. It runs as Deployment `kaneo` in namespace `kaneo`
 and keeps everything durable in the `kaneo` database on the
 [shared PostgreSQL](postgres.md) (`postgres-rw.postgres.svc.cluster.local`).
-Its `/var/lib/kaneo` and `/tmp` are temporary and not backed up. Flux starts it
-only after `postgres` is Ready. SMTP, OAuth, Redis and S3 uploads are not set
-up.
+Attachments live in bucket `kaneo-uploads` on the shared
+[Garage object store](garage.md), so the Pod keeps no files of its own: its
+`/var/lib/kaneo` and `/tmp` are temporary and not backed up, and it can run on
+any node. Flux starts it only after `postgres` and `garage` are Ready. SMTP,
+OAuth and Redis are not set up.
 
 ## Prepare the new instance
 
@@ -35,7 +37,9 @@ Do this during [setup](bootstrap.md) step 5, before turning on GitOps.
      --from-env-file="$KANEO_SETTINGS_FILE"
    ```
 
-3. **Check** the key names, without printing values:
+3. **Storage key:** [garage.md, First-time setup](garage.md#first-time-setup)
+   writes `$dir/storage.env` and creates Secret `kaneo-storage`.
+4. **Check** the key names, without printing values:
 
    ```bash
    kubectl --context "$PUBLIC_CONTEXT" -n kaneo get secret kaneo-credentials \
@@ -43,7 +47,10 @@ Do this during [setup](bootstrap.md) step 5, before turning on GitOps.
    kubectl --context "$PUBLIC_CONTEXT" -n kaneo get configmap kaneo-settings -o jsonpath='{.data}{"\n"}'
    ```
 
-4. **Copy `local/public-edge-inputs/` off the server.**
+5. **Copy `local/public-edge-inputs/` off the server.**
+
+Until the public route exists, attachments fail: Kaneo signs uploads for its
+own address, and the local one isn't reachable from the Pod.
 
 Don't edit these files in an editor: the password must not end in a newline.
 To rotate the database password, change it in both Secrets, then restart
@@ -72,23 +79,26 @@ ClusterIP directly, so no Kubernetes policy changes.
    ```
 
    From now on, login only works at the public address.
-2. **Tell Caddy where Kaneo is.** Add both lines to `/opt/caddy/routing.env`
-   **before** recreating Caddy. With an empty domain the Caddyfile is invalid,
-   and Caddy, with every public site, fails to start:
+2. **Tell Caddy where Kaneo and its bucket are.** Add all three lines to
+   `/opt/caddy/routing.env` **before** recreating Caddy. With an empty domain
+   the Caddyfile is invalid, and Caddy, with every public site, fails to start:
 
    ```bash
    kubectl --context "$PUBLIC_CONTEXT" -n kaneo get service kaneo -o jsonpath='{.spec.clusterIP}{"\n"}'
+   kubectl --context "$PUBLIC_CONTEXT" -n garage get service garage -o jsonpath='{.spec.clusterIP}{"\n"}'
    # in /opt/caddy/routing.env:
    #   KANEO_PUBLIC_DOMAIN=<kaneo domain>
-   #   KANEO_K3S_UPSTREAM=<that ClusterIP>:5173
+   #   KANEO_K3S_UPSTREAM=<Kaneo's ClusterIP>:5173
+   #   KANEO_STORAGE_K3S_UPSTREAM=<Garage's ClusterIP>:3900
    ```
 
-3. **Check Caddy can reach it:**
+3. **Check Caddy can reach both.** Garage answers 403 to unsigned requests:
 
    ```bash
-   upstream=<that ClusterIP>:5173
+   upstream=<Kaneo's ClusterIP>:5173 storage=<Garage's ClusterIP>:3900
    curl --fail "http://$upstream/api/health"
    docker exec caddy wget -qO- "http://$upstream/api/health"
+   curl -s -o /dev/null -w '%{http_code}\n' "http://$storage/kaneo-uploads/"   # 403
    ```
 
 4. **Point DNS** for the domain at the server, so Caddy can get a certificate.
@@ -100,9 +110,9 @@ ClusterIP directly, so no Kubernetes policy changes.
 
 Then run the public checks at the end of [testing.md](testing.md).
 
-The ClusterIP changes if the Service or cluster is recreated: update
-`KANEO_K3S_UPSTREAM` after any rebuild. To take Kaneo offline publicly, remove
-only its two routing lines and recreate Caddy; keep its database, credentials
+ClusterIPs change if a Service or the cluster is recreated: update both
+upstreams after any rebuild. To take Kaneo offline publicly, remove only its
+three routing lines and recreate Caddy; keep its database, credentials
 and recovery set.
 
 ## Capture one coherent recovery set
@@ -112,13 +122,15 @@ that match it, taken together. A copy of PostgreSQL's data directory is not
 one.
 
 **Every night**, server-2's encrypted B2 backup captures one automatically,
-without stopping Kaneo: the dump in `databases/kaneo.dump` and the inputs in
-`inputs/kaneo/` under `/opt/k3s-backup/latest` (see
+without stopping Kaneo: the dump in `databases/kaneo.dump`, the attachments in
+`objects/kaneo-uploads/` and the inputs in `inputs/kaneo/` under
+`/opt/k3s-backup/latest` (see
 [backups.md](../backups.md#the-public-k3s-cluster-server-2)).
 
-**By hand**, before a risky change, run this on the server, from the repo root, with `KUBECONFIG` and
-`PUBLIC_CONTEXT` exported. If you ever changed a Secret or ConfigMap by hand,
-update the input files to match first. Then point at the inputs and a new
+**By hand**, before a risky change, run this on the server (database and
+inputs only; attachments come from the nightly copy), from the repo root, with
+`KUBECONFIG` and `PUBLIC_CONTEXT` exported. If you ever changed a Secret or
+ConfigMap by hand, update the input files to match first. Then point at the inputs and a new
 private directory outside the repo:
 
 ```bash
@@ -186,9 +198,10 @@ Last drill: 2026-11-13. The restored tables matched live row for row, and
 login, reads, writes and restarts all worked.
 
 Restore into a throwaway cluster on another machine, never over the live
-instance. That machine needs Docker, [k3d](https://k3d.io) and kubectl, the
-repo at the commit the live cluster runs, and the recovery set in a private
-directory. The candidate has no Flux and no public route.
+instance. That machine needs Docker, [k3d](https://k3d.io), kubectl and
+[rclone](https://rclone.org), the repo at the commit the live cluster runs,
+and the recovery set in a private directory. The candidate has no Flux and no
+public route.
 
 To use a nightly capture, restore it from B2 (see
 [backups.md](../backups.md#the-public-k3s-cluster-server-2)), then gather the
@@ -198,7 +211,9 @@ recovery set:
 src=<restore target>/opt/k3s-backup/latest
 mkdir -m 0700 <recovery set>
 cp "$src/databases/kaneo.dump" "$src/inputs/kaneo/credentials.env" \
-  "$src/inputs/kaneo/db-password" <recovery set>/
+  "$src/inputs/kaneo/db-password" "$src/inputs/kaneo/storage.env" <recovery set>/
+cp "$src/inputs/garage/credentials.env" <recovery set>/garage-credentials.env
+cp -r "$src/objects/kaneo-uploads" <recovery set>/objects
 ```
 
 1. **Create the candidate**, on the server's K3s version, with its own
@@ -258,18 +273,43 @@ cp "$src/databases/kaneo.dump" "$src/inputs/kaneo/credentials.env" \
    }
    ```
 
-5. **Start Kaneo** with the recovered credentials and a local address:
+5. **Restore the attachments** into the candidate's own Garage. The key
+   goes to rclone through the environment, not the command line:
+
+   ```bash
+   k apply -f kubernetes/storage/garage/namespace.yaml
+   k -n garage create secret generic garage-credentials --from-env-file="$RECOVERY_DIR/garage-credentials.env"
+   k apply -k kubernetes/storage/garage
+   k -n garage rollout status statefulset/garage --timeout=300s
+   k -n garage port-forward --address=127.0.0.1 service/garage 3900:3900 &
+   (
+     set -a; . "$RECOVERY_DIR/storage.env"; set +a
+     export RCLONE_CONFIG_GARAGE_TYPE=s3 RCLONE_CONFIG_GARAGE_PROVIDER=Other \
+       RCLONE_CONFIG_GARAGE_ENDPOINT=http://127.0.0.1:3900 RCLONE_CONFIG_GARAGE_REGION=garage \
+       RCLONE_CONFIG_GARAGE_FORCE_PATH_STYLE=true \
+       RCLONE_CONFIG_GARAGE_ACCESS_KEY_ID="$S3_ACCESS_KEY_ID" \
+       RCLONE_CONFIG_GARAGE_SECRET_ACCESS_KEY="$S3_SECRET_ACCESS_KEY"
+     rclone --config /dev/null copy "$RECOVERY_DIR/objects" garage:kaneo-uploads
+     rclone --config /dev/null check "$RECOVERY_DIR/objects" garage:kaneo-uploads   # 0 differences
+   )
+   kill %1
+   ```
+
+6. **Start Kaneo** with the recovered credentials and a local address:
 
    ```bash
    k apply -f kubernetes/apps/kaneo/namespace.yaml
    k -n kaneo create secret generic kaneo-credentials --from-env-file="$RECOVERY_DIR/credentials.env"
+   k -n kaneo create secret generic kaneo-storage --from-env-file="$RECOVERY_DIR/storage.env"
    k -n kaneo create configmap kaneo-settings --from-literal=KANEO_CLIENT_URL=http://127.0.0.1:8912
    k apply -k kubernetes/apps/kaneo
    k -n kaneo rollout status deployment/kaneo --timeout=600s
    k -n kaneo port-forward --address=127.0.0.1 service/kaneo 8912:5173 &
    ```
 
-6. **Use it** at `http://127.0.0.1:8912`:
+7. **Use it** at `http://127.0.0.1:8912`. Attachments don't open here: Kaneo
+   reaches its bucket only through its public address, so step 5's check is
+   the attachments' test.
 
    - [ ] Log in with your normal account.
    - [ ] Your workspaces, projects and tasks are all there.
@@ -285,12 +325,11 @@ cp "$src/databases/kaneo.dump" "$src/inputs/kaneo/credentials.env" \
      k -n kaneo port-forward --address=127.0.0.1 service/kaneo 8912:5173 &
      ```
 
-7. **Clean up:** `kill %1`, `k3d cluster delete kaneo-restore` and
+8. **Clean up:** `kill %1`, `k3d cluster delete kaneo-restore` and
    `rm "$KUBECONFIG"`. Keep the recovery set only on encrypted storage.
 
 A successful import alone is not a passed drill; the app must work on it.
 Kaneo regenerates its runtime files on startup, so there is no file archive.
-If S3 uploads are added later, the object store must join the recovery set.
 
 ## Take it offline
 

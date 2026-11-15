@@ -1,0 +1,9 @@
+# No Pod talks to Garage directly. Its only client is Caddy on the host, which
+# K3s's policy controller does not filter, like the kubelet's probes.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
