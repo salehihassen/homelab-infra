@@ -11,7 +11,7 @@ name = "Existing CLIProxyAPI gateway"
 base_url = "http://ai-policy-proxy:18443/v1"
 wire_api = "responses"
 # CPA returns Codex-native metadata only when client_version is present.
-model_catalog_url = "http://cli-proxy-api:8317/v1/models?client_version=0.164.0"
+model_catalog_url = "http://cli-proxy-api:8317/v1/models?client_version=0.169.0"
 # HTTP SSE is supported by the policy proxy; WebSocket transport is not.
 request_max_retries = 1
 stream_max_retries = 1

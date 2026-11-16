@@ -61,6 +61,49 @@ use the same backoff, persisted before the CLI starts. A 401 blocks further
 requests with that token until it changes. Failures keep the last good sample
 and its timestamp; Home Assistant marks it unavailable after 30 minutes.
 
+## Synthetic usage exporter
+
+`export-synthetic-usage.sh` loads the private API key and runs the weekly-only
+exporter. The [quota API](https://dev.synthetic.new/docs/synthetic/quotas) is
+`GET https://api.synthetic.new/v2/quotas` with Bearer authentication. Its public
+example still shows an older `subscription` counter; the current account
+response exposes `planWeeklyLimit.percentRemaining`, `nextRegenAt`, and
+`nextRegenPercent`. Percentages are percentage points, including values below
+1%. The next regeneration is a partial refill, not a full weekly reset.
+
+The exporter writes `weekly_remaining`, `weekly_next_refill_at` (Unix seconds),
+`weekly_next_refill_percent`, `weekly_next_refill_remaining`, and `sampled_at`.
+`weekly_next_refill_effective_percent` caps the next increment at the missing
+quota, so a nearly full bar shows only the amount it can actually recover.
+Synthetic [publishes a fixed refill cadence](https://synthetic.new/rate-limits)
+of 2 percentage points every 202 minutes (about 14.3 points/day). The exporter
+uses the API's next tick and increment, plus that documented interval, to
+estimate `weekly_refills_until_full` and `weekly_full_refill_at`, assuming no
+further usage. It exports `weekly_refill_interval_seconds` as well. These are
+discrete ticks: full recovery occurs at the next tick plus the intervals needed
+for the remaining increments. The full timestamp is null when already full,
+when the increment is zero, or while awaiting a fresh next-tick timestamp.
+The full estimate uses the unrounded percentage; the visible balance is rounded.
+The host's `sensor.synthetic_weekly_refill_in` shows the next effective
+increment, countdown and resulting balance. `sensor.synthetic_weekly_full_in`
+shows the no-further-usage countdown, and
+`sensor.synthetic_weekly_full_estimate_at` provides the estimated timestamp.
+When full, both countdowns read `Already full` and the full timestamp is
+unavailable. Dashboard configuration remains unchanged.
+
+It ignores the legacy
+`subscription` counter and separate search quota. No five-hour quota or credit
+balances are exported. The existing weekly Home Assistant entity IDs stay the
+same; their attributes use the next refill time and percentage. Remove the
+retired five-hour remaining and refill helper entities from their owning
+`command_line.yaml` and `template.yaml` includes, without editing dashboards.
+
+`synthetic-usage-export.timer` polls every three minutes. Failed requests or
+invalid quota values preserve the previous sample and its timestamp. Keep
+`SYNTHETIC_USAGE_SECRETS_FILE` and `SYNTHETIC_USAGE_OUTPUT` in local service
+configuration; the sourced file must export `SYNTHETIC_API_KEY`. Tests:
+`python3 -m unittest discover -s hosts/server-1/home-automation/exporters -p 'test_export_synthetic_usage.py'`.
+
 ## Ollama usage exporter
 
 Uses only Ollama's API with an API key; no browser session is involved.

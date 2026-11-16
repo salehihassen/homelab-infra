@@ -1,6 +1,6 @@
 # Nested Codex sandbox
 
-Codex 0.164.0 requires bubblewrap to isolate agent shell commands. Docker's
+Codex 0.169.0 requires bubblewrap to isolate agent shell commands. Docker's
 default seccomp and AppArmor policies prevent it from creating namespaces and
 mounting the isolated filesystem. These profiles keep Codex's inner sandbox
 enabled without granting the application any host capabilities, privileged mode,

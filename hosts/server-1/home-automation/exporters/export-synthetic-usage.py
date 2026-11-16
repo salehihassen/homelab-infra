@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Export Synthetic subscription quota percentages and refill times for Home Assistant."""
+"""Export Synthetic's weekly quota percentage and next regeneration for Home Assistant."""
 
 import json
 import math
@@ -10,11 +10,12 @@ import time
 import urllib.error
 import urllib.request
 from datetime import datetime
-from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 
 URL = "https://api.synthetic.new/v2/quotas"
+# Published cadence: https://synthetic.new/rate-limits (2 percentage points/tick).
+REFILL_INTERVAL_SECONDS = 202 * 60
 
 
 def required_path(name):
@@ -36,13 +37,6 @@ def timestamp(value):
     return int(parsed.timestamp())
 
 
-def money(value):
-    try:
-        return float(Decimal(str(value).replace("$", "").replace(",", "")))
-    except InvalidOperation as exc:
-        raise ValueError("Synthetic returned an invalid credit balance") from exc
-
-
 def get_usage():
     api_key = os.environ.get("SYNTHETIC_API_KEY")
     if not api_key:
@@ -54,26 +48,34 @@ def get_usage():
     except urllib.error.HTTPError as exc:
         raise RuntimeError(f"Synthetic quota request returned HTTP {exc.code}") from exc
 
-    five_hour = data["rollingFiveHourLimit"]
-    weekly = data["weeklyTokenLimit"]
-    remaining_requests = float(five_hour["remaining"])
-    request_limit = float(five_hour["max"])
+    weekly = data["planWeeklyLimit"]
     weekly_percent = float(weekly["percentRemaining"])
-    if not all(math.isfinite(x) for x in (remaining_requests, request_limit, weekly_percent)):
+    refill_percent = float(weekly["nextRegenPercent"])
+    if not all(math.isfinite(x) for x in (weekly_percent, refill_percent)):
         raise ValueError("Synthetic returned nonfinite quota values")
-    if request_limit <= 0 or not 0 <= remaining_requests <= request_limit or not 0 <= weekly_percent <= 100:
+    if not all(0 <= x <= 100 for x in (weekly_percent, refill_percent)):
         raise ValueError("Synthetic returned invalid quota values")
 
+    next_refill_at = timestamp(weekly["nextRegenAt"])
+    sampled_at = int(time.time())
+    refills_until_full = None
+    full_refill_at = None
+    if weekly_percent == 100:
+        refills_until_full = 0
+    elif refill_percent > 0 and next_refill_at > sampled_at:
+        refills_until_full = math.ceil((100 - weekly_percent) / refill_percent)
+        full_refill_at = next_refill_at + (refills_until_full - 1) * REFILL_INTERVAL_SECONDS
+
     return {
-        "five_hour_remaining": round(100 * remaining_requests / request_limit, 1),
-        "five_hour_requests_remaining": round(remaining_requests, 2),
-        "five_hour_requests_limit": round(request_limit, 2),
-        "five_hour_next_refill_at": timestamp(five_hour["nextTickAt"]),
         "weekly_remaining": round(weekly_percent, 1),
-        "weekly_credits_remaining": money(weekly["remainingCredits"]),
-        "weekly_credits_limit": money(weekly["maxCredits"]),
-        "weekly_next_refill_at": timestamp(weekly["nextRegenAt"]),
-        "sampled_at": int(time.time()),
+        "weekly_next_refill_at": next_refill_at,
+        "weekly_next_refill_percent": refill_percent,
+        "weekly_next_refill_effective_percent": round(min(100 - weekly_percent, refill_percent), 4),
+        "weekly_next_refill_remaining": round(min(100, weekly_percent + refill_percent), 1),
+        "weekly_refill_interval_seconds": REFILL_INTERVAL_SECONDS,
+        "weekly_refills_until_full": refills_until_full,
+        "weekly_full_refill_at": full_refill_at,
+        "sampled_at": sampled_at,
     }
 
 

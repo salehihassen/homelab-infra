@@ -94,7 +94,3 @@ include:
     env_file:
       - metube/${STACK_ENV_FILE:-.env}
       - metube/${STACK_ROUTING_ENV_FILE:-routing.env}
-  - path: forgejo/compose.yaml
-    env_file:
-      - forgejo/${STACK_ENV_FILE:-.env}
-      - forgejo/${STACK_ROUTING_ENV_FILE:-routing.env}

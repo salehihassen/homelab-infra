@@ -1,0 +1,33 @@
+{
+  "comment": "Copy to private host config (never commit real fee amounts). One entry per billing account or pool. match fields are usage_events columns: any listed value selecting the event assigns it to the pool. Subscription periods: UTC dates, end exclusive, fee in currency units. Metered: #2 equals #1 (reconcile against provider invoices). Free: #2 is zero.",
+  "pools": [
+    {
+      "id": "chatgpt-subscription",
+      "billing": "subscription",
+      "match": {"auth_provider_snapshot": ["codex"]},
+      "periods": [{"start": "2026-10-05", "end": "2026-11-04", "fee": 20.00}]
+    },
+    {
+      "id": "claude-subscription",
+      "billing": "subscription",
+      "match": {"auth_provider_snapshot": ["claude"]},
+      "periods": [{"start": "2026-10-01", "end": "2026-10-31", "fee": 20.00}]
+    },
+    {
+      "id": "xai-subscription",
+      "billing": "subscription",
+      "match": {"auth_provider_snapshot": ["xai"]},
+      "periods": [{"start": "2026-10-01", "end": "2026-10-31", "fee": 30.00}]
+    },
+    {
+      "id": "metered-openrouter-budget",
+      "billing": "metered",
+      "match": {"auth_provider_snapshot": ["<metered provider snapshot, from --list-accounts>"]}
+    },
+    {
+      "id": "free-routes",
+      "billing": "free",
+      "match": {"auth_provider_snapshot": ["<free provider snapshots>"]}
+    }
+  ]
+}

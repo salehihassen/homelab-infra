@@ -75,8 +75,8 @@ The current allocation is `10.66.0.0/24` for observability, `.1` for home
 automation, `.2` for Postgres, and `.3` for Komodo. `.4` through `.7` are reserved
 and have no Docker networks. The other stack-private networks start at `.8`
 (Langfuse has `.15`).
-CPA's three subnet variables live in `ai-gateway/.env`; Forgejo CI's lives in
-`forgejo/.env`. Their existing ranges and static IPs are preserved.
+CPA's three subnet variables live in `ai-gateway/.env`. Its existing ranges
+and static IPs are preserved.
 Keep every subnet disjoint from the other Docker networks and host routes;
 automatic allocation can otherwise consume a subnet needed by a fixed network
 before that network is recreated during startup.
@@ -264,8 +264,10 @@ sudo bash hosts/server-1/backup/install.sh
      service stopped, remove old WAL/SHM/journal companions, restore the
      recorded owner and mode, and run `PRAGMA integrity_check` before starting
      the writer.
-   - Forgejo: copy `quiesced/opt/forgejo/data` with numeric owners and permissions
-     preserved alongside its database from this same snapshot.
+   - Historical Forgejo snapshots: copy `quiesced/opt/forgejo/data` with numeric
+     owners and permissions preserved alongside its database from the same
+     snapshot. Forgejo is retired from this host; see the
+     [migration handoff](docs/retired-forgejo.md) before restoring it.
    - Career Ops: recreate its three excluded dependency/build symlinks as
      described in `hosts/server-1/career-ops/README.md`. They point into the
      saved image; do not rebuild dependencies or overwrite restored user files.

@@ -12,7 +12,7 @@ public/LAN listener is added. `CAREER_OPS_ALLOWED_ORIGINS` stays unset.
 
 Source: https://github.com/career-ops-hq/career-ops at
 `b5e4c26f21efee31559296495d794c9a9564a714` (core 1.38.0, web 0.16.0).
-Node 24.18.0, Codex 0.164.0; Playwright 1.64.1 is recorded in core-package-lock.json (upstream omits a root lockfile).
+Node 24.18.0, Codex 0.169.0; Playwright 1.64.1 is recorded in core-package-lock.json (upstream omits a root lockfile).
 The image builds the deployment core lockfile and upstream Web lockfile with `npm ci` and rebuilds the Web UI. Build
 arguments, revision and image tag are recorded in `.env.example`; use a new tag
 for every revision or image change, and retain the previous image for rollback.
@@ -187,6 +187,17 @@ career-ops codex debug models     # authenticate/fetch model metadata; no infere
 ```
 
 The wrapper preserves arguments and enables a TTY only for interactive terminals.
+The image includes `procps`: Codex's default background app server invokes `ps`
+to record and verify its process identity. Missing it causes interactive startup
+to fail before accepting a prompt. Check that real startup path without prompts
+or model calls (using a separate temporary Codex home):
+
+```bash
+python3 hosts/server-1/career-ops/test-cli-startup.py
+# Before deployment, test the new image in a disposable networkless container:
+python3 hosts/server-1/career-ops/test-cli-startup.py --image <new-image-tag>
+```
+
 The UI detects Codex and shares its provider settings and secret with the CLI.
 Use one small explicit assistant request to verify model serving and streaming;
 never put model inference in health checks. Full evaluation still needs personal
@@ -308,6 +319,24 @@ not force it past a collision. Existing dependency/build symlinks keep their
 paths and resolve to the new image. Run doctor, PDF, profile/pipeline write/read,
 UI/CLI parity and restart-persistence checks again. Core and Web UI always move
 together. This procedure changes source/version only, never overlays user data.
+
+For a Codex-only upgrade, keep the workspace revision unchanged. Also update
+`client_version` in the persisted provider's `model_catalog_url`, preserving
+the selected model, authentication and telemetry settings. The separate managed
+daemon package can remain on an older version after changing the image. Once no
+interactive or Web assistant work is active, select the tested image's CLI
+package for the daemon (this restarts it and pins that package):
+
+```bash
+career-ops codex app-server daemon update --from-cli --yes
+career-ops codex app-server daemon version
+python3 hosts/server-1/career-ops/test-cli-startup.py
+python3 hosts/server-1/career-ops/test-sandbox.py
+```
+
+Confirm `cliVersion`, `managedCodexVersion` and `appServerVersion` all match.
+Repeat this daemon selection when upgrading or rolling back Codex; do not fetch
+an untested daemon version independently of the pinned image.
 
 To roll back, stop only the two services, check out the recorded prior commit
 (with the same clean-tree/collision checks), restore the previous image tag and
