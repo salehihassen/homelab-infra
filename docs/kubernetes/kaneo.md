@@ -1,7 +1,8 @@
 # Kaneo on the public cluster
 
-A new, empty Kaneo instance, separate from the private Compose Kaneo: it shares
-no data or secrets with it. It runs as Deployment `kaneo` in namespace `kaneo`
+This is the active Kaneo instance. It was created independently of the
+[retired server-1 Compose instance](../retired-kaneo.md) and shares no data or
+secrets with it. It runs as Deployment `kaneo` in namespace `kaneo`
 and keeps everything durable in the `kaneo` database on the
 [shared PostgreSQL](postgres.md) (`postgres-rw.postgres.svc.cluster.local`).
 Attachments live in bucket `kaneo-uploads` on the shared
@@ -339,7 +340,7 @@ Kaneo regenerates its runtime files on startup, so there is no file archive.
 ## Take it offline
 
 To withdraw the public site, remove only its Caddy route (see above) and keep
-its database, credentials and recovery sets. The private Compose Kaneo is a
-separate instance: never restore its database over this one. Never delete a
+its database, credentials and recovery sets. The retired server-1 Compose
+instance has separate data: never restore its database over this one. Never delete a
 PVC to roll back an image; retained PVCs don't survive disk failure or a K3s
 uninstall.

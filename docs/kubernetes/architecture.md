@@ -1,9 +1,10 @@
 # Public K3s foundation: a new Kaneo instance
 
-Scope revised 2026-11-10. No fleet host has been installed or changed by this branch.
-This first change introduces only a public cluster and an independent, empty
-Kaneo instance. All existing services, including private Compose Kaneo, retain
-their current Compose deployments, routes, credentials and data.
+The initial rollout introduced a public cluster and an independent Kaneo
+instance. Kaneo now runs only on server-2 K3s; the
+[server-1 Compose instance is retired](../retired-kaneo.md), with its original
+data retained separately. Other existing services retain their Compose
+deployments, routes, credentials and data.
 
 The [migration roadmap](roadmap.md) preserves the decisions and acceptance
 criteria from both supplied handoffs. Narrowing this MR does not discard the
