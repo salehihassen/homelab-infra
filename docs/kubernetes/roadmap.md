@@ -67,7 +67,6 @@ and a shared PostgreSQL 18 instance run by the CloudNativePG operator, with a
 retained local volume;
 Kaneo gets its own role and database there. The database has its own
 directory/Flux reconciliation, which Kaneo depends on.
-No existing private Kaneo data/credentials are imported.
 Flux Operator manages the two Flux controllers and generated Git/root sync;
 its read-only Mission Control UI is reached by port-forward or the tailnet.
 No extra GitOps engine or public dashboard route is introduced. See

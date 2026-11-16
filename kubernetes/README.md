@@ -1,7 +1,7 @@
 # Public K3s / Flux pilot
 
-This first step adds one public cluster, a shared PostgreSQL instance and a
-fresh Kaneo instance with its own database there. Existing services stay in Compose. The private cluster
+The public cluster on server-2 runs shared PostgreSQL and Kaneo. Other
+services run in Compose while the fleet migrates to K3s. The private cluster
 and its pilot belong to a later MR.
 
 The [migration roadmap](../docs/kubernetes/roadmap.md) keeps both supplied plans

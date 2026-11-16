@@ -1,5 +1,0 @@
-# Runtime config, credentials and app files; native exporter dumps the dedicated DB.
-paths:
-  - /opt/kaneo
-exclude:
-  /opt/kaneo/postgres: live PostgreSQL data; restored from native database-containers/kaneo-postgres.sql export

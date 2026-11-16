@@ -302,8 +302,8 @@ those. A full restore needs roughly the snapshot's size in free scratch space
 so delete it when the drill is done.
 
 The last full drill (2026-10-05) passed SQLite integrity, native PostgreSQL
-imports, Forgejo clone/push and `git fsck`, Komodo's native restore, image
-archive loading, SOPS decryption, and HTTP probes of the restored applications.
+imports, Komodo's native restore, image archive loading, SOPS decryption, and
+HTTP probes of the restored applications.
 It ran in isolated containers on the host, not on a rebuilt one. Media, Loki log
 history and caches are excluded by design.
 
@@ -314,6 +314,5 @@ SQLite exports passed full integrity and numeric ownership/mode checks.
 Email link helper passed settings decryption, authenticated settings reads and
 encrypted writes using its recovered key. Career Ops passed startup, pipeline
 reads and profile API writes after recreating its documented dependency links.
-Kaneo passed native SQL import into an empty cluster, application startup and
-database reads/writes. Containers had no outbound network access or published
-ports; the drill did not test external integrations or a rebuilt host.
+Containers had no outbound network access or published ports; the drill did
+not test external integrations or a rebuilt host.
