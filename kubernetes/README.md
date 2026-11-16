@@ -1,9 +1,8 @@
 # Public K3s / Flux pilot
 
-The public cluster runs shared PostgreSQL and the active Kaneo instance.
-The [old server-1 Compose Kaneo](../docs/retired-kaneo.md) is retired; its data
-is retained separately. Other existing services stay in Compose. The private
-cluster and its pilot belong to a later MR.
+The public cluster on server-2 runs shared PostgreSQL and Kaneo. Other
+services run in Compose while the fleet migrates to K3s. The private cluster
+and its pilot belong to a later MR.
 
 The [migration roadmap](../docs/kubernetes/roadmap.md) keeps both supplied plans
 as the target: independent public/private clusters, then tested public serving

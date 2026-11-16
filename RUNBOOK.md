@@ -264,10 +264,6 @@ sudo bash hosts/server-1/backup/install.sh
      service stopped, remove old WAL/SHM/journal companions, restore the
      recorded owner and mode, and run `PRAGMA integrity_check` before starting
      the writer.
-   - Historical Forgejo snapshots: copy `quiesced/opt/forgejo/data` with numeric
-     owners and permissions preserved alongside its database from the same
-     snapshot. Forgejo is retired from this host; see the
-     [migration handoff](docs/retired-forgejo.md) before restoring it.
    - Career Ops: recreate its three excluded dependency/build symlinks as
      described in `hosts/server-1/career-ops/README.md`. They point into the
      saved image; do not rebuild dependencies or overwrite restored user files.

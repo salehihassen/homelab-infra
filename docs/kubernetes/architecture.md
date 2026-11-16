@@ -1,10 +1,7 @@
-# Public K3s foundation: a new Kaneo instance
+# Public K3s architecture
 
-The initial rollout introduced a public cluster and an independent Kaneo
-instance. Kaneo now runs only on server-2 K3s; the
-[server-1 Compose instance is retired](../retired-kaneo.md), with its original
-data retained separately. Other existing services retain their Compose
-deployments, routes, credentials and data.
+The public cluster on server-2 runs Kaneo and shared PostgreSQL.
+Other services run in Compose while the fleet migrates to K3s.
 
 The [migration roadmap](roadmap.md) preserves the decisions and acceptance
 criteria from both supplied handoffs. Narrowing this MR does not discard the
@@ -105,8 +102,6 @@ using multiarchitecture digests. The database mount follows the official
 PostgreSQL 18 layout. PostgreSQL is shared: each app declares its own
 `DatabaseRole` and `Database` in one file, reviewed through Git like any other
 change. See [shared PostgreSQL](postgres.md).
-This is a new instance, with no import or reuse of existing private Kaneo
-content or secrets.
 
 Workloads require the public-cluster label; PostgreSQL also requires the
 `local-storage` label. Apply that label to exactly one inspected node. The retained local-path
