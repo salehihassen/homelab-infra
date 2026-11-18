@@ -1,6 +1,6 @@
 # Public K3s / Flux pilot
 
-The public cluster on server-2 runs shared PostgreSQL and Kaneo. Other
+The public cluster on server-2 runs shared PostgreSQL, Kaneo and Twenty. Other
 services run in Compose while the fleet migrates to K3s. The private cluster
 and its pilot belong to a later MR.
 
@@ -22,7 +22,7 @@ how Flux Operator, Flux and Mission Control fit together.
   its StorageClass and policies, and one file per app under `app-databases/`.
   Setup: [postgres.md](../docs/kubernetes/postgres.md).
 - `storage/garage`: shared Garage object store in namespace `garage`, one node
-  with one bucket per app (today Kaneo's attachments).
+  with one bucket per app.
   Setup: [garage.md](../docs/kubernetes/garage.md).
 - `apps/kaneo`: Kaneo namespace, Deployment, Service and policies. Runtime files use
   temporary `emptyDir` storage and attachments live in Garage; its Flux
@@ -43,8 +43,8 @@ Flux fetches again; `flux reconcile source git flux-system` speeds that up.
 Bootstrap points to this list instead of naming workloads.
 
 Prepare credentials, storage ownership and the initial local URL before starting
-Git reconciliation. PostgreSQL and Kaneo are enabled in Git; applying the root
-sync deploys the database before Kaneo. See [database ownership and upgrades](../docs/kubernetes/postgres.md).
+Git reconciliation. PostgreSQL, Kaneo and Twenty are enabled in Git; applying
+the root sync deploys databases before apps. See [database ownership and upgrades](../docs/kubernetes/postgres.md).
 No host is installed and no ingress changes merely by merging these files.
 No private cluster configuration is included.
 
