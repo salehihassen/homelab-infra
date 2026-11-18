@@ -54,10 +54,6 @@ services:
     env_file:
     - path: /opt/caddy/routing.env
       format: raw
-    - path: /opt/flowise/routing.env
-      format: raw
-    - path: /opt/n8n/routing.env
-      format: raw
     - path: /opt/nextcloud-aio/routing.env
       format: raw
     - path: /opt/open-webui/routing.env

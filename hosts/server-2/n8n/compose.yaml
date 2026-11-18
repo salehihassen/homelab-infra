@@ -2,6 +2,7 @@ x-stack:
   requires: []
 services:
   n8n:
+    profiles: [retired]
     image: ${N8N_IMAGE:?Set N8N_IMAGE in n8n/.env}
     container_name: n8n
     restart: unless-stopped

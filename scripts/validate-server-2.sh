@@ -12,6 +12,7 @@ validate_compose() {
   python3 scripts/check-stacks.py
   compose config --no-env-resolution --format json | python3 scripts/check-networks.py
   compose config --no-env-resolution --format json | python3 scripts/check-server-2.py compose
+  compose --profile retired config --no-env-resolution --format json | python3 scripts/check-server-2.py retired
   python3 -m py_compile backup/*.py
 }
 validate_caddy() (

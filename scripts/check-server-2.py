@@ -6,8 +6,9 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parent.parent / "hosts/server-2"
-APPS = {"flowise", "n8n", "nextcloud-aio-mastercontainer", "open-webui", "mock-traveler", "personal-network", "caddy", "alloy"}
-UPSTREAMS = {"FLOWISE_DOMAIN": "127.0.0.1:3003", "N8N_DOMAIN": "127.0.0.1:5678", "NEXTCLOUD_DOMAIN": "127.0.0.1:11000", "NEXTCLOUD_AIO_DOMAIN": "127.0.0.1:8080", "OPENWEBUI_DOMAIN": "127.0.0.1:3009", "MOCK_TRAVELER_DOMAIN": "127.0.0.1:8090", "PERSONAL_NETWORK_DOMAIN": "127.0.0.1:3100"}
+APPS = {"nextcloud-aio-mastercontainer", "open-webui", "mock-traveler", "personal-network", "caddy", "alloy"}
+RETIRED = {"n8n", "flowise"}
+UPSTREAMS = {"NEXTCLOUD_DOMAIN": "127.0.0.1:11000", "NEXTCLOUD_AIO_DOMAIN": "127.0.0.1:8080", "OPENWEBUI_DOMAIN": "127.0.0.1:3009", "MOCK_TRAVELER_DOMAIN": "127.0.0.1:8090", "PERSONAL_NETWORK_DOMAIN": "127.0.0.1:3100"}
 
 
 def nodes(value):
@@ -20,9 +21,11 @@ def nodes(value):
             yield from nodes(child)
 
 
-def compose(doc):
+def compose(doc, include_retired=False):
     services = doc["services"]
-    assert set(services) == APPS, "Only active applications and the log shipper belong in server-2"
+    assert set(services) == APPS | (RETIRED if include_retired else set()), "Unexpected active or recovery applications"
+    for name in RETIRED & set(services):
+        assert services[name].get("profiles") == ["retired"], name + ": recovery requires the retired profile"
     for name, service in services.items():
         assert service.get("healthcheck") or name == "alloy", name + ": missing health check"
         assert service.get("restart") == "unless-stopped", name + ": restart policy"
@@ -30,7 +33,10 @@ def compose(doc):
         assert service.get("logging", {}).get("options", {}).get("max-size") == "10m", name + ": bounded logs"
         assert not service.get("privileged"), name + ": privileged is forbidden"
         assert "no-new-privileges:true" in service.get("security_opt", []), name + ": prevent privilege gain"
-    for name, volume in [("n8n", "n8n_data"), ("caddy", "caddy_data"), ("nextcloud-aio-mastercontainer", "nextcloud_aio_mastercontainer")]:
+    volumes = [("caddy", "caddy_data"), ("nextcloud-aio-mastercontainer", "nextcloud_aio_mastercontainer")]
+    if include_retired:
+        volumes.append(("n8n", "n8n_data"))
+    for name, volume in volumes:
         definition = doc["volumes"][volume]
         assert definition.get("external") and definition.get("name") == volume, name + ": preserve the existing external volume"
     controller = services["nextcloud-aio-mastercontainer"]
@@ -45,6 +51,10 @@ def compose(doc):
         if name != "nextcloud-aio-mastercontainer" and name != "alloy":
             assert not any(m["target"] == "/var/run/docker.sock" for m in service.get("volumes", [])), name + ": unexpected Docker access"
     assert services["alloy"]["ports"][0]["host_ip"] == "127.0.0.1", "Alloy admin is loopback-only"
+
+
+def retired(doc):
+    compose(doc, include_retired=True)
 
 
 def routing(doc):
@@ -83,7 +93,7 @@ def routing(doc):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=["compose", "routing"])
+    parser.add_argument("mode", choices=["compose", "retired", "routing"])
     args = parser.parse_args()
     try:
         globals()[args.mode](json.load(sys.stdin))

@@ -165,22 +165,24 @@ stacks:
   server-2:
     caddy:
       services: [caddy]
-      urls: [NEXTCLOUD_DOMAIN, NEXTCLOUD_AIO_DOMAIN, OPENWEBUI_DOMAIN, N8N_DOMAIN, FLOWISE_DOMAIN, MOCK_TRAVELER_DOMAIN, PERSONAL_NETWORK_DOMAIN, PROFILE_DOMAIN, PROFILE_ALIAS_DOMAIN, RESOURCES_DOMAIN]
+      urls: [NEXTCLOUD_DOMAIN, NEXTCLOUD_AIO_DOMAIN, OPENWEBUI_DOMAIN, MOCK_TRAVELER_DOMAIN, PERSONAL_NETWORK_DOMAIN, PROFILE_DOMAIN, PROFILE_ALIAS_DOMAIN, RESOURCES_DOMAIN]
       data: [/opt/caddy, volume:caddy_data]
       backup: configuration and TLS state
       exposure: [public, loopback]
     flowise:
+      status: retired
       services: [flowise]
-      urls: [FLOWISE_DOMAIN]
+      urls: []
       data: [/opt/flowise, FLOWISE_DATA_DIR]
       backup: consistent SQLite and matching keys/files
-      exposure: [public, loopback]
+      exposure: []
     n8n:
+      status: retired
       services: [n8n]
-      urls: [N8N_DOMAIN]
+      urls: []
       data: [/opt/n8n, volume:n8n_data, N8N_FILES_DIR]
       backup: consistent SQLite, credential encryption key and files
-      exposure: [public, loopback]
+      exposure: []
     nextcloud-aio:
       services: [nextcloud-aio-mastercontainer]
       urls: [NEXTCLOUD_DOMAIN, NEXTCLOUD_AIO_DOMAIN]

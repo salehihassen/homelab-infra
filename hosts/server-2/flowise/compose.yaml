@@ -2,6 +2,7 @@ x-stack:
   requires: []
 services:
   flowise:
+    profiles: [retired]
     image: ${FLOWISE_IMAGE:?Set FLOWISE_IMAGE in flowise/.env}
     container_name: flowise
     restart: unless-stopped
