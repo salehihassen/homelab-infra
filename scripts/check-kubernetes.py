@@ -159,6 +159,10 @@ def check_workload_folder(path):
 
 def check_postgres(path="kubernetes/databases/postgres"):
     docs = render(path)
+    # Optional apps can own a separate, suspended Flux inventory. Validate
+    # their roles/databases too, without adding them to shared reconciliation.
+    for entry in sorted((ROOT / path / "app-databases").glob("*/kustomization.yaml")):
+        docs += render(str(entry.parent.relative_to(ROOT)))
     cluster = of_kind(docs, "Cluster")[0]
     spec = cluster["spec"]
     check(spec["instances"] == 1, "PostgreSQL: one instance until a second storage node exists")
@@ -192,6 +196,27 @@ def check_infrastructure_images(path):
     for deployment in of_kind(render(path), "Deployment"):
         for c in pod_spec(deployment)["containers"]:
             check(DIGEST.search(c["image"]), f"{path} {label(deployment)}: pin {c['image']} by digest")
+
+
+def check_twenty():
+    docs = render("kubernetes/apps/twenty")
+    workloads = of_kind(docs, "Deployment") + of_kind(docs, "StatefulSet")
+    check({d["metadata"]["name"] for d in workloads} == {"twenty-server", "twenty-worker", "twenty-redis"}
+          and all(d["spec"]["replicas"] == 0 for d in workloads)
+          and not of_kind(docs, "Job") and not of_kind(docs, "CronJob"),
+          "Twenty: keep server, worker and Redis dormant until activation is requested")
+    config = of_kind(docs, "ConfigMap")[0]["data"]
+    check(config.get("IS_MULTIWORKSPACE_ENABLED") == "true"
+          and config.get("IS_CONFIG_VARIABLES_IN_DB_ENABLED") == "false"
+          and config.get("IS_WORKSPACE_CREATION_LIMITED_TO_SERVER_ADMINS") == "true",
+          "Twenty: retain environment-controlled multi-workspace mode and restricted workspace creation")
+    children = {d["metadata"]["name"]: d["spec"] for d in
+                of_kind(render("kubernetes/clusters/public-edge"), "Kustomization")}
+    check(children["twenty-database"].get("suspend") is True,
+          "Twenty: database reconciliation stays suspended until its credentials are provisioned")
+    check(not any(d["metadata"]["name"] == "twenty" for d in
+                  of_kind(render("kubernetes/databases/postgres"), "Database")),
+          "Twenty: dormant database must not block the shared PostgreSQL reconciliation")
 
 
 def check_no_unresolved_variables(path):
@@ -229,10 +254,11 @@ def main():
     for path in workloads:
         check_workload_folder(path)
     check_postgres()
+    check_twenty()
     for path in folders("kubernetes/infrastructure"):
         check_infrastructure_images(path)
-    for path in clusters + workloads + folders("kubernetes/infrastructure"):
-        check_no_unresolved_variables(path)
+    for entry in sorted((ROOT / "kubernetes").rglob("kustomization.yaml")):
+        check_no_unresolved_variables(str(entry.parent.relative_to(ROOT)))
 
     if failures:
         print("\n".join(f"Kubernetes rule failed: {f}" for f in failures), file=sys.stderr)

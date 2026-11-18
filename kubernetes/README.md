@@ -1,6 +1,7 @@
 # Public K3s / Flux pilot
 
-The public cluster on server-2 runs shared PostgreSQL and Kaneo. Other
+The public cluster on server-2 runs shared PostgreSQL and Kaneo. Twenty CRM is
+declared but dormant (server, worker and Redis all have zero replicas). Other
 services run in Compose while the fleet migrates to K3s. The private cluster
 and its pilot belong to a later MR.
 
@@ -28,6 +29,11 @@ how Flux Operator, Flux and Mission Control fit together.
   temporary `emptyDir` storage and attachments live in Garage; its Flux
   reconciliation depends on postgres and garage.
   Setup: [kaneo.md](../docs/kubernetes/kaneo.md).
+- `apps/twenty`: multi-workspace Twenty CRM, a separate worker and retained Redis
+  queue, all at zero replicas. It uses shared PostgreSQL and Garage when enabled.
+  Setup and workspace acceptance: [twenty.md](../docs/kubernetes/twenty.md).
+- `databases/postgres/app-databases/twenty`: Twenty's retained role/database in a
+  separate, suspended Flux inventory; missing credentials cannot block Kaneo.
 - `infrastructure/flux-operator`: rendered, pinned Flux Operator 0.62.1 chart
   with its read-only Mission Control UI and private-access policy.
 - `clusters/public-edge/flux-instance.yaml`: Flux 2.10.0 controller selection,

@@ -81,6 +81,11 @@ Removing an app's file from Git does not drop its role or database (both use
 `retain` reclaim policies, which `check-kubernetes.py` enforces). Retire an
 app's data deliberately, after a backup.
 
+Dormant apps can use a nested app-database Kustomization with a separate,
+suspended Flux inventory, as [Twenty](twenty.md) does. Leave that folder out of
+the shared `kustomization.yaml`: missing credentials must not block existing
+apps, and each resource must have only one Flux owner.
+
 ## Backups
 
 Back up each app's database natively, together with that app's credentials and
