@@ -18,6 +18,17 @@ Garage bucket (`twenty-uploads`, with workspace paths), and one Redis queue.
 This is application-level separation within a shared service: the instance
 operator and application process remain trusted across all workspaces.
 
+Twenty has its own PostgreSQL password (`twenty-db-password`), copied only into
+its application Secret as a `PG_DATABASE_URL` using username/database `twenty`.
+The role explicitly has no superuser, database/role creation, replication,
+RLS bypass or inherited role privileges, and no memberships in other roles.
+It owns only its own database, allowing the schema migrations and per-workspace
+schema creation Twenty needs. Role-specific `pg_hba` rules in the shared
+`cluster.yaml` require password authentication for `twenty` and reject that
+role's network connections to all other databases, including `postgres` and
+Kaneo. This also closes PostgreSQL's default `PUBLIC CONNECT` path. The rules
+do not match other app roles or the operator, so their access is unchanged.
+
 Members of business A must never be invited to business B unless that access is
 intentional. Keep automatic access-domain enrollment off and issue API keys
 inside the appropriate workspace. Business workspace admins should not receive
@@ -115,6 +126,9 @@ keep an encrypted copy off-host. Never replace existing inputs with new keys.
    report `status.applied=true`. The operator installs `uuid-ossp`, `unaccent`
    and `citext` in Twenty's database. Its role gets no superuser, role-creation
    or cross-app grants.
+   Confirm that the shared Cluster's two Twenty-specific `pg_hba` rules have
+   reconciled before activation; the separate database inventory does not own
+   authentication rules.
 
 ## Start and accept the instance
 
@@ -165,6 +179,13 @@ served `/healthz` on PostgreSQL 18.6 with a non-superuser role and read-only
 application root filesystem; the worker also started and passed its process
 probe. This did not exercise K3s/CNPG, Garage file operations or two-business
 access controls. The two-business test above remains an activation gate.
+
+A separate disposable PostgreSQL 18.6 permissions test used the declared role
+attributes and authentication rules: own-database schema/table/function creation
+and writes passed, wrong passwords failed, and IPv4/IPv6 logins to Kaneo,
+`postgres` and `template1` were rejected despite `PUBLIC CONNECT`. Database/role
+creation and escalation to `postgres` were denied; Kaneo's existing login still
+worked. No production credentials were created or inspected for either test.
 
 ## State, backups and shutdown
 

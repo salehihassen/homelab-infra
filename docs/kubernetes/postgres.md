@@ -117,7 +117,10 @@ with its own storage; see the [roadmap](roadmap.md).
 - `postgres-from-clients` allows any Pod that carries the label. A Pod still
   needs a role's password to log in.
 - New databases keep PostgreSQL's default `CONNECT` grant to `PUBLIC`, so any
-  role can connect to any database, but cannot read tables it does not own.
+  role can normally connect to any database, but cannot read tables it does not
+  own. Twenty has an explicit role-specific `pg_hba` restriction: its password
+  authenticates only to database `twenty`; connections to every other database
+  are rejected. Existing apps retain their previous authentication behavior.
 - The operator's namespace, `cnpg-system`, has no NetworkPolicies: it must
   reach the Kubernetes API and receive admission webhook calls from it.
 

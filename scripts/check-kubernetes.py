@@ -217,6 +217,27 @@ def check_twenty():
     check(not any(d["metadata"]["name"] == "twenty" for d in
                   of_kind(render("kubernetes/databases/postgres"), "Database")),
           "Twenty: dormant database must not block the shared PostgreSQL reconciliation")
+    database_docs = render("kubernetes/databases/postgres/app-databases/twenty")
+    role = of_kind(database_docs, "DatabaseRole")[0]["spec"]
+    database = of_kind(database_docs, "Database")[0]["spec"]
+    check(role["name"] == database["name"] == database["owner"] == "twenty"
+          and role.get("passwordSecret", {}).get("name") == "twenty-db-password"
+          and role.get("login") is True,
+          "Twenty: use its own login, password Secret and database")
+    check(all(role.get(flag) is False for flag in
+              ("superuser", "createdb", "createrole", "replication", "bypassrls", "inherit"))
+          and role.get("inRoles") == [],
+          "Twenty: no cluster privileges or memberships in other database roles")
+    cluster = of_kind(render("kubernetes/databases/postgres"), "Cluster")[0]
+    check(cluster["spec"]["postgresql"].get("pg_hba", [])[:2] == [
+              "host twenty twenty all scram-sha-256", "host all twenty all reject"],
+          "Twenty: authenticate only to its database, rejecting other database connections first")
+    for deployment in of_kind(docs, "Deployment"):
+        for container in pod_spec(deployment)["containers"]:
+            sources = container.get("envFrom", [])
+            check([s["secretRef"]["name"] for s in sources if "secretRef" in s]
+                  == ["twenty-credentials"],
+                  f"Twenty {label(deployment)}: use only its own application credentials Secret")
 
 
 def check_no_unresolved_variables(path):
