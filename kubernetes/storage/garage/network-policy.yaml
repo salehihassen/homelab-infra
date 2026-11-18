@@ -1,5 +1,3 @@
-# Caddy on the host reaches Garage outside Pod policy filtering. Twenty also
-# accesses its separate bucket directly; browsers go through Twenty's API.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

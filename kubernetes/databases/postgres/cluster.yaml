@@ -22,9 +22,6 @@ spec:
     requests: {cpu: 100m, memory: 256Mi}
     limits: {cpu: "1", memory: 512Mi}
   postgresql:
-    # CNPG inserts these before its default allow rule. Twenty may log in only
-    # to its own database, even when another database grants CONNECT to PUBLIC.
-    # Match only Twenty's role so existing apps and operator access are unchanged.
     pg_hba:
       - host twenty twenty all scram-sha-256
       - host all twenty all reject

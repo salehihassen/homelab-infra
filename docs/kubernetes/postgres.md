@@ -81,11 +81,6 @@ Removing an app's file from Git does not drop its role or database (both use
 `retain` reclaim policies, which `check-kubernetes.py` enforces). Retire an
 app's data deliberately, after a backup.
 
-Dormant apps can use a nested app-database Kustomization with a separate,
-suspended Flux inventory, as [Twenty](twenty.md) does. Leave that folder out of
-the shared `kustomization.yaml`: missing credentials must not block existing
-apps, and each resource must have only one Flux owner.
-
 ## Backups
 
 Back up each app's database natively, together with that app's credentials and
@@ -117,10 +112,8 @@ with its own storage; see the [roadmap](roadmap.md).
 - `postgres-from-clients` allows any Pod that carries the label. A Pod still
   needs a role's password to log in.
 - New databases keep PostgreSQL's default `CONNECT` grant to `PUBLIC`, so any
-  role can normally connect to any database, but cannot read tables it does not
-  own. Twenty has an explicit role-specific `pg_hba` restriction: its password
-  authenticates only to database `twenty`; connections to every other database
-  are rejected. Existing apps retain their previous authentication behavior.
+  role can connect to any database, but cannot read tables it does not own.
+  Twenty's `pg_hba` rules restrict its login to database `twenty`.
 - The operator's namespace, `cnpg-system`, has no NetworkPolicies: it must
   reach the Kubernetes API and receive admission webhook calls from it.
 

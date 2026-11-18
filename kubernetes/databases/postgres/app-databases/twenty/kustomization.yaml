@@ -1,5 +1,3 @@
-# Separate Flux inventory: keep an unprovisioned Twenty password from blocking
-# the shared postgres Kustomization and its existing consumers.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: postgres

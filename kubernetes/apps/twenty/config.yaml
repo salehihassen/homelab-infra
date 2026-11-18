@@ -4,7 +4,6 @@ metadata:
   name: twenty-config
 data:
   NODE_PORT: "3000"
-  # Keep both processes on the same environment-controlled configuration.
   IS_CONFIG_VARIABLES_IN_DB_ENABLED: "false"
   IS_MULTIWORKSPACE_ENABLED: "true"
   DEFAULT_SUBDOMAIN: app
@@ -17,8 +16,6 @@ data:
   STORAGE_S3_REGION: garage
   STORAGE_S3_NAME: twenty-uploads
   STORAGE_S3_ENDPOINT: http://garage.garage.svc.cluster.local:3900
-  # Proxy files through Twenty's authenticated API; keep Garage private.
   STORAGE_S3_PRESIGNED_URL_ENABLED: "false"
-  # Yarn and local logic-function execution need writable temporary storage.
   HOME: /tmp
   YARN_ENABLE_IMMUTABLE_INSTALLS: "true"

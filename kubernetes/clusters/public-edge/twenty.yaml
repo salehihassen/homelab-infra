@@ -13,8 +13,7 @@ spec:
   sourceRef: {kind: GitRepository, name: flux-system}
   prune: false
   wait: true
-  # No credentials or database are provisioned while Twenty is dormant.
-  suspend: true
+  suspend: false
   healthCheckExprs:
     - apiVersion: postgresql.cnpg.io/v1
       kind: DatabaseRole
@@ -39,7 +38,7 @@ spec:
   dependsOn:
     - name: postgres
     - name: garage
-  # Add twenty-database to dependsOn when activating (see the setup doc).
+    - name: twenty-database
   sourceRef: {kind: GitRepository, name: flux-system}
   prune: false
   wait: true

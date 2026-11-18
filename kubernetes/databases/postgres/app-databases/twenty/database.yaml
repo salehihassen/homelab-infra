@@ -6,7 +6,6 @@ spec:
   cluster: {name: postgres}
   name: twenty
   login: true
-  # Twenty owns schemas inside its database, but no cluster-wide privileges.
   superuser: false
   createdb: false
   createrole: false

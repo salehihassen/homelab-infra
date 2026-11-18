@@ -3,8 +3,7 @@ kind: Deployment
 metadata:
   name: twenty-server
 spec:
-  # Deliberately dormant. See docs/kubernetes/twenty.md before activation.
-  replicas: 0
+  replicas: 1
   strategy: {type: Recreate}
   revisionHistoryLimit: 2
   selector:
@@ -56,7 +55,6 @@ spec:
           resources:
             requests: {cpu: 100m, memory: 512Mi}
             limits: {cpu: "2", memory: 2Gi}
-          # Initial migrations can be slow; only the server runs them.
           startupProbe:
             httpGet: {path: /healthz, port: http}
             periodSeconds: 10
@@ -84,7 +82,7 @@ kind: Deployment
 metadata:
   name: twenty-worker
 spec:
-  replicas: 0
+  replicas: 1
   strategy: {type: Recreate}
   revisionHistoryLimit: 2
   selector:
@@ -109,10 +107,20 @@ spec:
         runAsGroup: 1000
         fsGroup: 1000
         seccompProfile: {type: RuntimeDefault}
+      initContainers:
+        - name: wait-for-server
+          image: twentycrm/twenty:v2.59.0@sha256:76933f24d3781a3a90809857217b0cfd70735b0fa79eee4acc76956573810439
+          command: [sh, -ec, "until curl --fail --silent http://twenty:3000/healthz > /dev/null; do sleep 5; done"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          resources:
+            requests: {cpu: 10m, memory: 32Mi}
+            limits: {cpu: 100m, memory: 64Mi}
       containers:
         - name: worker
           image: twentycrm/twenty:v2.59.0@sha256:76933f24d3781a3a90809857217b0cfd70735b0fa79eee4acc76956573810439
-          # Same command as worker:prod, with node as PID 1 after entrypoint.
           args: [node, dist/queue-worker/queue-worker]
           envFrom:
             - configMapRef: {name: twenty-config}
@@ -136,8 +144,6 @@ spec:
           resources:
             requests: {cpu: 100m, memory: 512Mi}
             limits: {cpu: "2", memory: 2Gi}
-          # Upstream's worker has no HTTP health endpoint. These check only
-          # process identity, not queue progress; acceptance must run a job.
           readinessProbe:
             exec:
               command: [sh, -ec, "tr '\\000' ' ' < /proc/1/cmdline | grep -q '^node dist/queue-worker/queue-worker'"]
