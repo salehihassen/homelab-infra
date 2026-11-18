@@ -4,14 +4,6 @@ include:
   env_file:
   - caddy/${STACK_ENV_FILE:-.env}
   - caddy/${STACK_ROUTING_ENV_FILE:-routing.env}
-- path: flowise/compose.yaml
-  env_file:
-  - flowise/${STACK_ENV_FILE:-.env}
-  - flowise/${STACK_ROUTING_ENV_FILE:-routing.env}
-- path: n8n/compose.yaml
-  env_file:
-  - n8n/${STACK_ENV_FILE:-.env}
-  - n8n/${STACK_ROUTING_ENV_FILE:-routing.env}
 - path: nextcloud-aio/compose.yaml
   env_file:
   - nextcloud-aio/${STACK_ENV_FILE:-.env}

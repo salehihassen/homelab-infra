@@ -169,20 +169,6 @@ stacks:
       data: [/opt/caddy, volume:caddy_data]
       backup: configuration and TLS state
       exposure: [public, loopback]
-    flowise:
-      status: retired
-      services: [flowise]
-      urls: []
-      data: [/opt/flowise, FLOWISE_DATA_DIR]
-      backup: consistent SQLite and matching keys/files
-      exposure: []
-    n8n:
-      status: retired
-      services: [n8n]
-      urls: []
-      data: [/opt/n8n, volume:n8n_data, N8N_FILES_DIR]
-      backup: consistent SQLite, credential encryption key and files
-      exposure: []
     nextcloud-aio:
       services: [nextcloud-aio-mastercontainer]
       urls: [NEXTCLOUD_DOMAIN, NEXTCLOUD_AIO_DOMAIN]

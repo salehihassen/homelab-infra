@@ -14,17 +14,6 @@ apps are Caddy, the Nextcloud AIO controller, Open WebUI, Mock
 Traveler and Personal Network. Alloy is the new log shipper. Commented legacy
 services and retired storage are outside this deployment.
 
-n8n and Flowise use the `retired` profile for recovery only. After deploying
-their retirement, run from `hosts/server-2`:
-
-```bash
-docker compose up -d --no-deps --no-build --pull never --force-recreate caddy
-docker stop n8n flowise
-```
-
-Profiles do not stop existing containers. Keep their containers, volumes,
-runtime inputs and backup declarations; do not use orphan or volume removal.
-
 ## Prepare and validate a checkout
 
 Install the supported Docker/Compose runtime, Python/PyYAML, Restic and Git.
