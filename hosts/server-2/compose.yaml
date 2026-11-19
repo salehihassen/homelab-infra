@@ -4,10 +4,6 @@ include:
   env_file:
   - caddy/${STACK_ENV_FILE:-.env}
   - caddy/${STACK_ROUTING_ENV_FILE:-routing.env}
-- path: nextcloud-aio/compose.yaml
-  env_file:
-  - nextcloud-aio/${STACK_ENV_FILE:-.env}
-  - nextcloud-aio/${STACK_ROUTING_ENV_FILE:-routing.env}
 - path: open-webui/compose.yaml
   env_file:
   - open-webui/${STACK_ENV_FILE:-.env}

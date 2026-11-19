@@ -10,7 +10,7 @@ into a tracked document: all can contain secrets. Redact values when inspecting.
 
 The host project lives at `hosts/server-2/compose.yaml`, with project name
 `server`. Preserve this name, container names and external volumes. Retained
-apps are Caddy, the Nextcloud AIO controller, Open WebUI, Mock
+apps are Caddy, Open WebUI, Mock
 Traveler and Personal Network. Alloy is the new log shipper. Commented legacy
 services and retired storage are outside this deployment.
 
@@ -21,10 +21,7 @@ Enable `.githooks` for any checkout used to commit; install Gitleaks before
 committing. Read the repository AGENTS instructions. Copy env examples into
 private runtime files and restore data before starting applications. Keep env
 files mode 0600 and secret directories mode 0700. Images in live interpolation
-files must be pinned to a digest or a retained local image ID, except the AIO
-controller, whose startup script rejects digest references. Preserve its
-supported channel tag, verify the selected image ID before adoption, and use
-`--pull never` during adoption. Snapshot metadata records its exact image ID.
+files must be pinned to a digest or a retained local image ID.
 
 From the repo root:
 
@@ -39,13 +36,13 @@ python3 backup/run.py --settings /opt/infra-backup/backup.env check
 Validation uses CI's checksum-verified Compose version without replacing the
 host plugin. It checks only example settings; validate the live project with
 `docker compose config --quiet` from `hosts/server-2` as well. Public-host
-validation has an explicit route allowlist and fixed loopback upstreams. It
+validation has an explicit route allowlist and configured upstreams. It
 does not relax server-1's private ingress or log-ingress restrictions.
 
 ## Adopt or update one application
 
 Before adoption, record the running image ID, configured environment, named
-volumes, bind sources and AIO child IDs in a private recovery directory. Keep
+volumes and bind sources in a private recovery directory. Keep
 a tested recovery set and original deployment files. Do not combine adoption
 with application upgrades, UID changes, data relocation or exposure changes.
 
@@ -77,24 +74,19 @@ checkout after adoption. Preserve its original files and project-directory
 context privately for rollback. Do not continue maintaining two independent
 active deployment definitions.
 
-## Nextcloud AIO boundary
+## Remote Nextcloud proxy
 
-Only the master container belongs to this Compose project. Keep its name and
-`nextcloud_aio_mastercontainer` external volume unchanged. Preserve its data-dir
-setting, API socket and controller configuration. AIO owns all child creation,
-updates, resource settings and its private network; never add those children as
-Compose services. Confirm child container IDs remain unchanged during controller
-adoption, then check their health and `/status.php`.
+Nextcloud runs on a separate host. Caddy's private routing settings select its
+web and AIO controller upstreams.
 
 The controller checks browser Fetch Metadata headers. A plain CLI request can
 correctly receive 403; use `curl --fail -H 'Sec-Fetch-Site: none'
 "https://<AIO_ADMIN_DOMAIN>/login"` when checking its trusted HTTPS login route.
 Do not disable that protection to make a health probe pass.
 
-The Docker socket grants administrative power even when mounted read-only.
-The controller's local self-signed HTTPS upstream is the only proxy TLS-verifier
+The controller's self-signed HTTPS upstream is the only proxy TLS-verifier
 exception. User-facing HTTPS still uses trusted certificates. Existing app
-backends and the controller's direct port are private runtime listener choices;
+backends are private runtime listener choices;
 audit clients before narrowing a legacy listener.
 
 ## Daily operation and logging
@@ -117,17 +109,14 @@ disposable; replay older than 168 hours is discarded.
 
 Use the actual persistent or volatile journal directory in `JOURNAL_DIR`; it
 must exist after reboot. Log access and Docker socket access are trusted admin
-capabilities. Bound Docker log rotation applies to managed containers; AIO
-retains control of its own children's logging configuration.
+capabilities. Bound Docker log rotation applies to managed containers.
 
 ## Backups and recovery
 
 Both hosts use the [shared backup playbook](../../docs/backups.md) for
 schedules, capture, maintenance, status and isolated restore acceptance.
 Server-2 uses `/opt/infra-backup/backup.env` and lingering user systemd units;
-its Docker helper supplies root file access without interactive sudo. Only
-Nextcloud's coordinated capture adapter is application-specific. AIO retains
-ownership of its children.
+its Docker helper supplies root file access without interactive sudo.
 
 ## Rollback
 
