@@ -1,11 +1,11 @@
 # Public ingress belongs to this host; identities come from private env files.
 https://{$NEXTCLOUD_DOMAIN} {
-	reverse_proxy 127.0.0.1:11000 {
+	reverse_proxy {$NEXTCLOUD_UPSTREAM} {
 		header_up -Tailscale-*
 	}
 }
 https://{$NEXTCLOUD_AIO_DOMAIN} {
-	reverse_proxy https://127.0.0.1:8080 {
+	reverse_proxy https://{$NEXTCLOUD_AIO_UPSTREAM} {
 		header_up -Tailscale-*
 		transport http {
 			# The controller serves its own local self-signed certificate.
