@@ -7,6 +7,8 @@ to loopback; live listener settings are private deployment choices.
 
 Images are pinned to the deployed digest (or a retained local image ID) in the
 private env file. Adoption preserves the application version and stored keys.
+The slim image omits local embeddings, speech models and PDF/Office parsing.
+RAG requires external services; existing uploads and indexes remain on disk.
 
 Run `docker compose up -d --no-build --pull never open-webui` from the host
 directory and inspect its health. See [the host playbook](../PLAYBOOK.md) for
