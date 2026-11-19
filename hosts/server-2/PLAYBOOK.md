@@ -10,7 +10,7 @@ into a tracked document: all can contain secrets. Redact values when inspecting.
 
 The host project lives at `hosts/server-2/compose.yaml`, with project name
 `server`. Preserve this name, container names and external volumes. Retained
-apps are Caddy, Flowise, n8n, the Nextcloud AIO controller, Open WebUI, Mock
+apps are Caddy, the Nextcloud AIO controller, Open WebUI, Mock
 Traveler and Personal Network. Alloy is the new log shipper. Commented legacy
 services and retired storage are outside this deployment.
 

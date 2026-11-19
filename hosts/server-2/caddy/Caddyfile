@@ -18,16 +18,6 @@ https://{$OPENWEBUI_DOMAIN} {
 		header_up -Tailscale-*
 	}
 }
-https://{$N8N_DOMAIN} {
-	reverse_proxy 127.0.0.1:5678 {
-		header_up -Tailscale-*
-	}
-}
-https://{$FLOWISE_DOMAIN} {
-	reverse_proxy 127.0.0.1:3003 {
-		header_up -Tailscale-*
-	}
-}
 https://{$MOCK_TRAVELER_DOMAIN} {
 	reverse_proxy 127.0.0.1:8090 {
 		header_up -Tailscale-*
