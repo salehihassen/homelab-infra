@@ -7,7 +7,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parent.parent / "hosts/server-2"
 APPS = {"nextcloud-aio-mastercontainer", "open-webui", "mock-traveler", "personal-network", "caddy", "alloy"}
-UPSTREAMS = {"NEXTCLOUD_DOMAIN": "127.0.0.1:11000", "NEXTCLOUD_AIO_DOMAIN": "127.0.0.1:8080", "OPENWEBUI_DOMAIN": "127.0.0.1:3009", "MOCK_TRAVELER_DOMAIN": "127.0.0.1:8090", "PERSONAL_NETWORK_DOMAIN": "127.0.0.1:3100"}
+UPSTREAMS = {"OPENWEBUI_DOMAIN": "127.0.0.1:3009", "MOCK_TRAVELER_DOMAIN": "127.0.0.1:8090", "PERSONAL_NETWORK_DOMAIN": "127.0.0.1:3100"}
 
 
 def nodes(value):
@@ -54,7 +54,7 @@ def routing(doc):
     routes = [n for n in nodes(doc) if any("host" in m for m in n.get("match", []))]
     actual = {h for route in routes for m in route["match"] for h in m.get("host", [])}
     # Kaneo runs on K3s; its private upstream is the Service ClusterIP:5173.
-    upstreams = UPSTREAMS | {"KANEO_PUBLIC_DOMAIN": examples["KANEO_K3S_UPSTREAM"]}
+    upstreams = UPSTREAMS | {"KANEO_PUBLIC_DOMAIN": examples["KANEO_K3S_UPSTREAM"], "NEXTCLOUD_DOMAIN": examples["NEXTCLOUD_UPSTREAM"], "NEXTCLOUD_AIO_DOMAIN": examples["NEXTCLOUD_AIO_UPSTREAM"]}
     expected = {examples[k] for k in upstreams} | {examples[k] for k in ["PROFILE_DOMAIN", "PROFILE_ALIAS_DOMAIN", "RESOURCES_DOMAIN"]}
     assert actual == expected, "Only explicitly configured active app and redirect hosts may be served"
     for key, upstream in upstreams.items():
