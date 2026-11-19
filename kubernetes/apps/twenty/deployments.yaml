@@ -70,12 +70,9 @@ spec:
             timeoutSeconds: 5
           volumeMounts:
             - {name: tmp, mountPath: /tmp}
-            - {name: local-storage, mountPath: /app/packages/twenty-server/.local-storage}
       volumes:
         - name: tmp
           emptyDir: {sizeLimit: 1Gi}
-        - name: local-storage
-          emptyDir: {sizeLimit: 256Mi}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -154,9 +151,6 @@ spec:
             periodSeconds: 30
           volumeMounts:
             - {name: tmp, mountPath: /tmp}
-            - {name: local-storage, mountPath: /app/packages/twenty-server/.local-storage}
       volumes:
         - name: tmp
           emptyDir: {sizeLimit: 1Gi}
-        - name: local-storage
-          emptyDir: {sizeLimit: 256Mi}
