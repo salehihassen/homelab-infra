@@ -17,7 +17,7 @@ services:
       protocol: tcp
     networks:
     - open_webui
-    mem_limit: ${OPENWEBUI_MEMORY_LIMIT:-1536m}
+    mem_limit: ${OPENWEBUI_MEMORY_LIMIT:-768m}
     cpus: 2.0
     pids_limit: 512
     security_opt:
