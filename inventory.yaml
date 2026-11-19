@@ -169,12 +169,6 @@ stacks:
       data: [/opt/caddy, volume:caddy_data]
       backup: configuration and TLS state
       exposure: [public, loopback]
-    nextcloud-aio:
-      services: [nextcloud-aio-mastercontainer]
-      urls: [NEXTCLOUD_DOMAIN, NEXTCLOUD_AIO_DOMAIN]
-      data: [/opt/nextcloud-aio, volume:nextcloud_aio_mastercontainer, AIO-managed volumes, NEXTCLOUD_DATADIR]
-      backup: coordinated native PostgreSQL, Redis and matching AIO/user files
-      exposure: [public, loopback]
     open-webui:
       services: [open-webui]
       urls: [OPENWEBUI_DOMAIN]

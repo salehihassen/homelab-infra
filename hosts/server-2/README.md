@@ -2,7 +2,7 @@
 
 This host uses the existing `server` Compose project identity. It manages only
 the currently retained applications and a remote Alloy log shipper. Nextcloud
-AIO exclusively manages its children. The host's real identity is recorded in
+runs on a separate host behind this host's Caddy proxy. The real identity is recorded in
 ignored `local/site.md`, never in tracked paths, configuration or commands.
 
 Runtime settings and credentials live in `/opt/<stack>`; `.env` and
@@ -13,7 +13,7 @@ creating empty directories. The active services are in [inventory.yaml](../../in
 
 Public HTTPS is intentional on this host. Public routing is validated separately
 from server-1's tailnet-only rules; server-1 protections remain enforced.
-Example backend listeners are loopback-only. Adoption preserves existing private
+Backends use loopback ports or configured private upstreams. Adoption preserves existing private
 IPv4/IPv6 listener choices; review direct consumers before changing those inputs.
 
 Run `INFRA_HOST=server-2 bash scripts/validate-stack.sh all` from the repo root.

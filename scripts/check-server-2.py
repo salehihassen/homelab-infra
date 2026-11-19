@@ -6,7 +6,7 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parent.parent / "hosts/server-2"
-APPS = {"nextcloud-aio-mastercontainer", "open-webui", "mock-traveler", "personal-network", "caddy", "alloy"}
+APPS = {"open-webui", "mock-traveler", "personal-network", "caddy", "alloy"}
 UPSTREAMS = {"OPENWEBUI_DOMAIN": "127.0.0.1:3009", "MOCK_TRAVELER_DOMAIN": "127.0.0.1:8090", "PERSONAL_NETWORK_DOMAIN": "127.0.0.1:3100"}
 
 
@@ -30,19 +30,14 @@ def compose(doc):
         assert service.get("logging", {}).get("options", {}).get("max-size") == "10m", name + ": bounded logs"
         assert not service.get("privileged"), name + ": privileged is forbidden"
         assert "no-new-privileges:true" in service.get("security_opt", []), name + ": prevent privilege gain"
-    for name, volume in [("caddy", "caddy_data"), ("nextcloud-aio-mastercontainer", "nextcloud_aio_mastercontainer")]:
-        definition = doc["volumes"][volume]
-        assert definition.get("external") and definition.get("name") == volume, name + ": preserve the existing external volume"
-    controller = services["nextcloud-aio-mastercontainer"]
-    assert controller["container_name"] == "nextcloud-aio-mastercontainer"
-    assert not any(n.startswith("nextcloud-aio-") and n != "nextcloud-aio-mastercontainer" for n in services), "AIO owns its children"
-    assert any(m["target"] == "/var/run/docker.sock" for m in controller["volumes"])
+    definition = doc["volumes"]["caddy_data"]
+    assert definition.get("external") and definition.get("name") == "caddy_data", "caddy: preserve the existing external volume"
     assert services["caddy"].get("network_mode") == "host"
     for name, service in services.items():
         for mount in service.get("volumes", []):
             if mount["type"] == "bind":
                 assert mount.get("bind", {}).get("create_host_path") is False, name + ": bind mounts must fail closed"
-        if name != "nextcloud-aio-mastercontainer" and name != "alloy":
+        if name != "alloy":
             assert not any(m["target"] == "/var/run/docker.sock" for m in service.get("volumes", [])), name + ": unexpected Docker access"
     assert services["alloy"]["ports"][0]["host_ip"] == "127.0.0.1", "Alloy admin is loopback-only"
 
