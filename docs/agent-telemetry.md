@@ -215,8 +215,8 @@ and `pi -p "..."`, and look for its session in Langfuse.
   help investigate gaps, but no automatic archive-to-trace replay exists.
 - **Monitoring:** Grafana's **Telemetry health** dashboard shows dependency
   readiness, exporter queues, disk space and alerts. Prometheus evaluates the
-  control-plane rules; Grafana bridges firing alerts. Notification delivery
-  needs an operator-configured contact point and policy. An independent host
+  control-plane rules; Grafana bridges firing alerts and delivers them to
+  the owner's Discord (see the stack README's Alert delivery). An independent host
   must monitor collector-host availability; same-host alerts cannot report
   total host loss. See `hosts/server-1/observability/README.md`.
 - **Backups:** writer accounts (`/opt/observability/otel-writers`), Langfuse

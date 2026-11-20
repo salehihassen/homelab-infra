@@ -11,13 +11,13 @@
           "uid": "telemetry-prometheus-alerts",
           "title": "Telemetry control-plane alert",
           "condition": "B",
-          "for": "0s",
+          "for": "15m",
           "noDataState": "OK",
           "execErrState": "Alerting",
           "isPaused": false,
           "annotations": {
             "summary": "Telemetry alert: {{ $labels.signal }}",
-            "description": "See Telemetry health and Prometheus alert state. Notification delivery requires an operator-configured contact point."
+            "description": "See Telemetry health and Prometheus alert state. Delivered to Discord after 15 minutes; see grafana/provisioning/alerting/ping-me-discord.yaml."
           },
           "labels": {
             "stack": "ai-observability"
@@ -31,10 +31,97 @@
                 "to": 0
               },
               "model": {
-                "expr": "label_replace(ALERTS{alertstate=\"firing\",stack=\"ai-observability\"}, \"signal\", \"$1\", \"alertname\", \"(.*)\")",
+                "expr": "label_replace(ALERTS{alertstate=\"firing\",stack=\"ai-observability\",category!=\"disk\"}, \"signal\", \"$1\", \"alertname\", \"(.*)\")",
                 "instant": true,
                 "range": false,
                 "refId": "A",
+                "intervalMs": 15000,
+                "maxDataPoints": 43200
+              }
+            },
+            {
+              "refId": "B",
+              "datasourceUid": "__expr__",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0
+              },
+              "model": {
+                "type": "threshold",
+                "expression": "A",
+                "refId": "B",
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "type": "gt",
+                      "params": [
+                        0
+                      ]
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "query": {
+                      "params": [
+                        "A"
+                      ]
+                    },
+                    "reducer": {
+                      "type": "last",
+                      "params": []
+                    },
+                    "type": "query"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "uid": "disk-capacity-prometheus-alerts",
+          "title": "Disk capacity alert",
+          "condition": "B",
+          "for": "0s",
+          "noDataState": "OK",
+          "execErrState": "Alerting",
+          "isPaused": false,
+          "annotations": {
+            "summary": "Disk alert: {{ $labels.signal }}",
+            "description": "See Telemetry health for disk space and growth. Runbook: hosts/server-1/observability/README.md#disk-alerts.",
+            "free_space": "{{ with $values.C }}{{ humanize1024 .Value }}B{{ end }}"
+          },
+          "labels": {
+            "stack": "ai-observability"
+          },
+          "data": [
+            {
+              "refId": "A",
+              "datasourceUid": "prometheus",
+              "relativeTimeRange": {
+                "from": 60,
+                "to": 0
+              },
+              "model": {
+                "expr": "label_replace(ALERTS{alertstate=\"firing\",stack=\"ai-observability\",category=\"disk\"}, \"signal\", \"$1\", \"alertname\", \"(.*)\")",
+                "instant": true,
+                "range": false,
+                "refId": "A",
+                "intervalMs": 15000,
+                "maxDataPoints": 43200
+              }
+            },
+            {
+              "refId": "C",
+              "datasourceUid": "prometheus",
+              "relativeTimeRange": {
+                "from": 60,
+                "to": 0
+              },
+              "model": {
+                "expr": "max by (host, device) (node_filesystem_avail_bytes{stack=\"ai-observability\"})",
+                "instant": true,
+                "range": false,
+                "refId": "C",
                 "intervalMs": 15000,
                 "maxDataPoints": 43200
               }
