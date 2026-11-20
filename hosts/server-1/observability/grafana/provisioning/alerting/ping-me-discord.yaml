@@ -1,0 +1,62 @@
+# Alert delivery to the owner's Discord through the Personal Ping Me bot,
+# shared with agent pings. Grafana posts directly to Discord's REST API as the
+# bot; no relay service or LLM is involved. ${PING_ME_*} values come from the
+# host's Ping Me config via grafana/ping-me-entrypoint.sh. Grafana expands them
+# in contact point settings but not in templates, so the user mention reaches
+# the template through the payload's vars. Grafana turns an all-digit value
+# into a number there, so the var carries the whole <@ID> mention.
+apiVersion: 1
+
+templates:
+  - orgId: 1
+    name: ping-me-discord
+    template: |
+      {{ define "ping_me.alert" -}}
+      - **{{ .Labels.signal }}** ({{ or .Labels.severity "unknown" }}) on {{ or .Labels.host "unknown host" }}
+      {{- with .Labels.device }} `{{ . }}`{{ end }}, since <t:{{ .StartsAt.Unix }}:R>
+      {{- with .Annotations.free_space }}, {{ . }} available{{ end }}
+      {{ end }}
+
+      {{ define "ping_me.content" -}}
+      {{ .Vars.mention }} {{ len .Alerts.Firing }} alert(s) firing
+      {{ range .Alerts.Firing }}{{ template "ping_me.alert" . }}{{ end -}}
+      Diagnose: {{ reReplaceAll "/+$" "" .ExternalURL }}/alerting/list
+      {{- end }}
+
+      {{ define "ping_me.discord" -}}
+      {{- $content := tmpl.Exec "ping_me.content" . -}}
+      {{- coll.Dict
+            "content" (printf "%.1900s" $content)
+            "allowed_mentions" (coll.Dict "parse" coll.Slice "users" (coll.Slice (reReplaceAll "[^0-9]" "" .Vars.mention)))
+          | data.ToJSONPretty " " -}}
+      {{- end }}
+
+contactPoints:
+  - orgId: 1
+    name: ping-me-discord
+    receivers:
+      - uid: ping-me-discord
+        type: webhook
+        # Recovery stays visible in Grafana but is not posted.
+        disableResolveMessage: true
+        settings:
+          url: https://discord.com/api/v10/channels/${PING_ME_CHANNEL_ID}/messages
+          httpMethod: POST
+          authorization_scheme: Bot
+          authorization_credentials: ${PING_ME_BOT_TOKEN}
+          maxAlerts: 10
+          payload:
+            template: '{{ template "ping_me.discord" . }}'
+            vars:
+              mention: "<@${PING_ME_USER_ID}>"
+
+policies:
+  - orgId: 1
+    receiver: ping-me-discord
+    # One message per bridge rule (disk or telemetry) and host; it lists
+    # every firing signal, and a newly firing one follows within 5 minutes.
+    group_by: [grafana_folder, alertname, host]
+    group_wait: 30s
+    group_interval: 5m
+    # At most one reminder a day while an alert stays unresolved.
+    repeat_interval: 24h

@@ -103,28 +103,84 @@ Grafana provisions **Telemetry health** from
 `grafana/provisioning/dashboards/telemetry-health.json`. Prometheus scrapes
 Alloy's own metrics every 15 seconds, independently of Alloy's export pipeline.
 Alloy's embedded exporters send private remote-write samples for seven
-dependency probes and six filesystem mounts:
+dependency probes and seven filesystem mounts:
 
 - Langfuse web and worker, ClickHouse, MinIO, Loki and Grafana HTTP readiness;
   Redis TCP availability only (not an authenticated Redis command).
-- Loki, Prometheus, ClickHouse, MinIO, Redis and Alloy queue filesystems.
-  Alloy receives only narrow read-only data-directory mounts for the first
-  five; it does not mount the whole host filesystem for this check.
+- Loki, Prometheus, ClickHouse, MinIO, Redis and Alloy queue filesystems,
+  plus the host root filesystem. Alloy receives only narrow read-only
+  data-directory mounts for the first five, and the host's `/usr` at
+  `/telemetry-disks/root` as a non-sensitive stand-in for root; it does not
+  mount the whole host filesystem for this check.
 
 `prometheus-rules.yml` evaluates collector/dependency outages, sustained
 backlogs, queue capacity, export/enqueue failures, receiver refusals, low disk
 space, filesystem read errors and missing probe/disk metrics. Most outage
 rules wait one minute; missing metrics wait two minutes and low disk space
-waits five. Export/refusal counters look back five minutes, so those alerts
+waits five. Disk rules group by host and device, so bind mounts of the same
+filesystem raise one alert; see [Disk alerts](#disk-alerts). Export/refusal counters look back five minutes, so those alerts
 can remain active briefly after recovery. Queue size is exporter batches,
 not a count of spans or bytes.
 
 `grafana/provisioning/alerting/telemetry.yaml` bridges firing Prometheus alerts
 into Grafana every 20 seconds, preserving their original name in the `signal`
-label. Configure a contact point and notification policy in Grafana before
-expecting messages; no destination or credentials are provisioned here.
-Never commit contact-point secrets. This monitors a running control plane,
+label. Disk alerts (`category="disk"`) are forwarded at once with the
+filesystem's current free space; other telemetry alerts must stay firing for
+15 minutes, so brief outages stay quiet. This monitors a running control plane,
 not total host loss: use a separate host for independent availability checks.
+
+### Alert delivery
+
+`grafana/provisioning/alerting/ping-me-discord.yaml` provisions the only
+contact point and the notification policy. Grafana's generic webhook posts
+straight to Discord's REST API as the owner's Personal Ping Me bot, into the
+channel it shares with agent pings, and mentions only the owner. Each message
+lists the signal, severity, host, device, start time, free space for disk
+alerts, and a link to Grafana's alert list. Alerts are grouped per bridge rule
+and host, an unresolved alert is repeated at most daily, and recovery is not
+posted. Provisioned alerting resources are read-only in the UI.
+
+The bot token, channel ID and user ID are never in this repository. Compose
+mounts the host's Ping Me config, `/etc/ai-agent/credentials/personal-ping-me.json`
+(root:ai-agents, 0640), as the `ping_me_config` secret. Grafana joins that group
+through `AI_AGENTS_GID` in `/opt/observability/.env`, and
+`grafana/ping-me-entrypoint.sh` loads the three values into Grafana's own
+environment before starting it, so they do not appear in `docker inspect`.
+The provisioning file references them as `${PING_ME_*}`. Grafana expands
+those in contact point settings, not in notification templates, which is why
+the mention travels through the webhook's `vars`. A missing or malformed
+config stops Grafana with a `ping-me-entrypoint:` log line rather than
+provisioning an empty token. Rotating the token means updating that file and
+recreating Grafana.
+
+To test delivery, use a temporary Grafana rule or synthetic metrics; never
+fill the disk. A successful webhook call is not proof of delivery: confirm the
+message arrived in Discord.
+
+### Disk alerts
+
+| Alert | Fires when | Wait | Severity |
+|---|---|---|---|
+| `HostRootDiskLow` | root has under 75 GiB available | 10m | warning |
+| `HostRootDiskCritical` | root has under 30 GiB available | 2m | critical |
+| `HostRootDiskFillingFast` | the last hour's trend reaches zero within 4 hours | 5m | critical |
+| `HostRootDiskFillsWithin24h` | the last 6 hours' trend reaches zero within 24 hours | 30m | warning |
+| `TelemetryDiskLow` | another telemetry filesystem is under 15 percent available | 5m | warning |
+
+The trend alerts require most of their window's samples (90 of 120, 540 of
+720), so a new or gappy series stays quiet; `TelemetryDiskMetricsMissing`
+covers a missing root mount. Replaying these rules over the 14 days before
+they were added flagged only the November root exhaustion and its recovery.
+
+When a root alert fires:
+
+1. Check `df -h /` and which category grew: agent scratch and worktrees,
+   Docker (`docker system df`), backup staging, Prometheus data and
+   container logs, and media/download directories.
+2. Stop or pause the process that is writing before deleting anything. Prefer
+   removing regenerable data (build caches, unused images, finished scratch)
+   and leave backup staging to its job's own cleanup.
+3. Grafana's **Telemetry health** dashboard shows the free-space history.
 
 After changes, validate with `bash scripts/validate-stack.sh prometheus` and
 `bash scripts/validate-stack.sh alloy`; the script selects its isolated CI
