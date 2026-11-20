@@ -49,7 +49,10 @@ def routing(doc):
     routes = [n for n in nodes(doc) if any("host" in m for m in n.get("match", []))]
     actual = {h for route in routes for m in route["match"] for h in m.get("host", [])}
     # Kaneo runs on K3s; its private upstream is the Service ClusterIP:5173.
-    upstreams = UPSTREAMS | {"KANEO_PUBLIC_DOMAIN": examples["KANEO_K3S_UPSTREAM"], "NEXTCLOUD_DOMAIN": examples["NEXTCLOUD_UPSTREAM"], "NEXTCLOUD_AIO_DOMAIN": examples["NEXTCLOUD_AIO_UPSTREAM"]}
+    upstreams = UPSTREAMS | {"KANEO_PUBLIC_DOMAIN": examples["KANEO_K3S_UPSTREAM"], "NEXTCLOUD_DOMAIN": examples["NEXTCLOUD_UPSTREAM"], "NEXTCLOUD_AIO_DOMAIN": examples["NEXTCLOUD_AIO_UPSTREAM"]} | dict.fromkeys(
+        ["TWENTY_BASE_DOMAIN", "TWENTY_APP_DOMAIN", "TWENTY_WORKSPACE_ONE_DOMAIN", "TWENTY_WORKSPACE_TWO_DOMAIN"],
+        examples["TWENTY_K3S_UPSTREAM"],
+    )
     expected = {examples[k] for k in upstreams} | {examples[k] for k in ["PROFILE_DOMAIN", "PROFILE_ALIAS_DOMAIN", "RESOURCES_DOMAIN"]}
     assert actual == expected, "Only explicitly configured active app and redirect hosts may be served"
     for key, upstream in upstreams.items():

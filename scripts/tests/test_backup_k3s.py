@@ -22,7 +22,19 @@ case "$*" in
   *"get databases"*) printf 'kaneo\nother_app\n' ;;
   *pg_dump*) [[ -z ${FAIL_DUMP:-} ]] || exit 1; echo "dump of ${*: -2:1}"
     [[ -z ${DELETE_AFTER_DUMP:-} ]] || rm -f "${DELETE_AFTER_DUMP}" ;;
-  *pg_restore*) cat >/dev/null ;;
+  *pg_restore*)
+    if [[ -n ${CHECK_DUMP_DRAINED:-} ]]; then
+      while [[ $1 != -- ]]; do shift; done
+      shift
+      status=0
+      "$@" || status=$?
+      if IFS= read -r -n 1; then
+        echo 'archive command left unread input' >&2
+        exit 97
+      fi
+      exit "$status"
+    fi
+    cat >/dev/null ;;
   *gitrepository*) echo 'refs/heads/main@sha1:abc' ;;
   *"service garage"*) echo 10.145.0.9 ;;
   *) echo "unexpected: $*" >&2; exit 2 ;;
@@ -57,6 +69,10 @@ class CaptureScript(unittest.TestCase):
         (root / 'bin').mkdir()
         (root / 'bin/kubectl.upstream').write_text(FAKE_KUBECTL)
         (root / 'bin/kubectl.upstream').chmod(0o755)
+        (root / 'bin/pg_restore').write_text(
+            '#!/usr/bin/env python3\nimport os, sys\nos.read(0, 1)\n'
+            'sys.exit(int(os.environ.get("FAIL_RESTORE", "0")))\n')
+        (root / 'bin/pg_restore').chmod(0o755)
         for name in ('public-edge-inputs/kaneo/credentials.env', 'public-edge-keys/age.agekey'):
             path = root / 'repo/local' / name
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -91,6 +107,16 @@ class CaptureScript(unittest.TestCase):
         self.assertEqual(self.capture(self.root).returncode, 0)
         result = self.capture(self.root, FAIL_DUMP='1')
         self.assertNotEqual(result.returncode, 0)
+        self.assertEqual((self.root / 'k3s/latest/databases/kaneo.dump').read_text(), 'dump of kaneo\n')
+
+    def test_archive_validation_drains_remaining_input(self):
+        result = self.capture(self.root, CHECK_DUMP_DRAINED='1')
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_failed_archive_validation_keeps_the_previous_capture(self):
+        self.assertEqual(self.capture(self.root).returncode, 0)
+        result = self.capture(self.root, CHECK_DUMP_DRAINED='1', FAIL_RESTORE='5')
+        self.assertEqual(result.returncode, 5, result.stderr)
         self.assertEqual((self.root / 'k3s/latest/databases/kaneo.dump').read_text(), 'dump of kaneo\n')
 
     def test_buckets_are_mirrored_into_the_set(self):
