@@ -50,13 +50,65 @@ groups:
       - alert: TelemetryDiskLow
         # The exporter sees read-only bind mounts; the owning stores write to
         # the same backing filesystems, so do not exclude readonly=1 here.
-        expr: node_filesystem_avail_bytes{stack="ai-observability"} / node_filesystem_size_bytes{stack="ai-observability"} < 0.15
+        # One alert per filesystem, not per bind mount. The host root
+        # filesystem has its own absolute and growth rules below.
+        expr: |
+          min by (host, device) (node_filesystem_avail_bytes{stack="ai-observability"} / node_filesystem_size_bytes{stack="ai-observability"}) < 0.15
+          unless on (host, device) node_filesystem_avail_bytes{stack="ai-observability",mountpoint="/telemetry-disks/root"}
         for: 5m
         labels:
           stack: ai-observability
           severity: warning
+          category: disk
         annotations:
           summary: Telemetry filesystem has less than 15 percent available
+      # Host root filesystem, seen through the read-only /telemetry-disks/root
+      # mount. Grouping by host and device drops the exporter's container-ID
+      # instance label, so recreating Alloy keeps the same alert.
+      - alert: HostRootDiskLow
+        expr: max by (host, device) (node_filesystem_avail_bytes{stack="ai-observability",mountpoint="/telemetry-disks/root"}) < 75 * 1024 ^ 3
+        for: 10m
+        labels:
+          stack: ai-observability
+          severity: warning
+          category: disk
+        annotations:
+          summary: Host root filesystem has less than 75 GiB available
+      - alert: HostRootDiskCritical
+        expr: max by (host, device) (node_filesystem_avail_bytes{stack="ai-observability",mountpoint="/telemetry-disks/root"}) < 30 * 1024 ^ 3
+        for: 2m
+        labels:
+          stack: ai-observability
+          severity: critical
+          category: disk
+        annotations:
+          summary: Host root filesystem has less than 30 GiB available
+      - alert: HostRootDiskFillingFast
+        # The last hour's trend runs out within four hours. Requires 90 of the
+        # hour's 120 samples (30s scrape), so a new or gappy series stays quiet.
+        expr: |
+          max by (host, device) (predict_linear(node_filesystem_avail_bytes{stack="ai-observability",mountpoint="/telemetry-disks/root"}[1h], 4 * 3600)) < 0
+          and on (host, device) max by (host, device) (count_over_time(node_filesystem_avail_bytes{stack="ai-observability",mountpoint="/telemetry-disks/root"}[1h])) >= 90
+        for: 5m
+        labels:
+          stack: ai-observability
+          severity: critical
+          category: disk
+        annotations:
+          summary: Host root filesystem will be full within 4 hours at the last hour's rate
+      - alert: HostRootDiskFillsWithin24h
+        # Sustained six-hour decline that runs out within a day. Requires 540
+        # of the window's 720 samples.
+        expr: |
+          max by (host, device) (predict_linear(node_filesystem_avail_bytes{stack="ai-observability",mountpoint="/telemetry-disks/root"}[6h], 24 * 3600)) < 0
+          and on (host, device) max by (host, device) (count_over_time(node_filesystem_avail_bytes{stack="ai-observability",mountpoint="/telemetry-disks/root"}[6h])) >= 540
+        for: 30m
+        labels:
+          stack: ai-observability
+          severity: warning
+          category: disk
+        annotations:
+          summary: Host root filesystem will be full within 24 hours at the last six hours' rate
       - alert: TelemetryFilesystemReadError
         expr: node_filesystem_device_error{stack="ai-observability"} != 0
         for: 1m
@@ -66,13 +118,14 @@ groups:
         annotations:
           summary: Telemetry filesystem statistics cannot be read
       - alert: TelemetryDiskMetricsMissing
-        expr: count(node_filesystem_size_bytes{stack="ai-observability"}) < 6 or absent(node_filesystem_size_bytes{stack="ai-observability"})
+        # max() keeps one alert: absent() would add a mountpoint label.
+        expr: max(count(node_filesystem_size_bytes{stack="ai-observability"}) < 7 or absent(node_filesystem_size_bytes{stack="ai-observability"}) or absent(node_filesystem_avail_bytes{stack="ai-observability",mountpoint="/telemetry-disks/root"}))
         for: 2m
         labels:
           stack: ai-observability
           severity: critical
         annotations:
-          summary: One or more of the six telemetry disk mounts is not monitored
+          summary: One or more of the seven monitored disk mounts is not reporting
       - alert: TelemetryDependencyMetricsMissing
         expr: count(probe_success{stack="ai-observability"}) < 7 or absent(probe_success{stack="ai-observability"})
         for: 2m
