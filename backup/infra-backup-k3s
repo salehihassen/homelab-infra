@@ -82,7 +82,12 @@ for db in "${databases[@]}"; do
   echo "Dumping K3s PostgreSQL database ${db}"
   k -n postgres exec "${primary}" -c postgres -- pg_dump -d "${db}" --format=custom >"incoming/databases/${db}.dump"
   # pg_restore reads the whole table of contents, so a truncated dump fails here.
-  k -n postgres exec -i "${primary}" -c postgres -- pg_restore --list <"incoming/databases/${db}.dump" >/dev/null
+  k -n postgres exec -i "${primary}" -c postgres -- sh -ec '
+    status=0
+    pg_restore --list || status=$?
+    cat >/dev/null
+    exit "$status"
+  ' <"incoming/databases/${db}.dump" >/dev/null
 done
 
 mirror copy
