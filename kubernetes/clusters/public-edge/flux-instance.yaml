@@ -47,7 +47,9 @@ spec:
             value:
               - kubernetes/clusters/public-edge
               - kubernetes/apps/kaneo
+              - kubernetes/apps/twenty
               - kubernetes/databases/postgres
+              - kubernetes/databases/postgres/app-databases/twenty
               - kubernetes/storage/garage
               - kubernetes/infrastructure/flux-operator
               - kubernetes/infrastructure/cloudnative-pg

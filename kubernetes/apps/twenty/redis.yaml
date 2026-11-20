@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: twenty-redis
+spec:
+  serviceName: twenty-redis
+  replicas: 1
+  revisionHistoryLimit: 2
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: twenty-redis
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: twenty-redis
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      nodeSelector:
+        homelab.example/cluster: public-edge
+        homelab.example/local-storage: "true"
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: redis
+          image: redis:8.2.3-alpine@sha256:08ad0b1d280850169a790dba1393ff7a90aef951fc19632cf4d3ce4f78e679ba
+          command: [redis-server]
+          args: [--dir, /data, --appendonly, "yes", --appendfsync, everysec, --save, "", --maxmemory, 192mb, --maxmemory-policy, noeviction]
+          ports:
+            - {name: redis, containerPort: 6379}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          resources:
+            requests: {cpu: 20m, memory: 64Mi}
+            limits: {cpu: "1", memory: 384Mi}
+          readinessProbe:
+            exec: {command: [sh, -ec, "test \"$(redis-cli ping)\" = PONG"]}
+            periodSeconds: 10
+          livenessProbe:
+            exec: {command: [sh, -ec, "test \"$(redis-cli ping)\" = PONG"]}
+            periodSeconds: 30
+          volumeMounts:
+            - {name: data, mountPath: /data}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        storageClassName: local-retain
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests: {storage: 1Gi}

@@ -1,0 +1,31 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: DatabaseRole
+metadata:
+  name: twenty
+spec:
+  cluster: {name: postgres}
+  name: twenty
+  login: true
+  superuser: false
+  createdb: false
+  createrole: false
+  replication: false
+  bypassrls: false
+  inherit: false
+  inRoles: []
+  passwordSecret: {name: twenty-db-password}
+  databaseRoleReclaimPolicy: retain
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: twenty
+spec:
+  cluster: {name: postgres}
+  name: twenty
+  owner: twenty
+  databaseReclaimPolicy: retain
+  extensions:
+    - {name: uuid-ossp, schema: public}
+    - {name: unaccent, schema: public}
+    - {name: citext, schema: public}

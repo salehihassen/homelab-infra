@@ -113,6 +113,7 @@ with its own storage; see the [roadmap](roadmap.md).
   needs a role's password to log in.
 - New databases keep PostgreSQL's default `CONNECT` grant to `PUBLIC`, so any
   role can connect to any database, but cannot read tables it does not own.
+  Twenty's `pg_hba` rules restrict its login to database `twenty`.
 - The operator's namespace, `cnpg-system`, has no NetworkPolicies: it must
   reach the Kubernetes API and receive admission webhook calls from it.
 

@@ -30,11 +30,12 @@ check_schemas() {
 mkdir "$work/schemas"
 python3 scripts/check-kubernetes.py --export-schemas "$work/schemas"
 
-for folder in kubernetes/infrastructure/* kubernetes/clusters/* kubernetes/databases/* kubernetes/storage/* kubernetes/apps/*; do
+while IFS= read -r kustomization; do
+  folder="$(dirname "$kustomization")"
   rendered="$work/$(basename "$folder").yaml"
   render "$folder" > "$rendered"
   check_schemas "$rendered"
-done
+done < <(find kubernetes -name kustomization.yaml -type f | sort)
 
 python3 scripts/check-kubernetes.py
 bash scripts/check-private.sh

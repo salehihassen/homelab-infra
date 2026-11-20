@@ -22,6 +22,9 @@ spec:
     requests: {cpu: 100m, memory: 256Mi}
     limits: {cpu: "1", memory: 512Mi}
   postgresql:
+    pg_hba:
+      - host twenty twenty all scram-sha-256
+      - host all twenty all reject
     parameters:
       shared_buffers: 64MB
       max_connections: "50"
