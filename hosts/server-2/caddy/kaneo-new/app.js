@@ -63,8 +63,10 @@ function renderPicker(config) {
 
 function selectedLabels(template) {
   const labels = [...template.labels];
-  if (template.area !== "none" && $("area").value) labels.push($("area").value);
-  if ($("group").value) labels.push($("group").value);
+  if (template.area !== "none") {
+    if ($("area").value) labels.push($("area").value);
+    if ($("group").value) labels.push($("group").value);
+  }
   if ($("human-only").checked) labels.push("human-only");
   return labels;
 }
@@ -82,11 +84,11 @@ function renderForm(config, template, params) {
     for (const a of config.areas) option($("area"), a.label, a.name);
     const wanted = params.get("area") ? "area:" + params.get("area") : template.area;
     if (config.areas.some((a) => a.label === wanted)) $("area").value = wanted;
+    option($("group"), "", "None");
+    for (const g of config.groups) option($("group"), g.label, g.name);
+    const group = params.get("group") ? "group:" + params.get("group") : template.group;
+    if (config.groups.some((g) => g.label === group)) $("group").value = group;
   }
-  option($("group"), "", "None");
-  for (const g of config.groups) option($("group"), g.label, g.name);
-  const group = params.get("group") ? "group:" + params.get("group") : template.group;
-  if (config.groups.some((g) => g.label === group)) $("group").value = group;
 
   $("priority").value = template.priority;
   $("state").value = template.status;
