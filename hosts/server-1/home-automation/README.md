@@ -17,6 +17,12 @@ with the USB stick from `ZWAVE_DEVICE`.
 
 Image tags are pinned; Renovate proposes Home Assistant upgrades.
 
+## fal billing exporter
+
+The [fal setup guide](fal-usage.md) documents the 15-minute account-credit and
+estimated model-spending exporter and four Home Assistant entities. Credentials
+stay in a separate host file, and dashboards remain editable through the web UI.
+
 ## CondenseIt headlines
 
 The [CondenseIt integration runbook](condenseit-digest.md) describes the

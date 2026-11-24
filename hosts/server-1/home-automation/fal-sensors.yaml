@@ -1,0 +1,61 @@
+# Append these integration entries to the existing command_line.yaml include.
+- sensor:
+    name: FAL Credit Remaining
+    unique_id: fal_credit_remaining
+    command: "cat /config/fal_usage.json"
+    scan_interval: 60
+    unit_of_measurement: USD
+    device_class: monetary
+    state_class: total
+    icon: mdi:wallet
+    value_template: "{{ value_json.credit_remaining_usd }}"
+    availability: "{{ 0 <= as_timestamp(now()) - value_json.sampled_at < 2700 }}"
+    json_attributes:
+      - sampled_at
+      - currency
+
+- sensor:
+    name: FAL Spend Today
+    unique_id: fal_spend_today
+    command: "cat /config/fal_usage.json"
+    scan_interval: 60
+    unit_of_measurement: USD
+    device_class: monetary
+    state_class: total
+    icon: mdi:cash-clock
+    value_template: "{{ value_json.spend_today_usd }}"
+    availability: "{{ 0 <= as_timestamp(now()) - value_json.sampled_at < 2700 }}"
+    json_attributes_path: "$.daily_attributes"
+    json_attributes:
+      - sampled_at
+      - last_reset
+      - timezone
+      - usage_source
+
+- sensor:
+    name: FAL Spend Month To Date
+    unique_id: fal_spend_month_to_date
+    command: "cat /config/fal_usage.json"
+    scan_interval: 60
+    unit_of_measurement: USD
+    device_class: monetary
+    state_class: total
+    icon: mdi:calendar-month
+    value_template: "{{ value_json.spend_month_to_date_usd }}"
+    availability: "{{ 0 <= as_timestamp(now()) - value_json.sampled_at < 2700 }}"
+    json_attributes_path: "$.monthly_attributes"
+    json_attributes:
+      - sampled_at
+      - last_reset
+      - timezone
+      - usage_source
+
+- sensor:
+    name: FAL Usage Updated
+    unique_id: fal_usage_updated
+    command: "cat /config/fal_usage.json"
+    scan_interval: 60
+    device_class: timestamp
+    icon: mdi:update
+    value_template: "{{ value_json.sampled_at | timestamp_utc }}"
+    availability: "{{ 0 <= as_timestamp(now()) - value_json.sampled_at < 2700 }}"
