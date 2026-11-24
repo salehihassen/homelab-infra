@@ -19,8 +19,8 @@ Image tags are pinned; Renovate proposes Home Assistant upgrades.
 
 ## fal billing exporter
 
-See [fal setup](fal-usage.md) for the 15-minute credit and model-spending
-exporter and Home Assistant entities.
+See [fal setup](fal-usage.md) for HA-owned 15-minute credit and spending
+polling through restricted localhost SSH, matching the Antigravity pattern.
 
 ## CondenseIt headlines
 

@@ -5,14 +5,12 @@ import json
 import math
 import os
 import sys
-import tempfile
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime
 from decimal import Decimal
-from pathlib import Path
 from zoneinfo import ZoneInfo
 
 
@@ -90,7 +88,7 @@ def get_usage(now=None):
     if credits["currency"] != "USD":
         raise ValueError("Unsupported fal credit currency")
     balance = float(amount(credits["current_balance"]))
-    sample = {
+    return {
         "credit_remaining_usd": balance,
         "spend_today_usd": spending(key, day_start, now, timezone),
         "spend_month_to_date_usd": spending(key, month_start, now, timezone),
@@ -101,32 +99,11 @@ def get_usage(now=None):
         "month_start": month_start.isoformat(),
         "sampled_at": int(time.time()),
     }
-    for period, start in (("daily", day_start), ("monthly", month_start)):
-        sample[period + "_attributes"] = {
-            "last_reset": start.isoformat(),
-            "sampled_at": sample["sampled_at"],
-            "timezone": timezone,
-            "usage_source": "estimate",
-        }
-    return sample
 
 
 def main():
-    output = Path(os.environ["FAL_USAGE_OUTPUT"])
-    if not output.is_absolute():
-        raise ValueError("FAL_USAGE_OUTPUT must be absolute")
-    data = get_usage()
-    temporary = None
-    try:
-        with tempfile.NamedTemporaryFile(mode="w", dir=output.parent, delete=False) as handle:
-            temporary = Path(handle.name)
-            os.fchmod(handle.fileno(), 0o600)
-            json.dump(data, handle, separators=(",", ":"), allow_nan=False)
-            handle.write("\n")
-        os.replace(temporary, output)
-    finally:
-        if temporary is not None and temporary.exists():
-            temporary.unlink()
+    # Build the whole JSON string before printing: failed polls emit no sample.
+    print(json.dumps(get_usage(), separators=(",", ":"), allow_nan=False))
 
 
 if __name__ == "__main__":

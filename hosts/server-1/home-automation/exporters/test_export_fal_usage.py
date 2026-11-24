@@ -1,9 +1,9 @@
-"""Check billing aggregation, date boundaries, and preservation of good samples."""
+"""Check billing aggregation, date boundaries, and failed-poll output."""
 
 import importlib.util
 import json
 import os
-import tempfile
+import io
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
@@ -24,11 +24,7 @@ def page(*costs, cursor=None):
 
 class FalUsageTests(unittest.TestCase):
     def setUp(self):
-        tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(tmp.cleanup)
-        self.output = Path(tmp.name) / "sample.json"
         env = patch.dict(os.environ, {"FAL_BILLING_API_KEY": "test-api-secret",
-                                    "FAL_USAGE_OUTPUT": str(self.output),
                                     "FAL_USAGE_TIMEZONE": "America/New_York"})
         env.start()
         self.addCleanup(env.stop)
@@ -36,16 +32,15 @@ class FalUsageTests(unittest.TestCase):
     def test_exports_discounted_totals_without_account_or_key(self):
         balance = {"username": "private-account", "credits": {
             "current_balance": 15.123456, "currency": "USD"}}
-        with patch.object(exporter, "fetch", side_effect=[balance, page(.1, .2), page(2, 3)]):
+        with patch.object(exporter, "fetch", side_effect=[balance, page(.1, .2), page(2, 3)]), patch('sys.stdout', new_callable=io.StringIO) as output:
             exporter.main()
-        data = json.loads(self.output.read_text())
+        data = json.loads(output.getvalue())
         self.assertEqual(data["credit_remaining_usd"], 15.123456)
         self.assertEqual(data["spend_today_usd"], .3)
         self.assertEqual(data["spend_month_to_date_usd"], 5)
         self.assertEqual(data["usage_source"], "estimate")
-        self.assertEqual(self.output.stat().st_mode & 0o777, 0o600)
-        self.assertNotIn("private-account", self.output.read_text())
-        self.assertNotIn("test-api-secret", self.output.read_text())
+        self.assertNotIn("private-account", output.getvalue())
+        self.assertNotIn("test-api-secret", output.getvalue())
 
     def test_paginates_and_leaves_account_scope_unfiltered(self):
         with patch.object(exporter, "fetch", side_effect=[page(.1, cursor="next"), page(.2)]) as fetch:
@@ -73,8 +68,6 @@ class FalUsageTests(unittest.TestCase):
         self.assertEqual(data["day_start"], "2026-11-30T00:00:00-05:00")
         # November starts before the DST change; keep the correct offset.
         self.assertEqual(data["month_start"], "2026-11-01T00:00:00-04:00")
-        self.assertEqual(data["daily_attributes"]["last_reset"], data["day_start"])
-        self.assertEqual(data["monthly_attributes"]["last_reset"], data["month_start"])
 
     def test_invalid_money_is_rejected(self):
         for value in (True, None, "12", -1, float("nan"), float("inf")):
@@ -87,17 +80,14 @@ class FalUsageTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 exporter.spending("key", now, now, "UTC")
 
-    def test_partial_or_failed_poll_preserves_previous_file_and_timestamp(self):
-        previous = '{"sampled_at":123,"credit_remaining_usd":5}\n'
-        self.output.write_text(previous)
+    def test_partial_or_failed_poll_emits_no_sample(self):
         balance = {"credits": {"current_balance": 0, "currency": "USD"}}
         for failure in (RuntimeError("HTTP 403"), ValueError("malformed response")):
             with self.subTest(failure=type(failure).__name__):
-                with patch.object(exporter, "fetch", side_effect=[balance, page(1), failure]):
+                with patch.object(exporter, "fetch", side_effect=[balance, page(1), failure]), patch('sys.stdout', new_callable=io.StringIO) as output:
                     with self.assertRaises(type(failure)):
                         exporter.main()
-                self.assertEqual(self.output.read_text(), previous)
-                self.assertEqual(list(self.output.parent.iterdir()), [self.output])
+                self.assertEqual(output.getvalue(), '')
 
     def test_different_currencies_are_not_summed_as_usd(self):
         now = datetime.now(timezone.utc)
