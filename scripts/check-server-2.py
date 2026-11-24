@@ -61,7 +61,9 @@ def routing(doc):
         if key == "KANEO_PUBLIC_DOMAIN":
             # Kaneo's uploads bucket shares its origin: only that path reaches Garage.
             branches = route["handle"][0]["routes"]
-            assert [b.get("match") for b in branches] == [[{"path": ["/kaneo-uploads/*"]}], None], key + ": only the uploads path reaches storage"
+            assert [b.get("match") for b in branches] == [[{"path": ["/new"]}], [{"path": ["/kaneo-uploads/*"]}], [{"path": ["/new/*"]}], None], key + ": only the uploads path reaches storage"
+            handlers = {n.get("handler") for b in (branches[0], branches[2]) for n in nodes(b)}
+            assert "file_server" in handlers and "reverse_proxy" not in handlers, key + ": ticket templates are static files only"
             assert [p.get("upstreams") for p in proxies] == [[{"dial": examples["KANEO_STORAGE_K3S_UPSTREAM"]}], [{"dial": upstream}]], key + ": exact backends"
         else:
             assert len(proxies) == 1 and proxies[0].get("upstreams") == [{"dial": upstream}], key + ": exact backend"

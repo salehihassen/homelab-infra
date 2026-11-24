@@ -1,0 +1,84 @@
+{
+  "workspaceSlug": "team",
+  "projectSlug": "WORK",
+  "areas": [
+    { "label": "area:homelab", "name": "Homelab" },
+    { "label": "area:ai-tools", "name": "AI tools" },
+    { "label": "area:nixos", "name": "NixOS & workstations" },
+    { "label": "area:personal-network", "name": "Personal Network" },
+    { "label": "area:email", "name": "Email tools" },
+    { "label": "area:portfolio", "name": "Portfolio" },
+    { "label": "area:evals", "name": "Evals" },
+    { "label": "area:career", "name": "Career" },
+    { "label": "area:oss", "name": "OSS" },
+    { "label": "area:surface-select", "name": "Surface Select" },
+    { "label": "area:smash-bros", "name": "Smash Bros Audience" },
+    { "label": "area:qds", "name": "QDS / freelance" },
+    { "label": "area:navigator", "name": "Navigator" },
+    { "label": "area:learning", "name": "Learning" },
+    { "label": "area:back-burner", "name": "Back burner" }
+  ],
+  "groups": [
+    { "label": "group:maintenance", "name": "Maintenance" },
+    { "label": "group:team", "name": "Team" },
+    { "label": "group:back-burner", "name": "Back burner" }
+  ],
+  "descriptions": {
+    "story": "## User story\n\nAs a <who>, we want / need <what>, so that <why>.\n\n## Description\n\n<Details related to this ticket: context, links, constraints.>\n\n## Acceptance criteria\n\n- [ ] <What has to be true to close this ticket>\n- [ ] \n",
+    "bug": "## What's wrong\n\n<What happened, and where: URL, host, app version.>\n\nSteps to reproduce:\n\n1. \n2. \n3. \n\n## Expected behavior\n\n<What should have happened instead.>\n\n## Screen recordings / artifacts\n\n<Links, logs or error output. Attach recordings and screenshots to the ticket after creating it.>\n"
+  },
+  "templates": [
+    {
+      "id": "triage",
+      "name": "Triage",
+      "summary": "Quick capture. No area or group yet; sort it later.",
+      "labels": ["triage"],
+      "area": "none",
+      "description": "story",
+      "priority": "no-priority",
+      "status": "planned"
+    },
+    {
+      "id": "bug",
+      "name": "Bug",
+      "summary": "Something is broken. Pick the area it belongs to.",
+      "labels": [],
+      "area": "choose",
+      "description": "bug",
+      "priority": "medium",
+      "status": "planned"
+    },
+    {
+      "id": "task",
+      "name": "Task",
+      "summary": "Ordinary work in any area.",
+      "labels": [],
+      "area": "choose",
+      "description": "story",
+      "priority": "no-priority",
+      "status": "planned"
+    },
+    {
+      "id": "surface-select",
+      "name": "Surface Select",
+      "summary": "Surface Select work, in the Team group.",
+      "labels": [],
+      "area": "area:surface-select",
+      "group": "group:team",
+      "description": "story",
+      "priority": "no-priority",
+      "status": "planned"
+    },
+    {
+      "id": "backburner",
+      "name": "Back burner",
+      "summary": "A parked idea, in the Back burner group.",
+      "labels": [],
+      "area": "area:back-burner",
+      "group": "group:back-burner",
+      "description": "story",
+      "priority": "low",
+      "status": "planned"
+    }
+  ]
+}

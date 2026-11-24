@@ -14,6 +14,12 @@ services:
       bind:
         create_host_path: false
     - type: bind
+      source: ./kaneo-new
+      target: /etc/caddy/kaneo-new
+      read_only: true
+      bind:
+        create_host_path: false
+    - type: bind
       source: ${CADDY_CERTS_DIR:?Set CADDY_CERTS_DIR}
       target: /certs
       bind:
