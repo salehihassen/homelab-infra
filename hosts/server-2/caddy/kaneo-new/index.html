@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="same-origin">
+  <title>New ticket</title>
+  <link rel="stylesheet" href="/new/style.css">
+  <script src="/new/app.js" defer></script>
+</head>
+<body>
+  <main>
+    <header>
+      <a class="back" href="/">Kaneo</a>
+      <h1 id="heading">New ticket</h1>
+      <p id="summary" class="muted"></p>
+    </header>
+
+    <p id="status" class="notice" role="status" hidden></p>
+
+    <nav id="picker" hidden>
+      <ul id="template-list" class="cards"></ul>
+      <h2>Task in a specific area</h2>
+      <ul id="area-list" class="chips"></ul>
+    </nav>
+
+    <form id="form" hidden novalidate>
+      <label>Title
+        <input id="title" name="title" required autocomplete="off">
+      </label>
+
+      <div class="row">
+        <label id="area-field">Area
+          <select id="area" name="area"></select>
+        </label>
+        <label id="group-field">Group
+          <select id="group" name="group"></select>
+        </label>
+      </div>
+
+      <div class="row">
+        <label>Priority
+          <select id="priority" name="priority">
+            <option value="no-priority">No priority</option>
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+            <option value="urgent">Urgent</option>
+          </select>
+        </label>
+        <label>Status
+          <select id="state" name="state">
+            <option value="planned">Backlog</option>
+            <option value="to-do">To Do</option>
+          </select>
+        </label>
+      </div>
+
+      <label class="check">
+        <input id="human-only" type="checkbox"> Human-only (agents may not work it)
+      </label>
+
+      <label>Description
+        <textarea id="description" name="description" rows="18"></textarea>
+      </label>
+
+      <p class="muted" id="labels-preview"></p>
+
+      <div class="actions">
+        <button id="submit" type="submit">Create ticket</button>
+        <a href="/new/">All templates</a>
+      </div>
+    </form>
+  </main>
+</body>
+</html>
