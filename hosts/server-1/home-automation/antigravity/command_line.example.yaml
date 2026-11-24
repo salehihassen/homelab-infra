@@ -7,6 +7,7 @@
     command: |
       python3 - <<'PYCODE'
       import datetime, json, math, subprocess, sys
+      previous_sample = {{ {'sampled_at': states('sensor.antigravity_usage_updated'), 'buckets': state_attr('sensor.antigravity_usage_updated', 'buckets')} | to_json | to_json }}
       try:
           result = subprocess.run([
               'ssh', '-T', '-i', '/config/.ssh/antigravity_usage',
@@ -38,7 +39,11 @@
               raise ValueError('Missing quota buckets')
           print(json.dumps({'sampled_at': datetime.datetime.now(datetime.timezone.utc).isoformat(), 'buckets': buckets}))
       except Exception:
-          sys.exit('Antigravity usage poll failed; check the host CLI login and connection.')
+          print('Antigravity usage poll failed; keeping the previous sample.', file=sys.stderr)
+          previous = json.loads(previous_sample)
+          if previous['sampled_at'] in ('unknown', 'unavailable') or not previous['buckets']:
+              sys.exit(1)
+          print(json.dumps(previous))
       PYCODE
     command_timeout: 110
     scan_interval: 900
