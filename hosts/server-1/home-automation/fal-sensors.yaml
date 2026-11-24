@@ -34,7 +34,7 @@
       PYCODE
     command_timeout: 130
     scan_interval: 900
-    value_template: '{{ value_json.sampled_at | timestamp_utc }}'
+    value_template: "{{ value_json.sampled_at | timestamp_custom('%Y-%m-%dT%H:%M:%S+00:00', false) }}"
     json_attributes:
     - credit_remaining_usd
     - spend_today_usd
