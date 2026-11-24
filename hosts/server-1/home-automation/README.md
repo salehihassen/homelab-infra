@@ -19,9 +19,8 @@ Image tags are pinned; Renovate proposes Home Assistant upgrades.
 
 ## fal billing exporter
 
-The [fal setup guide](fal-usage.md) documents the 15-minute account-credit and
-estimated model-spending exporter and four Home Assistant entities. Credentials
-stay in a separate host file, and dashboards remain editable through the web UI.
+See [fal setup](fal-usage.md) for the 15-minute credit and model-spending
+exporter and Home Assistant entities.
 
 ## CondenseIt headlines
 
