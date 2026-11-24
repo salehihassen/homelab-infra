@@ -22,11 +22,11 @@ sensor:
   availability: '{{ 0 <= as_timestamp(now()) - as_timestamp(states(''sensor.fal_usage_updated''), 0) < 2700 and
     state_attr(''sensor.fal_usage_updated'', ''spend_today_usd'') is number }}'
   state: '{{ state_attr(''sensor.fal_usage_updated'', ''spend_today_usd'') }}'
+  last_reset: '{{ state_attr(''sensor.fal_usage_updated'', ''day_start'') }}'
   attributes:
     currency: '{{ state_attr(''sensor.fal_usage_updated'', ''currency'') }}'
     timezone: '{{ state_attr(''sensor.fal_usage_updated'', ''timezone'') }}'
     usage_source: '{{ state_attr(''sensor.fal_usage_updated'', ''usage_source'') }}'
-    last_reset: '{{ state_attr(''sensor.fal_usage_updated'', ''day_start'') }}'
 - name: FAL Spend Month To Date
   unique_id: fal_spend_month_to_date
   unit_of_measurement: USD
@@ -36,8 +36,8 @@ sensor:
   availability: '{{ 0 <= as_timestamp(now()) - as_timestamp(states(''sensor.fal_usage_updated''), 0) < 2700 and
     state_attr(''sensor.fal_usage_updated'', ''spend_month_to_date_usd'') is number }}'
   state: '{{ state_attr(''sensor.fal_usage_updated'', ''spend_month_to_date_usd'') }}'
+  last_reset: '{{ state_attr(''sensor.fal_usage_updated'', ''month_start'') }}'
   attributes:
     currency: '{{ state_attr(''sensor.fal_usage_updated'', ''currency'') }}'
     timezone: '{{ state_attr(''sensor.fal_usage_updated'', ''timezone'') }}'
     usage_source: '{{ state_attr(''sensor.fal_usage_updated'', ''usage_source'') }}'
-    last_reset: '{{ state_attr(''sensor.fal_usage_updated'', ''month_start'') }}'
