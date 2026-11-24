@@ -1,0 +1,47 @@
+# Merge this list item into the existing command_line include.
+- sensor:
+    name: Antigravity Usage Updated
+    unique_id: antigravity_usage_updated
+    device_class: timestamp
+    icon: mdi:update
+    command: |
+      python3 - <<'PYCODE'
+      import datetime, json, math, subprocess, sys
+      try:
+          result = subprocess.run([
+              'ssh', '-T', '-i', '/config/.ssh/antigravity_usage',
+              '-o', 'UserKnownHostsFile=/config/.ssh/antigravity_known_hosts',
+              '-o', 'StrictHostKeyChecking=yes', '-o', 'BatchMode=yes',
+              '-o', 'IdentitiesOnly=yes', '-o', 'ClearAllForwardings=yes',
+              '-o', 'ConnectTimeout=5', 'replace-with-host-user@127.0.0.1',
+              'AGY_CLI_DISABLE_AUTO_UPDATE=true /path/to/agy -p /usage --output-format json'
+          ], stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=100)
+          if result.returncode or len(result.stdout) > 1048576:
+              raise ValueError('CLI failed')
+          report = json.loads(result.stdout)
+          if report.get('status') != 'SUCCESS' or report.get('command', {}).get('name') != 'usage':
+              raise ValueError('Not a successful usage report')
+          buckets = {}
+          for group in report['command']['data']['groups']:
+              for bucket in group['buckets']:
+                  key = bucket['id']
+                  if key not in ('gemini-5h', 'gemini-weekly', '3p-5h', '3p-weekly'):
+                      continue
+                  fraction = bucket['remaining_fraction']
+                  if type(fraction) not in (int, float) or not math.isfinite(fraction) or not 0 <= fraction <= 1 or key in buckets:
+                      raise ValueError('Invalid quota')
+                  reset = datetime.datetime.fromisoformat(bucket['reset_time'].replace('Z', '+00:00'))
+                  if reset.tzinfo is None:
+                      raise ValueError('Missing reset timezone')
+                  buckets[key] = {'remaining': round(fraction * 100, 2), 'resets_at': reset.isoformat() if reset.timestamp() > 0 else None}
+          if len(buckets) != 4:
+              raise ValueError('Missing quota buckets')
+          print(json.dumps({'sampled_at': datetime.datetime.now(datetime.timezone.utc).isoformat(), 'buckets': buckets}))
+      except Exception:
+          sys.exit('Antigravity usage poll failed; check the host CLI login and connection.')
+      PYCODE
+    command_timeout: 110
+    scan_interval: 900
+    value_template: '{{ value_json.sampled_at }}'
+    json_attributes:
+    - buckets

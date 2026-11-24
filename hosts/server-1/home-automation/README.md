@@ -24,6 +24,13 @@ five-minute local API exporter, compact `sensor.condenseit_top_news` entity,
 and a built-in Markdown card to paste into a UI-managed dashboard. Credentials
 stay in host files; dashboard YAML and storage records stay untouched.
 
+## Antigravity quotas
+
+[Antigravity quotas](antigravity/README.md) use one Home Assistant command-line
+poll of the official host CLI every 15 minutes, with eight template entities
+for the four remaining percentages and their reset timestamps. It uses a
+restricted localhost SSH key and needs no exporter service or systemd timer.
+
 ## Claude usage exporter
 
 `export-claude-usage.py` writes the Claude quota sample used by Home

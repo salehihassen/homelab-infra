@@ -1,0 +1,70 @@
+# Merge these items into template.sensor, alongside any existing sensor entries.
+sensor:
+- name: Antigravity Gemini 5h Remaining
+  unique_id: antigravity_gemini_5h_remaining
+  unit_of_measurement: '%'
+  state_class: measurement
+  icon: mdi:timer-sand
+  availability: '{{ as_timestamp(states(''sensor.antigravity_usage_updated''), 0) > as_timestamp(now()) - 2700 and (state_attr(''sensor.antigravity_usage_updated'',
+    ''buckets'') or {}).get(''gemini-5h'', {}).get(''remaining'') is number }}'
+  state: '{{ (state_attr(''sensor.antigravity_usage_updated'', ''buckets'') or {}).get(''gemini-5h'', {}).get(''remaining'') }}'
+  attributes:
+    resets_at: '{{ (state_attr(''sensor.antigravity_usage_updated'', ''buckets'') or {}).get(''gemini-5h'', {}).get(''resets_at'') }}'
+- name: Antigravity Gemini 5h Resets At
+  unique_id: antigravity_gemini_5h_resets_at
+  device_class: timestamp
+  icon: mdi:calendar-clock
+  availability: '{{ as_timestamp(states(''sensor.antigravity_usage_updated''), 0) > as_timestamp(now()) - 2700 and (state_attr(''sensor.antigravity_usage_updated'',
+    ''buckets'') or {}).get(''gemini-5h'', {}).get(''resets_at'') is not none }}'
+  state: '{{ (state_attr(''sensor.antigravity_usage_updated'', ''buckets'') or {}).get(''gemini-5h'', {}).get(''resets_at'') }}'
+- name: Antigravity Gemini Weekly Remaining
+  unique_id: antigravity_gemini_weekly_remaining
+  unit_of_measurement: '%'
+  state_class: measurement
+  icon: mdi:calendar-week
+  availability: '{{ as_timestamp(states(''sensor.antigravity_usage_updated''), 0) > as_timestamp(now()) - 2700 and (state_attr(''sensor.antigravity_usage_updated'',
+    ''buckets'') or {}).get(''gemini-weekly'', {}).get(''remaining'') is number }}'
+  state: '{{ (state_attr(''sensor.antigravity_usage_updated'', ''buckets'') or {}).get(''gemini-weekly'', {}).get(''remaining'') }}'
+  attributes:
+    resets_at: '{{ (state_attr(''sensor.antigravity_usage_updated'', ''buckets'') or {}).get(''gemini-weekly'', {}).get(''resets_at'') }}'
+- name: Antigravity Gemini Weekly Resets At
+  unique_id: antigravity_gemini_weekly_resets_at
+  device_class: timestamp
+  icon: mdi:calendar-clock
+  availability: '{{ as_timestamp(states(''sensor.antigravity_usage_updated''), 0) > as_timestamp(now()) - 2700 and (state_attr(''sensor.antigravity_usage_updated'',
+    ''buckets'') or {}).get(''gemini-weekly'', {}).get(''resets_at'') is not none }}'
+  state: '{{ (state_attr(''sensor.antigravity_usage_updated'', ''buckets'') or {}).get(''gemini-weekly'', {}).get(''resets_at'') }}'
+- name: Antigravity Claude GPT 5h Remaining
+  unique_id: antigravity_claude_gpt_5h_remaining
+  unit_of_measurement: '%'
+  state_class: measurement
+  icon: mdi:timer-sand
+  availability: '{{ as_timestamp(states(''sensor.antigravity_usage_updated''), 0) > as_timestamp(now()) - 2700 and (state_attr(''sensor.antigravity_usage_updated'',
+    ''buckets'') or {}).get(''3p-5h'', {}).get(''remaining'') is number }}'
+  state: '{{ (state_attr(''sensor.antigravity_usage_updated'', ''buckets'') or {}).get(''3p-5h'', {}).get(''remaining'') }}'
+  attributes:
+    resets_at: '{{ (state_attr(''sensor.antigravity_usage_updated'', ''buckets'') or {}).get(''3p-5h'', {}).get(''resets_at'') }}'
+- name: Antigravity Claude GPT 5h Resets At
+  unique_id: antigravity_claude_gpt_5h_resets_at
+  device_class: timestamp
+  icon: mdi:calendar-clock
+  availability: '{{ as_timestamp(states(''sensor.antigravity_usage_updated''), 0) > as_timestamp(now()) - 2700 and (state_attr(''sensor.antigravity_usage_updated'',
+    ''buckets'') or {}).get(''3p-5h'', {}).get(''resets_at'') is not none }}'
+  state: '{{ (state_attr(''sensor.antigravity_usage_updated'', ''buckets'') or {}).get(''3p-5h'', {}).get(''resets_at'') }}'
+- name: Antigravity Claude GPT Weekly Remaining
+  unique_id: antigravity_claude_gpt_weekly_remaining
+  unit_of_measurement: '%'
+  state_class: measurement
+  icon: mdi:calendar-week
+  availability: '{{ as_timestamp(states(''sensor.antigravity_usage_updated''), 0) > as_timestamp(now()) - 2700 and (state_attr(''sensor.antigravity_usage_updated'',
+    ''buckets'') or {}).get(''3p-weekly'', {}).get(''remaining'') is number }}'
+  state: '{{ (state_attr(''sensor.antigravity_usage_updated'', ''buckets'') or {}).get(''3p-weekly'', {}).get(''remaining'') }}'
+  attributes:
+    resets_at: '{{ (state_attr(''sensor.antigravity_usage_updated'', ''buckets'') or {}).get(''3p-weekly'', {}).get(''resets_at'') }}'
+- name: Antigravity Claude GPT Weekly Resets At
+  unique_id: antigravity_claude_gpt_weekly_resets_at
+  device_class: timestamp
+  icon: mdi:calendar-clock
+  availability: '{{ as_timestamp(states(''sensor.antigravity_usage_updated''), 0) > as_timestamp(now()) - 2700 and (state_attr(''sensor.antigravity_usage_updated'',
+    ''buckets'') or {}).get(''3p-weekly'', {}).get(''resets_at'') is not none }}'
+  state: '{{ (state_attr(''sensor.antigravity_usage_updated'', ''buckets'') or {}).get(''3p-weekly'', {}).get(''resets_at'') }}'
