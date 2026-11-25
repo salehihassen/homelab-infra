@@ -5,7 +5,7 @@
   "evaluation_interval": "15s",
   "tests": [
     {
-      "name": "healthy: all ten alerts quiet",
+      "name": "healthy: all fourteen alerts quiet",
       "interval": "15s",
       "input_series": [
         {
@@ -31,6 +31,14 @@
         {
           "series": "node_filesystem_size_bytes{stack=\"ai-observability\",mountpoint=\"/var/lib/alloy/data\"}",
           "values": "1000+0x40"
+        },
+        {
+          "series": "node_filesystem_size_bytes{stack=\"ai-observability\",host=\"server\",device=\"/dev/root-lv\",mountpoint=\"/telemetry-disks/root\"}",
+          "values": "499289948160+0x40"
+        },
+        {
+          "series": "node_filesystem_avail_bytes{stack=\"ai-observability\",host=\"server\",device=\"/dev/root-lv\",mountpoint=\"/telemetry-disks/root\"}",
+          "values": "214748364800+0x40"
         },
         {
           "series": "probe_success{stack=\"ai-observability\",dependency=\"langfuse-web\"}",
@@ -114,6 +122,26 @@
         {
           "eval_time": "6m",
           "alertname": "TelemetryDependencyMetricsMissing",
+          "exp_alerts": []
+        },
+        {
+          "eval_time": "6m",
+          "alertname": "HostRootDiskLow",
+          "exp_alerts": []
+        },
+        {
+          "eval_time": "6m",
+          "alertname": "HostRootDiskCritical",
+          "exp_alerts": []
+        },
+        {
+          "eval_time": "6m",
+          "alertname": "HostRootDiskFillingFast",
+          "exp_alerts": []
+        },
+        {
+          "eval_time": "6m",
+          "alertname": "HostRootDiskFillsWithin24h",
           "exp_alerts": []
         }
       ]
@@ -328,20 +356,28 @@
       ]
     },
     {
-      "name": "disk nearly full even through readonly monitoring bind",
+      "name": "disk nearly full: one alert per filesystem across bind mounts",
       "interval": "15s",
       "input_series": [
         {
-          "series": "node_filesystem_size_bytes{stack=\"ai-observability\",mountpoint=\"/telemetry-disks/loki\"}",
+          "series": "node_filesystem_size_bytes{stack=\"ai-observability\",host=\"server\",device=\"/dev/telemetry-lv\",mountpoint=\"/telemetry-disks/prometheus\"}",
           "values": "1000+0x40"
         },
         {
-          "series": "node_filesystem_avail_bytes{stack=\"ai-observability\",mountpoint=\"/telemetry-disks/loki\"}",
+          "series": "node_filesystem_avail_bytes{stack=\"ai-observability\",host=\"server\",device=\"/dev/telemetry-lv\",mountpoint=\"/telemetry-disks/prometheus\"}",
           "values": "100+0x40"
         },
         {
-          "series": "node_filesystem_readonly{stack=\"ai-observability\",mountpoint=\"/telemetry-disks/loki\"}",
+          "series": "node_filesystem_readonly{stack=\"ai-observability\",host=\"server\",device=\"/dev/telemetry-lv\",mountpoint=\"/telemetry-disks/prometheus\"}",
           "values": "1+0x40"
+        },
+        {
+          "series": "node_filesystem_size_bytes{stack=\"ai-observability\",host=\"server\",device=\"/dev/telemetry-lv\",mountpoint=\"/var/lib/alloy/data\"}",
+          "values": "1000+0x40"
+        },
+        {
+          "series": "node_filesystem_avail_bytes{stack=\"ai-observability\",host=\"server\",device=\"/dev/telemetry-lv\",mountpoint=\"/var/lib/alloy/data\"}",
+          "values": "100+0x40"
         }
       ],
       "alert_rule_test": [
@@ -354,7 +390,9 @@
                 "alertname": "TelemetryDiskLow",
                 "stack": "ai-observability",
                 "severity": "warning",
-                "mountpoint": "/telemetry-disks/loki"
+                "category": "disk",
+                "host": "server",
+                "device": "/dev/telemetry-lv"
               },
               "exp_annotations": {
                 "summary": "Telemetry filesystem has less than 15 percent available"
@@ -409,7 +447,306 @@
                 "severity": "critical"
               },
               "exp_annotations": {
-                "summary": "One or more of the six telemetry disk mounts is not monitored"
+                "summary": "One or more of the seven monitored disk mounts is not reporting"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "root disk below 75 GiB warns, not the percentage rule",
+      "interval": "30s",
+      "input_series": [
+        {
+          "series": "node_filesystem_size_bytes{stack=\"ai-observability\",host=\"server\",device=\"/dev/root-lv\",mountpoint=\"/telemetry-disks/root\"}",
+          "values": "499289948160+0x40"
+        },
+        {
+          "series": "node_filesystem_avail_bytes{stack=\"ai-observability\",host=\"server\",device=\"/dev/root-lv\",mountpoint=\"/telemetry-disks/root\"}",
+          "values": "64424509440+0x40"
+        }
+      ],
+      "alert_rule_test": [
+        {
+          "eval_time": "9m",
+          "alertname": "HostRootDiskLow",
+          "exp_alerts": []
+        },
+        {
+          "eval_time": "15m",
+          "alertname": "HostRootDiskLow",
+          "exp_alerts": [
+            {
+              "exp_labels": {
+                "alertname": "HostRootDiskLow",
+                "stack": "ai-observability",
+                "severity": "warning",
+                "category": "disk",
+                "host": "server",
+                "device": "/dev/root-lv"
+              },
+              "exp_annotations": {
+                "summary": "Host root filesystem has less than 75 GiB available"
+              }
+            }
+          ]
+        },
+        {
+          "eval_time": "15m",
+          "alertname": "HostRootDiskCritical",
+          "exp_alerts": []
+        },
+        {
+          "eval_time": "15m",
+          "alertname": "TelemetryDiskLow",
+          "exp_alerts": []
+        }
+      ]
+    },
+    {
+      "name": "root disk below 30 GiB is critical within minutes",
+      "interval": "30s",
+      "input_series": [
+        {
+          "series": "node_filesystem_avail_bytes{stack=\"ai-observability\",host=\"server\",device=\"/dev/root-lv\",mountpoint=\"/telemetry-disks/root\"}",
+          "values": "21474836480+0x20"
+        }
+      ],
+      "alert_rule_test": [
+        {
+          "eval_time": "4m",
+          "alertname": "HostRootDiskCritical",
+          "exp_alerts": [
+            {
+              "exp_labels": {
+                "alertname": "HostRootDiskCritical",
+                "stack": "ai-observability",
+                "severity": "critical",
+                "category": "disk",
+                "host": "server",
+                "device": "/dev/root-lv"
+              },
+              "exp_annotations": {
+                "summary": "Host root filesystem has less than 30 GiB available"
+              }
+            }
+          ]
+        },
+        {
+          "eval_time": "4m",
+          "alertname": "HostRootDiskLow",
+          "exp_alerts": []
+        }
+      ]
+    },
+    {
+      "name": "recreated collector keeps a single root alert",
+      "interval": "30s",
+      "input_series": [
+        {
+          "series": "node_filesystem_avail_bytes{stack=\"ai-observability\",host=\"server\",device=\"/dev/root-lv\",mountpoint=\"/telemetry-disks/root\",instance=\"old\"}",
+          "values": "21474836480+0x20"
+        },
+        {
+          "series": "node_filesystem_avail_bytes{stack=\"ai-observability\",host=\"server\",device=\"/dev/root-lv\",mountpoint=\"/telemetry-disks/root\",instance=\"new\"}",
+          "values": "21474836480+0x20"
+        }
+      ],
+      "alert_rule_test": [
+        {
+          "eval_time": "4m",
+          "alertname": "HostRootDiskCritical",
+          "exp_alerts": [
+            {
+              "exp_labels": {
+                "alertname": "HostRootDiskCritical",
+                "stack": "ai-observability",
+                "severity": "critical",
+                "category": "disk",
+                "host": "server",
+                "device": "/dev/root-lv"
+              },
+              "exp_annotations": {
+                "summary": "Host root filesystem has less than 30 GiB available"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "root recovery resolves the critical alert",
+      "interval": "30s",
+      "input_series": [
+        {
+          "series": "node_filesystem_avail_bytes{stack=\"ai-observability\",host=\"server\",device=\"/dev/root-lv\",mountpoint=\"/telemetry-disks/root\"}",
+          "values": "21474836480+0x10 214748364800+0x20"
+        }
+      ],
+      "alert_rule_test": [
+        {
+          "eval_time": "10m",
+          "alertname": "HostRootDiskCritical",
+          "exp_alerts": []
+        }
+      ]
+    },
+    {
+      "name": "root filling fast: last hour runs out within four hours",
+      "interval": "30s",
+      "input_series": [
+        {
+          "series": "node_filesystem_avail_bytes{stack=\"ai-observability\",host=\"server\",device=\"/dev/root-lv\",mountpoint=\"/telemetry-disks/root\"}",
+          "values": "429496729600-1073741824x160"
+        }
+      ],
+      "alert_rule_test": [
+        {
+          "eval_time": "70m",
+          "alertname": "HostRootDiskFillingFast",
+          "exp_alerts": [
+            {
+              "exp_labels": {
+                "alertname": "HostRootDiskFillingFast",
+                "stack": "ai-observability",
+                "severity": "critical",
+                "category": "disk",
+                "host": "server",
+                "device": "/dev/root-lv"
+              },
+              "exp_annotations": {
+                "summary": "Host root filesystem will be full within 4 hours at the last hour's rate"
+              }
+            }
+          ]
+        },
+        {
+          "eval_time": "70m",
+          "alertname": "HostRootDiskLow",
+          "exp_alerts": []
+        },
+        {
+          "eval_time": "70m",
+          "alertname": "HostRootDiskCritical",
+          "exp_alerts": []
+        },
+        {
+          "eval_time": "70m",
+          "alertname": "HostRootDiskFillsWithin24h",
+          "exp_alerts": []
+        }
+      ]
+    },
+    {
+      "name": "root filling fast stays quiet without enough history",
+      "interval": "30s",
+      "input_series": [
+        {
+          "series": "node_filesystem_avail_bytes{stack=\"ai-observability\",host=\"server\",device=\"/dev/root-lv\",mountpoint=\"/telemetry-disks/root\"}",
+          "values": "429496729600-1073741824x40"
+        }
+      ],
+      "alert_rule_test": [
+        {
+          "eval_time": "20m",
+          "alertname": "HostRootDiskFillingFast",
+          "exp_alerts": []
+        }
+      ]
+    },
+    {
+      "name": "root steady six-hour decline runs out within a day",
+      "interval": "30s",
+      "input_series": [
+        {
+          "series": "node_filesystem_avail_bytes{stack=\"ai-observability\",host=\"server\",device=\"/dev/root-lv\",mountpoint=\"/telemetry-disks/root\"}",
+          "values": "322122547200-134217728x740"
+        }
+      ],
+      "alert_rule_test": [
+        {
+          "eval_time": "4h",
+          "alertname": "HostRootDiskFillsWithin24h",
+          "exp_alerts": []
+        },
+        {
+          "eval_time": "6h",
+          "alertname": "HostRootDiskFillsWithin24h",
+          "exp_alerts": [
+            {
+              "exp_labels": {
+                "alertname": "HostRootDiskFillsWithin24h",
+                "stack": "ai-observability",
+                "severity": "warning",
+                "category": "disk",
+                "host": "server",
+                "device": "/dev/root-lv"
+              },
+              "exp_annotations": {
+                "summary": "Host root filesystem will be full within 24 hours at the last six hours' rate"
+              }
+            }
+          ]
+        },
+        {
+          "eval_time": "6h",
+          "alertname": "HostRootDiskFillingFast",
+          "exp_alerts": []
+        },
+        {
+          "eval_time": "6h",
+          "alertname": "HostRootDiskLow",
+          "exp_alerts": []
+        }
+      ]
+    },
+    {
+      "name": "root free-space metric missing while sizes report",
+      "interval": "15s",
+      "input_series": [
+        {
+          "series": "node_filesystem_size_bytes{stack=\"ai-observability\",mountpoint=\"/m0\"}",
+          "values": "1000+0x20"
+        },
+        {
+          "series": "node_filesystem_size_bytes{stack=\"ai-observability\",mountpoint=\"/m1\"}",
+          "values": "1000+0x20"
+        },
+        {
+          "series": "node_filesystem_size_bytes{stack=\"ai-observability\",mountpoint=\"/m2\"}",
+          "values": "1000+0x20"
+        },
+        {
+          "series": "node_filesystem_size_bytes{stack=\"ai-observability\",mountpoint=\"/m3\"}",
+          "values": "1000+0x20"
+        },
+        {
+          "series": "node_filesystem_size_bytes{stack=\"ai-observability\",mountpoint=\"/m4\"}",
+          "values": "1000+0x20"
+        },
+        {
+          "series": "node_filesystem_size_bytes{stack=\"ai-observability\",mountpoint=\"/m5\"}",
+          "values": "1000+0x20"
+        },
+        {
+          "series": "node_filesystem_size_bytes{stack=\"ai-observability\",mountpoint=\"/m6\"}",
+          "values": "1000+0x20"
+        }
+      ],
+      "alert_rule_test": [
+        {
+          "eval_time": "3m",
+          "alertname": "TelemetryDiskMetricsMissing",
+          "exp_alerts": [
+            {
+              "exp_labels": {
+                "alertname": "TelemetryDiskMetricsMissing",
+                "stack": "ai-observability",
+                "severity": "critical"
+              },
+              "exp_annotations": {
+                "summary": "One or more of the seven monitored disk mounts is not reporting"
               }
             }
           ]
@@ -502,6 +839,14 @@
           "values": "1000+0x160"
         },
         {
+          "series": "node_filesystem_size_bytes{stack=\"ai-observability\",host=\"server\",device=\"/dev/root-lv\",mountpoint=\"/telemetry-disks/root\"}",
+          "values": "499289948160+0x160"
+        },
+        {
+          "series": "node_filesystem_avail_bytes{stack=\"ai-observability\",host=\"server\",device=\"/dev/root-lv\",mountpoint=\"/telemetry-disks/root\"}",
+          "values": "214748364800+0x160"
+        },
+        {
           "series": "probe_success{stack=\"ai-observability\",dependency=\"langfuse-web\"}",
           "values": "1+0x160"
         },
@@ -574,6 +919,14 @@
         {
           "series": "node_filesystem_size_bytes{stack=\"ai-observability\",mountpoint=\"/var/lib/alloy/data\"}",
           "values": "1000+0x160"
+        },
+        {
+          "series": "node_filesystem_size_bytes{stack=\"ai-observability\",host=\"server\",device=\"/dev/root-lv\",mountpoint=\"/telemetry-disks/root\"}",
+          "values": "499289948160+0x160"
+        },
+        {
+          "series": "node_filesystem_avail_bytes{stack=\"ai-observability\",host=\"server\",device=\"/dev/root-lv\",mountpoint=\"/telemetry-disks/root\"}",
+          "values": "214748364800+0x160"
         },
         {
           "series": "probe_success{stack=\"ai-observability\",dependency=\"langfuse-web\"}",

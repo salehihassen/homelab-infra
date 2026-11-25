@@ -63,8 +63,26 @@ class AgentDashboardTests(unittest.TestCase):
         self.assertNotIn("ports", stack["services"]["prometheus"])
         mounts = stack["services"]["alloy"]["volumes"]
         disk_mounts = [mount for mount in mounts if ":/telemetry-disks/" in mount]
-        self.assertEqual(len(disk_mounts), 5)
+        self.assertEqual(len(disk_mounts), 6)
         self.assertTrue(all(mount.endswith(":ro") for mount in disk_mounts))
+        # The root filesystem is watched through a narrow stand-in, never "/".
+        self.assertIn("/usr:/telemetry-disks/root:ro", disk_mounts)
+
+    def test_alert_delivery_credentials_stay_out_of_git(self):
+        stack = yaml.safe_load((REPO / "hosts/server-1/observability/compose.yaml").read_text())
+        grafana = stack["services"]["grafana"]
+        self.assertIn("ping_me_config", grafana["secrets"])
+        self.assertEqual(grafana["entrypoint"][-1], "/etc/grafana/ping-me-entrypoint.sh")
+        self.assertNotIn("PING_ME_BOT_TOKEN", grafana["environment"])
+        delivery = yaml.safe_load((REPO / "hosts/server-1/observability/grafana/provisioning/"
+                                   "alerting/ping-me-discord.yaml").read_text())
+        (receiver,) = delivery["contactPoints"][0]["receivers"]
+        settings = receiver["settings"]
+        self.assertEqual(settings["authorization_credentials"], "${PING_ME_BOT_TOKEN}")
+        self.assertIn("${PING_ME_CHANNEL_ID}", settings["url"])
+        self.assertEqual(settings["payload"]["vars"]["mention"], "<@${PING_ME_USER_ID}>")
+        self.assertTrue(receiver["disableResolveMessage"])
+        self.assertEqual(delivery["policies"][0]["receiver"], delivery["contactPoints"][0]["name"])
 
     def test_grafana_reserves_memory_for_datasource_processes(self):
         # This is a capacity-policy guard, not an OOM simulation. The behavioral
