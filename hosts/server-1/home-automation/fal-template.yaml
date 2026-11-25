@@ -1,0 +1,43 @@
+# Merge these entries into template.sensor.
+sensor:
+- name: FAL Credit Remaining
+  unique_id: fal_credit_remaining
+  unit_of_measurement: USD
+  device_class: monetary
+  state_class: total
+  icon: mdi:wallet
+  availability: '{{ 0 <= as_timestamp(now()) - as_timestamp(states(''sensor.fal_usage_updated''), 0) < 2700 and
+    state_attr(''sensor.fal_usage_updated'', ''credit_remaining_usd'') is number }}'
+  state: '{{ state_attr(''sensor.fal_usage_updated'', ''credit_remaining_usd'') }}'
+  attributes:
+    currency: '{{ state_attr(''sensor.fal_usage_updated'', ''currency'') }}'
+    timezone: '{{ state_attr(''sensor.fal_usage_updated'', ''timezone'') }}'
+    usage_source: '{{ state_attr(''sensor.fal_usage_updated'', ''usage_source'') }}'
+- name: FAL Spend Today
+  unique_id: fal_spend_today
+  unit_of_measurement: USD
+  device_class: monetary
+  state_class: total
+  icon: mdi:cash-clock
+  availability: '{{ 0 <= as_timestamp(now()) - as_timestamp(states(''sensor.fal_usage_updated''), 0) < 2700 and
+    state_attr(''sensor.fal_usage_updated'', ''spend_today_usd'') is number }}'
+  state: '{{ state_attr(''sensor.fal_usage_updated'', ''spend_today_usd'') }}'
+  last_reset: '{{ state_attr(''sensor.fal_usage_updated'', ''day_start'') }}'
+  attributes:
+    currency: '{{ state_attr(''sensor.fal_usage_updated'', ''currency'') }}'
+    timezone: '{{ state_attr(''sensor.fal_usage_updated'', ''timezone'') }}'
+    usage_source: '{{ state_attr(''sensor.fal_usage_updated'', ''usage_source'') }}'
+- name: FAL Spend Month To Date
+  unique_id: fal_spend_month_to_date
+  unit_of_measurement: USD
+  device_class: monetary
+  state_class: total
+  icon: mdi:calendar-month
+  availability: '{{ 0 <= as_timestamp(now()) - as_timestamp(states(''sensor.fal_usage_updated''), 0) < 2700 and
+    state_attr(''sensor.fal_usage_updated'', ''spend_month_to_date_usd'') is number }}'
+  state: '{{ state_attr(''sensor.fal_usage_updated'', ''spend_month_to_date_usd'') }}'
+  last_reset: '{{ state_attr(''sensor.fal_usage_updated'', ''month_start'') }}'
+  attributes:
+    currency: '{{ state_attr(''sensor.fal_usage_updated'', ''currency'') }}'
+    timezone: '{{ state_attr(''sensor.fal_usage_updated'', ''timezone'') }}'
+    usage_source: '{{ state_attr(''sensor.fal_usage_updated'', ''usage_source'') }}'

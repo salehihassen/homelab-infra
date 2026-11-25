@@ -1,0 +1,46 @@
+# Merge into the existing command_line include; HA owns the 15-minute poll.
+- sensor:
+    name: FAL Usage Updated
+    unique_id: fal_usage_updated
+    device_class: timestamp
+    icon: mdi:update
+    command: |
+      python3 - <<'PYCODE'
+      import json, math, subprocess, sys
+      try:
+          result = subprocess.run([
+              'ssh', '-T', '-i', '/config/.ssh/fal_usage',
+              '-o', 'UserKnownHostsFile=/config/.ssh/fal_known_hosts',
+              '-o', 'StrictHostKeyChecking=yes', '-o', 'BatchMode=yes',
+              '-o', 'IdentitiesOnly=yes', '-o', 'ClearAllForwardings=yes',
+              '-o', 'ConnectTimeout=5', 'replace-with-host-user@127.0.0.1',
+              'fal-usage'
+          ], stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=120)
+          if result.returncode or len(result.stdout) > 1048576:
+              raise ValueError('Poll failed')
+          data = json.loads(result.stdout)
+          for name in ('credit_remaining_usd', 'spend_today_usd', 'spend_month_to_date_usd'):
+              value = data[name]
+              if type(value) not in (int, float) or not math.isfinite(value) or value < 0:
+                  raise ValueError('Invalid amount')
+          if type(data['sampled_at']) is not int or data['sampled_at'] <= 0 or data['currency'] != 'USD':
+              raise ValueError('Invalid sample')
+          fields = ('sampled_at', 'credit_remaining_usd', 'spend_today_usd',
+                    'spend_month_to_date_usd', 'currency', 'timezone',
+                    'usage_source', 'day_start', 'month_start')
+          print(json.dumps({name: data[name] for name in fields}, allow_nan=False))
+      except Exception:
+          sys.exit('fal usage poll failed; check the restricted SSH connection and billing access.')
+      PYCODE
+    command_timeout: 130
+    scan_interval: 900
+    value_template: "{{ value_json.sampled_at | timestamp_custom('%Y-%m-%dT%H:%M:%S+00:00', false) }}"
+    json_attributes:
+    - credit_remaining_usd
+    - spend_today_usd
+    - spend_month_to_date_usd
+    - currency
+    - timezone
+    - usage_source
+    - day_start
+    - month_start
