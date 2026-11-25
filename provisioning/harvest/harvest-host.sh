@@ -41,12 +41,12 @@ section="user"
 dest="${out}/${section}"
 mkdir -p "${dest}"
 
-# Redact values of assignments whose key looks like a credential, and
-# credentials embedded in URLs.
+# Redact values of assignments whose key looks like a credential, including
+# quoted JSON/YAML keys ("password": ...), and credentials embedded in URLs.
 redact() {
   sed -E \
     -e 's#(://)[^/@[:space:]]+@#\1REDACTED@#g' \
-    -e 's@^([^#]*(pass(word)?|passwd|secret|token|api[_-]?key|auth[_-]?key|psk|credential)[A-Za-z0-9_.-]*[[:space:]]*[=:][[:space:]]*).*@\1REDACTED@I'
+    -e 's@^([^#]*(pass(word)?|passwd|secret|token|api[_-]?key|auth([_-]?key)?|psk|credential)[A-Za-z0-9_.-]*["'"'"']?[[:space:]]*[=:][[:space:]]*).*@\1REDACTED@I'
 }
 
 # run NAME COMMAND...: save stdout to NAME, errors to NAME.err; never abort.
