@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh CPAMP usage snapshots for Home Assistant
+
+[Timer]
+OnBootSec=3min
+OnUnitInactiveSec=10min
+Persistent=true
+Unit=cpamp-usage-export.service
+
+[Install]
+WantedBy=timers.target

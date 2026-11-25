@@ -29,6 +29,13 @@ five-minute local API exporter, compact `sensor.condenseit_top_news` entity,
 and a built-in Markdown card to paste into a UI-managed dashboard. Credentials
 stay in host files; dashboard YAML and storage records stay untouched.
 
+## CPAMP daily usage snapshots
+
+[CPAMP usage snapshots](cpamp-usage/README.md) freeze one write-once file per
+local day with token, cache and API-equivalent cost figures from CPA Manager
+Plus. They feed Home Assistant cumulative counters for daily, weekly and
+monthly statistics graphs.
+
 ## Antigravity quotas
 
 [Antigravity quotas](antigravity/README.md) use one Home Assistant command-line

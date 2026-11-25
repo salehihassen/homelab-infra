@@ -1,0 +1,19 @@
+# Merge this list item into the existing command_line include.
+- sensor:
+    name: CPAMP Usage Updated
+    unique_id: cpamp_usage_updated
+    device_class: timestamp
+    icon: mdi:update
+    command: "cat /config/cpamp_usage.json"
+    scan_interval: 300
+    value_template: "{{ value_json.sampled_at | timestamp_custom('%Y-%m-%dT%H:%M:%S%z', false) }}"
+    json_attributes:
+      - today
+      - first_day
+      - last_frozen_day
+      - frozen_days
+      - price_book_sha16
+      - totals
+      - families
+      - rolling_7d
+      - yesterday
