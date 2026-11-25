@@ -46,7 +46,7 @@ mkdir -p "${dest}"
 redact() {
   sed -E \
     -e 's#(://)[^/@[:space:]]+@#\1REDACTED@#g' \
-    -e 's#^([^#]*(pass(word)?|passwd|secret|token|api[_-]?key|auth[_-]?key|psk|credential)[A-Za-z0-9_.-]*[[:space:]]*[=:][[:space:]]*).*#\1REDACTED#I'
+    -e 's@^([^#]*(pass(word)?|passwd|secret|token|api[_-]?key|auth[_-]?key|psk|credential)[A-Za-z0-9_.-]*[[:space:]]*[=:][[:space:]]*).*@\1REDACTED@I'
 }
 
 # run NAME COMMAND...: save stdout to NAME, errors to NAME.err; never abort.
