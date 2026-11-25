@@ -64,14 +64,17 @@ FAMILIES = [
 ]
 
 COUNTERS = ("requests", "failed_requests", "input_tokens", "uncached_input_tokens", "cache_read_tokens",
-            "cache_write_tokens", "output_tokens", "reasoning_tokens", "unpriced_requests", "unpriced_tokens")
+            "cache_write_tokens", "cache_write_5m_tokens", "cache_write_1h_tokens",
+            "cache_write_ttl_unknown_tokens", "output_tokens", "reasoning_tokens", "unpriced_requests", "unpriced_tokens")
 MONEY = ("api_equivalent_usd", "cache_savings_usd")
 
 EVENT_SQL = """
 select timestamp_ms, requested_model, resolved_model, failed, auth_provider_snapshot, api_key_hash,
        session_id, input_tokens, cached_tokens, cache_tokens, cache_read_tokens, cache_creation_tokens,
        normalized_total_input_tokens, normalized_cache_read_tokens, normalized_cache_creation_tokens,
-       output_tokens, reasoning_tokens, latency_ms, ttft_ms
+       output_tokens, reasoning_tokens, latency_ms, ttft_ms,
+       json_extract(raw_json, '$.tokens.cache_creation_1h_tokens') as cache_write_1h_tokens,
+       json_extract(raw_json, '$.tokens.cache_creation_5m_tokens') as cache_write_5m_tokens
 from usage_events where timestamp_ms >= ? and timestamp_ms < ?
 """
 
@@ -147,6 +150,9 @@ def summarize_day(db, day, tz, prices, tiers, book_hash, aliases, now):
             b["uncached_input_tokens"] += parts["fresh"]
             b["cache_read_tokens"] += parts["cache_read"] + parts["cache_compat"]
             b["cache_write_tokens"] += parts["cache_write"]
+            b["cache_write_5m_tokens"] += parts["cache_write_5m"]
+            b["cache_write_1h_tokens"] += parts["cache_write_1h"]
+            b["cache_write_ttl_unknown_tokens"] += parts["cache_write_ttl_unknown"]
             b["output_tokens"] += parts["output"]
             b["reasoning_tokens"] += row.get("reasoning_tokens") or 0
             if parts["cost"] is None:
@@ -379,6 +385,10 @@ def ha_yaml(kind):
                "%", "measurement")
     sensor("cpamp_total_cache_write_tokens", "AI Cache Write Tokens", "mdi:database-plus",
            ("totals", "cache_write_tokens"), "M tokens", "total", scale=1000000)
+    sensor("cpamp_total_cache_write_5m_tokens", "AI Cache Write 5m Tokens", "mdi:timer-sand",
+           ("totals", "cache_write_5m_tokens"), "M tokens", "total", scale=1000000)
+    sensor("cpamp_total_cache_write_1h_tokens", "AI Cache Write 1h Tokens", "mdi:timer-outline",
+           ("totals", "cache_write_1h_tokens"), "M tokens", "total", scale=1000000)
     sensor("cpamp_total_reasoning_tokens", "AI Reasoning Tokens", "mdi:brain", ("totals", "reasoning_tokens"),
            "M tokens", "total", scale=1000000)
     sensor("cpamp_total_cache_savings", "AI Cache Savings", "mdi:piggy-bank", ("totals", "cache_savings_usd"),

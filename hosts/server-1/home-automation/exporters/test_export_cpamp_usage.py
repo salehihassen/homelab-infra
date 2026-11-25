@@ -40,18 +40,22 @@ class Fixture:
             cached_tokens int, cache_tokens int, cache_read_tokens int, cache_creation_tokens int,
             normalized_total_input_tokens int, normalized_cache_read_tokens int,
             normalized_cache_creation_tokens int, output_tokens int, reasoning_tokens int,
-            latency_ms int, ttft_ms int)""")
+            latency_ms int, ttft_ms int, raw_json text)""")
         db.execute("insert into model_prices (model, prompt_per_1m, completion_per_1m, cache_read_per_1m, "
-                   "cache_read_configured) values ('claude-opus-x', 2.0, 10.0, 0.2, 1)")
+                   "cache_creation_per_1m, cache_read_configured, cache_creation_configured) "
+                   "values ('claude-opus-x', 2.0, 10.0, 0.2, 2.5, 1, 1)")
         db.execute("insert into api_key_aliases values ('aaaaaaaa1111', 'laptop agent', 0)")
         db.commit()
         db.close()
 
-    def event(self, when, model="claude-opus-x", inp=1_000_000, cache_read=0, out=100_000, failed=0, key="aaaaaaaa1111"):
+    def event(self, when, model="claude-opus-x", inp=1_000_000, cache_read=0, out=100_000, failed=0, key="aaaaaaaa1111",
+              cache_write=0, ttl=None):
+        tokens = {} if ttl is None else {"cache_creation_1h_tokens": ttl[1], "cache_creation_5m_tokens": ttl[0]}
         db = sqlite3.connect(self.db_path)
-        db.execute("insert into usage_events values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        db.execute("insert into usage_events values (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                    (int(when.timestamp() * 1000), model, model, failed, "claude", key, "s1", inp, cache_read, 0,
-                    cache_read, 0, inp, cache_read, 0, out, 0, 1000, 100))
+                    cache_read, cache_write, inp, cache_read, cache_write, out, 0, 1000, 100,
+                    json.dumps({"tokens": tokens})))
         db.commit()
         db.close()
 
@@ -92,6 +96,19 @@ class ExportCpampUsageTests(unittest.TestCase):
         self.assertEqual(t["cache_hit_rate"], 0.6)
         client = self.f.day("2026-11-23")["by_client"]["key:aaaaaaaa"]
         self.assertEqual(client["alias"], "laptop agent")
+
+    def test_cache_writes_priced_by_ttl(self):
+        # 1M input = 400k cache writes + 600k fresh; 100k output.
+        # unknown TTL: 400k*2.5 + 600k*2 + 100k*10 = 1.0 + 1.2 + 1.0 = $3.20
+        self.f.event(at(23, 10), cache_write=400_000)
+        # 100k 5m at $2.5 + 300k 1h at 2x$2 = 0.25 + 1.2; + 1.2 fresh + 1.0 output = $3.65
+        self.f.event(at(23, 11), cache_write=400_000, ttl=(100_000, 300_000))
+        self.f.event(at(24, 10))
+        self.f.run(at(24, 12))
+        t = self.f.day("2026-11-23")["totals"]
+        self.assertAlmostEqual(t["api_equivalent_usd"], 3.20 + 3.65)
+        self.assertEqual((t["cache_write_5m_tokens"], t["cache_write_1h_tokens"], t["cache_write_ttl_unknown_tokens"]),
+                         (100_000, 300_000, 400_000))
 
     def test_frozen_days_keep_their_price_after_a_price_change(self):
         self.f.event(at(23, 10))

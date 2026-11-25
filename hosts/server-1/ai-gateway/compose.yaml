@@ -12,7 +12,7 @@ x-stack:
 
 services:
   cli-proxy-api:
-    image: eceasy/cli-proxy-api:v8.0.22@sha256:fb287227792ae14eff38063479568049c90cb692b1f299e39c6f54650584428f
+    image: eceasy/cli-proxy-api:v8.1.4@sha256:32fb7dfc272bf63daee4dcaaa679095aad431ceed31416f98ea55f3d1d7db77a
     container_name: cli-proxy-api
     restart: unless-stopped
     user: "1000:1000"

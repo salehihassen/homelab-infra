@@ -26,6 +26,9 @@ import sqlite3
 import sys
 
 PER_M = 1_000_000.0
+# Anthropic bills 1-hour cache writes at 2x the base input price (5-minute writes: the
+# configured cache-write price, 1.25x). CPA >= v8.1.0 reports the split per request.
+CACHE_WRITE_1H_MULTIPLIER = 2.0
 
 
 def open_db(path):
@@ -70,8 +73,11 @@ def token_parts(row):
     cr = v(row, "normalized_cache_read_tokens") or v(row, "cache_read_tokens")
     cc = v(row, "normalized_cache_creation_tokens") or v(row, "cache_creation_tokens")
     compat = max(max(v(row, "cached_tokens"), v(row, "cache_tokens")) - cr - cc, 0)
+    w1h = min(v(row, "cache_write_1h_tokens"), cc)
+    w5m = min(v(row, "cache_write_5m_tokens"), cc - w1h)
     return {
         "input": total_in, "cache_read": cr, "cache_write": cc, "cache_compat": compat,
+        "cache_write_1h": w1h, "cache_write_5m": w5m, "cache_write_ttl_unknown": cc - w1h - w5m,
         "fresh": max(total_in - cr - cc - compat, 0), "output": v(row, "output_tokens"),
     }
 
@@ -95,7 +101,9 @@ def event_parts(row, prices, tiers):
         price.get("cache_per_1m") or prompt * 0.1)
     cc_rate = price["cache_creation_per_1m"] if price.get("cache_creation_configured") else prompt
     parts["cost"] = (parts["fresh"] * prompt + parts["cache_compat"] * compat_rate
-                     + parts["cache_read"] * cr_rate + parts["cache_write"] * cc_rate
+                     + parts["cache_read"] * cr_rate
+                     + (parts["cache_write"] - parts["cache_write_1h"]) * cc_rate
+                     + parts["cache_write_1h"] * prompt * CACHE_WRITE_1H_MULTIPLIER
                      + parts["output"] * price["completion_per_1m"]) / PER_M
     parts["cache_savings"] = (parts["cache_read"] * (prompt - cr_rate)
                               + parts["cache_compat"] * (prompt - compat_rate)) / PER_M

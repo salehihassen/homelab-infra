@@ -367,6 +367,20 @@ sensor:
   state_class: total
   availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and ((state_attr('sensor.cpamp_usage_updated', 'totals') or {}).get('cache_write_tokens')) is number }}"
   state: "{{ (((state_attr('sensor.cpamp_usage_updated', 'totals') or {}).get('cache_write_tokens')) / 1000000) | round(3) }}"
+- name: AI Cache Write 5m Tokens
+  unique_id: cpamp_total_cache_write_5m_tokens
+  icon: mdi:timer-sand
+  unit_of_measurement: 'M tokens'
+  state_class: total
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and ((state_attr('sensor.cpamp_usage_updated', 'totals') or {}).get('cache_write_5m_tokens')) is number }}"
+  state: "{{ (((state_attr('sensor.cpamp_usage_updated', 'totals') or {}).get('cache_write_5m_tokens')) / 1000000) | round(3) }}"
+- name: AI Cache Write 1h Tokens
+  unique_id: cpamp_total_cache_write_1h_tokens
+  icon: mdi:timer-outline
+  unit_of_measurement: 'M tokens'
+  state_class: total
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and ((state_attr('sensor.cpamp_usage_updated', 'totals') or {}).get('cache_write_1h_tokens')) is number }}"
+  state: "{{ (((state_attr('sensor.cpamp_usage_updated', 'totals') or {}).get('cache_write_1h_tokens')) / 1000000) | round(3) }}"
 - name: AI Reasoning Tokens
   unique_id: cpamp_total_reasoning_tokens
   icon: mdi:brain

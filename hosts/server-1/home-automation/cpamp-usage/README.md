@@ -21,14 +21,16 @@ The gap between API-equivalent cost and cash spend is the subscription subsidy.
   book and its segment rules (fresh input, cache read, cache write, output, and
   context tiers), shared with `scripts/effective-cost.py`. Failed requests are
   counted but not priced. Cached prompt tokens are priced as cache reads
-  and cache writes at their own rates, never at the full input price. CPA does
-  not record Anthropic's cache-write duration, so every write uses the
-  configured cache-write price. That is usually the 5-minute rate; 1-hour
-  writes cost more.
+  and cache writes at their own rates, never at the full input price.
+- **Cache-write TTL:** CPA v8.1.0 and later reports Anthropic's 5-minute and
+  1-hour cache writes separately. 1-hour writes are priced at 2× the base input
+  price and 5-minute writes at CPAMP's cache-write price (1.25×). Writes with no
+  TTL split, such as those from older CPA versions or other providers, use the
+  cache-write price and are counted as `cache_write_ttl_unknown_tokens`.
 - **Day files:** `<archive>/days/YYYY/YYYY-MM-DD.json`. Each holds totals and
   per-model, per-provider and per-client-key figures:
   - requests, failures and sessions
-  - input, cache-read, cache-write, output and reasoning tokens
+  - input, cache-read, cache-write (by TTL), output and reasoning tokens
   - cache hit rate
   - API-equivalent cost and cache savings
   - median latency and time to first token
@@ -82,8 +84,8 @@ covered.
   - API-equivalent cost
   - input, cache-read and output tokens (in millions)
 
-  The all-models group also counts cache-write and reasoning tokens, cache
-  savings, requests and failed requests. Open days are repriced live, so a
+  The all-models group also counts cache-write tokens (total, 5-minute and
+  1-hour), reasoning tokens, cache savings, requests and failed requests. Open days are repriced live, so a
   counter can occasionally dip. `total` handles that; `total_increasing`
   would not.
 - **Trailing 7-day rates** (`measurement`):
