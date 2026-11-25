@@ -26,6 +26,9 @@ import sqlite3
 import sys
 
 PER_M = 1_000_000.0
+# Anthropic bills 1-hour cache writes at 2x the base input price (5-minute writes: the
+# configured cache-write price, 1.25x). CPA >= v8.1.0 reports the split per request.
+CACHE_WRITE_1H_MULTIPLIER = 2.0
 
 
 def open_db(path):
@@ -64,29 +67,53 @@ def v(row, key):
     return row.get(key) or 0
 
 
-def event_cost(row, prices, tiers):
-    """Dollar cost of one event under CPAMP segment rules; None if unpriced."""
+def token_parts(row):
+    """Split one event's tokens into the segments CPAMP prices separately."""
+    total_in = v(row, "normalized_total_input_tokens") or v(row, "input_tokens")
+    cr = v(row, "normalized_cache_read_tokens") or v(row, "cache_read_tokens")
+    cc = v(row, "normalized_cache_creation_tokens") or v(row, "cache_creation_tokens")
+    compat = max(max(v(row, "cached_tokens"), v(row, "cache_tokens")) - cr - cc, 0)
+    w1h = min(v(row, "cache_write_1h_tokens"), cc)
+    w5m = min(v(row, "cache_write_5m_tokens"), cc - w1h)
+    return {
+        "input": total_in, "cache_read": cr, "cache_write": cc, "cache_compat": compat,
+        "cache_write_1h": w1h, "cache_write_5m": w5m, "cache_write_ttl_unknown": cc - w1h - w5m,
+        "fresh": max(total_in - cr - cc - compat, 0), "output": v(row, "output_tokens"),
+    }
+
+
+def event_parts(row, prices, tiers):
+    """Token segments plus API list-price cost and cache savings; cost None if unpriced."""
     model = row["resolved_model"] or row["requested_model"]
+    parts = token_parts(row)
+    parts.update(model=model, cost=None, cache_savings=None)
     priced_model = model
     price = prices.get(priced_model)
     if price is None:
         priced_model = row["requested_model"]
         price = prices.get(priced_model)
     if price is None or not price.get("prompt_configured"):
-        return None, model
-    total_in = v(row, "normalized_total_input_tokens") or v(row, "input_tokens")
-    cr = v(row, "normalized_cache_read_tokens") or v(row, "cache_read_tokens")
-    cc = v(row, "normalized_cache_creation_tokens") or v(row, "cache_creation_tokens")
-    compat = max(max(v(row, "cached_tokens"), v(row, "cache_tokens")) - cr - cc, 0)
-    out = v(row, "output_tokens")
-    price = tier_price(price, tiers.get(priced_model, []), total_in)
+        return parts
+    price = tier_price(price, tiers.get(priced_model, []), parts["input"])
+    prompt = price["prompt_per_1m"]
+    compat_rate = price.get("cache_per_1m") or 0
     cr_rate = price["cache_read_per_1m"] if price.get("cache_read_configured") else (
-        price.get("cache_per_1m") or price["prompt_per_1m"] * 0.1)
-    cc_rate = price["cache_creation_per_1m"] if price.get("cache_creation_configured") else price["prompt_per_1m"]
-    fresh = max(total_in - cr - cc - compat, 0)
-    cost = (fresh * price["prompt_per_1m"] + compat * (price.get("cache_per_1m") or 0)
-            + cr * cr_rate + cc * cc_rate + out * price["completion_per_1m"]) / PER_M
-    return cost, model
+        price.get("cache_per_1m") or prompt * 0.1)
+    cc_rate = price["cache_creation_per_1m"] if price.get("cache_creation_configured") else prompt
+    parts["cost"] = (parts["fresh"] * prompt + parts["cache_compat"] * compat_rate
+                     + parts["cache_read"] * cr_rate
+                     + (parts["cache_write"] - parts["cache_write_1h"]) * cc_rate
+                     + parts["cache_write_1h"] * prompt * CACHE_WRITE_1H_MULTIPLIER
+                     + parts["output"] * price["completion_per_1m"]) / PER_M
+    parts["cache_savings"] = (parts["cache_read"] * (prompt - cr_rate)
+                              + parts["cache_compat"] * (prompt - compat_rate)) / PER_M
+    return parts
+
+
+def event_cost(row, prices, tiers):
+    """Dollar cost of one event under CPAMP segment rules; None if unpriced."""
+    parts = event_parts(row, prices, tiers)
+    return parts["cost"], parts["model"]
 
 
 EVENT_SQL = """

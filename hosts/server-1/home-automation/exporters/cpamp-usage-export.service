@@ -1,0 +1,9 @@
+[Unit]
+Description=Freeze daily CPAMP usage snapshots and export them for Home Assistant
+
+[Service]
+Type=oneshot
+EnvironmentFile=/opt/homeassistant/secrets/cpamp-usage-export.env
+ExecStart=/usr/bin/python3 ${CPAMP_USAGE_EXPORTER}
+UMask=0077
+TimeoutStartSec=300

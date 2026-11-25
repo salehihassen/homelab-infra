@@ -1,0 +1,426 @@
+# Merge these items into template.sensor, alongside any existing sensor entries.
+sensor:
+- name: AI API-Equivalent Cost
+  unique_id: cpamp_total_api_cost
+  icon: mdi:cash
+  unit_of_measurement: 'USD'
+  state_class: total
+  device_class: monetary
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and ((state_attr('sensor.cpamp_usage_updated', 'totals') or {}).get('api_equivalent_usd')) is number }}"
+  state: "{{ (state_attr('sensor.cpamp_usage_updated', 'totals') or {}).get('api_equivalent_usd') }}"
+- name: AI Input Tokens
+  unique_id: cpamp_total_input_tokens
+  icon: mdi:import
+  unit_of_measurement: 'M tokens'
+  state_class: total
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and ((state_attr('sensor.cpamp_usage_updated', 'totals') or {}).get('input_tokens')) is number }}"
+  state: "{{ (((state_attr('sensor.cpamp_usage_updated', 'totals') or {}).get('input_tokens')) / 1000000) | round(3) }}"
+- name: AI Cache Read Tokens
+  unique_id: cpamp_total_cache_read_tokens
+  icon: mdi:cached
+  unit_of_measurement: 'M tokens'
+  state_class: total
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and ((state_attr('sensor.cpamp_usage_updated', 'totals') or {}).get('cache_read_tokens')) is number }}"
+  state: "{{ (((state_attr('sensor.cpamp_usage_updated', 'totals') or {}).get('cache_read_tokens')) / 1000000) | round(3) }}"
+- name: AI Output Tokens
+  unique_id: cpamp_total_output_tokens
+  icon: mdi:export
+  unit_of_measurement: 'M tokens'
+  state_class: total
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and ((state_attr('sensor.cpamp_usage_updated', 'totals') or {}).get('output_tokens')) is number }}"
+  state: "{{ (((state_attr('sensor.cpamp_usage_updated', 'totals') or {}).get('output_tokens')) / 1000000) | round(3) }}"
+- name: AI Cache Hit Rate 7d
+  unique_id: cpamp_total_cache_hit_7d
+  icon: mdi:percent
+  unit_of_measurement: '%'
+  state_class: measurement
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and (((state_attr('sensor.cpamp_usage_updated', 'rolling_7d') or {}).get('totals') or {}).get('cache_hit_pct')) is number }}"
+  state: "{{ ((state_attr('sensor.cpamp_usage_updated', 'rolling_7d') or {}).get('totals') or {}).get('cache_hit_pct') }}"
+- name: AI Claude Opus API-Equivalent Cost
+  unique_id: cpamp_claude_opus_api_cost
+  icon: mdi:cash
+  unit_of_measurement: 'USD'
+  state_class: total
+  device_class: monetary
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and (((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('claude_opus') or {}).get('api_equivalent_usd')) is number }}"
+  state: "{{ ((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('claude_opus') or {}).get('api_equivalent_usd') }}"
+- name: AI Claude Opus Input Tokens
+  unique_id: cpamp_claude_opus_input_tokens
+  icon: mdi:import
+  unit_of_measurement: 'M tokens'
+  state_class: total
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and (((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('claude_opus') or {}).get('input_tokens')) is number }}"
+  state: "{{ ((((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('claude_opus') or {}).get('input_tokens')) / 1000000) | round(3) }}"
+- name: AI Claude Opus Cache Read Tokens
+  unique_id: cpamp_claude_opus_cache_read_tokens
+  icon: mdi:cached
+  unit_of_measurement: 'M tokens'
+  state_class: total
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and (((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('claude_opus') or {}).get('cache_read_tokens')) is number }}"
+  state: "{{ ((((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('claude_opus') or {}).get('cache_read_tokens')) / 1000000) | round(3) }}"
+- name: AI Claude Opus Output Tokens
+  unique_id: cpamp_claude_opus_output_tokens
+  icon: mdi:export
+  unit_of_measurement: 'M tokens'
+  state_class: total
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and (((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('claude_opus') or {}).get('output_tokens')) is number }}"
+  state: "{{ ((((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('claude_opus') or {}).get('output_tokens')) / 1000000) | round(3) }}"
+- name: AI Claude Opus Cache Hit Rate 7d
+  unique_id: cpamp_claude_opus_cache_hit_7d
+  icon: mdi:percent
+  unit_of_measurement: '%'
+  state_class: measurement
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and (((state_attr('sensor.cpamp_usage_updated', 'rolling_7d') or {}).get('claude_opus') or {}).get('cache_hit_pct')) is number }}"
+  state: "{{ ((state_attr('sensor.cpamp_usage_updated', 'rolling_7d') or {}).get('claude_opus') or {}).get('cache_hit_pct') }}"
+- name: AI Claude Sonnet/Haiku API-Equivalent Cost
+  unique_id: cpamp_claude_other_api_cost
+  icon: mdi:cash
+  unit_of_measurement: 'USD'
+  state_class: total
+  device_class: monetary
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and (((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('claude_other') or {}).get('api_equivalent_usd')) is number }}"
+  state: "{{ ((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('claude_other') or {}).get('api_equivalent_usd') }}"
+- name: AI Claude Sonnet/Haiku Input Tokens
+  unique_id: cpamp_claude_other_input_tokens
+  icon: mdi:import
+  unit_of_measurement: 'M tokens'
+  state_class: total
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and (((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('claude_other') or {}).get('input_tokens')) is number }}"
+  state: "{{ ((((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('claude_other') or {}).get('input_tokens')) / 1000000) | round(3) }}"
+- name: AI Claude Sonnet/Haiku Cache Read Tokens
+  unique_id: cpamp_claude_other_cache_read_tokens
+  icon: mdi:cached
+  unit_of_measurement: 'M tokens'
+  state_class: total
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and (((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('claude_other') or {}).get('cache_read_tokens')) is number }}"
+  state: "{{ ((((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('claude_other') or {}).get('cache_read_tokens')) / 1000000) | round(3) }}"
+- name: AI Claude Sonnet/Haiku Output Tokens
+  unique_id: cpamp_claude_other_output_tokens
+  icon: mdi:export
+  unit_of_measurement: 'M tokens'
+  state_class: total
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and (((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('claude_other') or {}).get('output_tokens')) is number }}"
+  state: "{{ ((((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('claude_other') or {}).get('output_tokens')) / 1000000) | round(3) }}"
+- name: AI Claude Sonnet/Haiku Cache Hit Rate 7d
+  unique_id: cpamp_claude_other_cache_hit_7d
+  icon: mdi:percent
+  unit_of_measurement: '%'
+  state_class: measurement
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and (((state_attr('sensor.cpamp_usage_updated', 'rolling_7d') or {}).get('claude_other') or {}).get('cache_hit_pct')) is number }}"
+  state: "{{ ((state_attr('sensor.cpamp_usage_updated', 'rolling_7d') or {}).get('claude_other') or {}).get('cache_hit_pct') }}"
+- name: AI GPT API-Equivalent Cost
+  unique_id: cpamp_gpt_api_cost
+  icon: mdi:cash
+  unit_of_measurement: 'USD'
+  state_class: total
+  device_class: monetary
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and (((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('gpt') or {}).get('api_equivalent_usd')) is number }}"
+  state: "{{ ((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('gpt') or {}).get('api_equivalent_usd') }}"
+- name: AI GPT Input Tokens
+  unique_id: cpamp_gpt_input_tokens
+  icon: mdi:import
+  unit_of_measurement: 'M tokens'
+  state_class: total
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and (((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('gpt') or {}).get('input_tokens')) is number }}"
+  state: "{{ ((((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('gpt') or {}).get('input_tokens')) / 1000000) | round(3) }}"
+- name: AI GPT Cache Read Tokens
+  unique_id: cpamp_gpt_cache_read_tokens
+  icon: mdi:cached
+  unit_of_measurement: 'M tokens'
+  state_class: total
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and (((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('gpt') or {}).get('cache_read_tokens')) is number }}"
+  state: "{{ ((((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('gpt') or {}).get('cache_read_tokens')) / 1000000) | round(3) }}"
+- name: AI GPT Output Tokens
+  unique_id: cpamp_gpt_output_tokens
+  icon: mdi:export
+  unit_of_measurement: 'M tokens'
+  state_class: total
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and (((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('gpt') or {}).get('output_tokens')) is number }}"
+  state: "{{ ((((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('gpt') or {}).get('output_tokens')) / 1000000) | round(3) }}"
+- name: AI GPT Cache Hit Rate 7d
+  unique_id: cpamp_gpt_cache_hit_7d
+  icon: mdi:percent
+  unit_of_measurement: '%'
+  state_class: measurement
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and (((state_attr('sensor.cpamp_usage_updated', 'rolling_7d') or {}).get('gpt') or {}).get('cache_hit_pct')) is number }}"
+  state: "{{ ((state_attr('sensor.cpamp_usage_updated', 'rolling_7d') or {}).get('gpt') or {}).get('cache_hit_pct') }}"
+- name: AI Kimi API-Equivalent Cost
+  unique_id: cpamp_kimi_api_cost
+  icon: mdi:cash
+  unit_of_measurement: 'USD'
+  state_class: total
+  device_class: monetary
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and (((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('kimi') or {}).get('api_equivalent_usd')) is number }}"
+  state: "{{ ((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('kimi') or {}).get('api_equivalent_usd') }}"
+- name: AI Kimi Input Tokens
+  unique_id: cpamp_kimi_input_tokens
+  icon: mdi:import
+  unit_of_measurement: 'M tokens'
+  state_class: total
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and (((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('kimi') or {}).get('input_tokens')) is number }}"
+  state: "{{ ((((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('kimi') or {}).get('input_tokens')) / 1000000) | round(3) }}"
+- name: AI Kimi Cache Read Tokens
+  unique_id: cpamp_kimi_cache_read_tokens
+  icon: mdi:cached
+  unit_of_measurement: 'M tokens'
+  state_class: total
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and (((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('kimi') or {}).get('cache_read_tokens')) is number }}"
+  state: "{{ ((((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('kimi') or {}).get('cache_read_tokens')) / 1000000) | round(3) }}"
+- name: AI Kimi Output Tokens
+  unique_id: cpamp_kimi_output_tokens
+  icon: mdi:export
+  unit_of_measurement: 'M tokens'
+  state_class: total
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and (((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('kimi') or {}).get('output_tokens')) is number }}"
+  state: "{{ ((((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('kimi') or {}).get('output_tokens')) / 1000000) | round(3) }}"
+- name: AI Kimi Cache Hit Rate 7d
+  unique_id: cpamp_kimi_cache_hit_7d
+  icon: mdi:percent
+  unit_of_measurement: '%'
+  state_class: measurement
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and (((state_attr('sensor.cpamp_usage_updated', 'rolling_7d') or {}).get('kimi') or {}).get('cache_hit_pct')) is number }}"
+  state: "{{ ((state_attr('sensor.cpamp_usage_updated', 'rolling_7d') or {}).get('kimi') or {}).get('cache_hit_pct') }}"
+- name: AI DeepSeek API-Equivalent Cost
+  unique_id: cpamp_deepseek_api_cost
+  icon: mdi:cash
+  unit_of_measurement: 'USD'
+  state_class: total
+  device_class: monetary
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and (((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('deepseek') or {}).get('api_equivalent_usd')) is number }}"
+  state: "{{ ((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('deepseek') or {}).get('api_equivalent_usd') }}"
+- name: AI DeepSeek Input Tokens
+  unique_id: cpamp_deepseek_input_tokens
+  icon: mdi:import
+  unit_of_measurement: 'M tokens'
+  state_class: total
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and (((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('deepseek') or {}).get('input_tokens')) is number }}"
+  state: "{{ ((((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('deepseek') or {}).get('input_tokens')) / 1000000) | round(3) }}"
+- name: AI DeepSeek Cache Read Tokens
+  unique_id: cpamp_deepseek_cache_read_tokens
+  icon: mdi:cached
+  unit_of_measurement: 'M tokens'
+  state_class: total
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and (((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('deepseek') or {}).get('cache_read_tokens')) is number }}"
+  state: "{{ ((((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('deepseek') or {}).get('cache_read_tokens')) / 1000000) | round(3) }}"
+- name: AI DeepSeek Output Tokens
+  unique_id: cpamp_deepseek_output_tokens
+  icon: mdi:export
+  unit_of_measurement: 'M tokens'
+  state_class: total
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and (((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('deepseek') or {}).get('output_tokens')) is number }}"
+  state: "{{ ((((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('deepseek') or {}).get('output_tokens')) / 1000000) | round(3) }}"
+- name: AI DeepSeek Cache Hit Rate 7d
+  unique_id: cpamp_deepseek_cache_hit_7d
+  icon: mdi:percent
+  unit_of_measurement: '%'
+  state_class: measurement
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and (((state_attr('sensor.cpamp_usage_updated', 'rolling_7d') or {}).get('deepseek') or {}).get('cache_hit_pct')) is number }}"
+  state: "{{ ((state_attr('sensor.cpamp_usage_updated', 'rolling_7d') or {}).get('deepseek') or {}).get('cache_hit_pct') }}"
+- name: AI GLM API-Equivalent Cost
+  unique_id: cpamp_glm_api_cost
+  icon: mdi:cash
+  unit_of_measurement: 'USD'
+  state_class: total
+  device_class: monetary
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and (((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('glm') or {}).get('api_equivalent_usd')) is number }}"
+  state: "{{ ((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('glm') or {}).get('api_equivalent_usd') }}"
+- name: AI GLM Input Tokens
+  unique_id: cpamp_glm_input_tokens
+  icon: mdi:import
+  unit_of_measurement: 'M tokens'
+  state_class: total
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and (((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('glm') or {}).get('input_tokens')) is number }}"
+  state: "{{ ((((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('glm') or {}).get('input_tokens')) / 1000000) | round(3) }}"
+- name: AI GLM Cache Read Tokens
+  unique_id: cpamp_glm_cache_read_tokens
+  icon: mdi:cached
+  unit_of_measurement: 'M tokens'
+  state_class: total
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and (((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('glm') or {}).get('cache_read_tokens')) is number }}"
+  state: "{{ ((((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('glm') or {}).get('cache_read_tokens')) / 1000000) | round(3) }}"
+- name: AI GLM Output Tokens
+  unique_id: cpamp_glm_output_tokens
+  icon: mdi:export
+  unit_of_measurement: 'M tokens'
+  state_class: total
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and (((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('glm') or {}).get('output_tokens')) is number }}"
+  state: "{{ ((((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('glm') or {}).get('output_tokens')) / 1000000) | round(3) }}"
+- name: AI GLM Cache Hit Rate 7d
+  unique_id: cpamp_glm_cache_hit_7d
+  icon: mdi:percent
+  unit_of_measurement: '%'
+  state_class: measurement
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and (((state_attr('sensor.cpamp_usage_updated', 'rolling_7d') or {}).get('glm') or {}).get('cache_hit_pct')) is number }}"
+  state: "{{ ((state_attr('sensor.cpamp_usage_updated', 'rolling_7d') or {}).get('glm') or {}).get('cache_hit_pct') }}"
+- name: AI Qwen API-Equivalent Cost
+  unique_id: cpamp_qwen_api_cost
+  icon: mdi:cash
+  unit_of_measurement: 'USD'
+  state_class: total
+  device_class: monetary
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and (((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('qwen') or {}).get('api_equivalent_usd')) is number }}"
+  state: "{{ ((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('qwen') or {}).get('api_equivalent_usd') }}"
+- name: AI Qwen Input Tokens
+  unique_id: cpamp_qwen_input_tokens
+  icon: mdi:import
+  unit_of_measurement: 'M tokens'
+  state_class: total
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and (((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('qwen') or {}).get('input_tokens')) is number }}"
+  state: "{{ ((((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('qwen') or {}).get('input_tokens')) / 1000000) | round(3) }}"
+- name: AI Qwen Cache Read Tokens
+  unique_id: cpamp_qwen_cache_read_tokens
+  icon: mdi:cached
+  unit_of_measurement: 'M tokens'
+  state_class: total
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and (((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('qwen') or {}).get('cache_read_tokens')) is number }}"
+  state: "{{ ((((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('qwen') or {}).get('cache_read_tokens')) / 1000000) | round(3) }}"
+- name: AI Qwen Output Tokens
+  unique_id: cpamp_qwen_output_tokens
+  icon: mdi:export
+  unit_of_measurement: 'M tokens'
+  state_class: total
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and (((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('qwen') or {}).get('output_tokens')) is number }}"
+  state: "{{ ((((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('qwen') or {}).get('output_tokens')) / 1000000) | round(3) }}"
+- name: AI Qwen Cache Hit Rate 7d
+  unique_id: cpamp_qwen_cache_hit_7d
+  icon: mdi:percent
+  unit_of_measurement: '%'
+  state_class: measurement
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and (((state_attr('sensor.cpamp_usage_updated', 'rolling_7d') or {}).get('qwen') or {}).get('cache_hit_pct')) is number }}"
+  state: "{{ ((state_attr('sensor.cpamp_usage_updated', 'rolling_7d') or {}).get('qwen') or {}).get('cache_hit_pct') }}"
+- name: AI Grok API-Equivalent Cost
+  unique_id: cpamp_grok_api_cost
+  icon: mdi:cash
+  unit_of_measurement: 'USD'
+  state_class: total
+  device_class: monetary
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and (((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('grok') or {}).get('api_equivalent_usd')) is number }}"
+  state: "{{ ((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('grok') or {}).get('api_equivalent_usd') }}"
+- name: AI Grok Input Tokens
+  unique_id: cpamp_grok_input_tokens
+  icon: mdi:import
+  unit_of_measurement: 'M tokens'
+  state_class: total
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and (((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('grok') or {}).get('input_tokens')) is number }}"
+  state: "{{ ((((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('grok') or {}).get('input_tokens')) / 1000000) | round(3) }}"
+- name: AI Grok Cache Read Tokens
+  unique_id: cpamp_grok_cache_read_tokens
+  icon: mdi:cached
+  unit_of_measurement: 'M tokens'
+  state_class: total
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and (((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('grok') or {}).get('cache_read_tokens')) is number }}"
+  state: "{{ ((((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('grok') or {}).get('cache_read_tokens')) / 1000000) | round(3) }}"
+- name: AI Grok Output Tokens
+  unique_id: cpamp_grok_output_tokens
+  icon: mdi:export
+  unit_of_measurement: 'M tokens'
+  state_class: total
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and (((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('grok') or {}).get('output_tokens')) is number }}"
+  state: "{{ ((((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('grok') or {}).get('output_tokens')) / 1000000) | round(3) }}"
+- name: AI Grok Cache Hit Rate 7d
+  unique_id: cpamp_grok_cache_hit_7d
+  icon: mdi:percent
+  unit_of_measurement: '%'
+  state_class: measurement
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and (((state_attr('sensor.cpamp_usage_updated', 'rolling_7d') or {}).get('grok') or {}).get('cache_hit_pct')) is number }}"
+  state: "{{ ((state_attr('sensor.cpamp_usage_updated', 'rolling_7d') or {}).get('grok') or {}).get('cache_hit_pct') }}"
+- name: AI Other models API-Equivalent Cost
+  unique_id: cpamp_other_api_cost
+  icon: mdi:cash
+  unit_of_measurement: 'USD'
+  state_class: total
+  device_class: monetary
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and (((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('other') or {}).get('api_equivalent_usd')) is number }}"
+  state: "{{ ((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('other') or {}).get('api_equivalent_usd') }}"
+- name: AI Other models Input Tokens
+  unique_id: cpamp_other_input_tokens
+  icon: mdi:import
+  unit_of_measurement: 'M tokens'
+  state_class: total
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and (((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('other') or {}).get('input_tokens')) is number }}"
+  state: "{{ ((((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('other') or {}).get('input_tokens')) / 1000000) | round(3) }}"
+- name: AI Other models Cache Read Tokens
+  unique_id: cpamp_other_cache_read_tokens
+  icon: mdi:cached
+  unit_of_measurement: 'M tokens'
+  state_class: total
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and (((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('other') or {}).get('cache_read_tokens')) is number }}"
+  state: "{{ ((((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('other') or {}).get('cache_read_tokens')) / 1000000) | round(3) }}"
+- name: AI Other models Output Tokens
+  unique_id: cpamp_other_output_tokens
+  icon: mdi:export
+  unit_of_measurement: 'M tokens'
+  state_class: total
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and (((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('other') or {}).get('output_tokens')) is number }}"
+  state: "{{ ((((state_attr('sensor.cpamp_usage_updated', 'families') or {}).get('other') or {}).get('output_tokens')) / 1000000) | round(3) }}"
+- name: AI Other models Cache Hit Rate 7d
+  unique_id: cpamp_other_cache_hit_7d
+  icon: mdi:percent
+  unit_of_measurement: '%'
+  state_class: measurement
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and (((state_attr('sensor.cpamp_usage_updated', 'rolling_7d') or {}).get('other') or {}).get('cache_hit_pct')) is number }}"
+  state: "{{ ((state_attr('sensor.cpamp_usage_updated', 'rolling_7d') or {}).get('other') or {}).get('cache_hit_pct') }}"
+- name: AI Cache Write Tokens
+  unique_id: cpamp_total_cache_write_tokens
+  icon: mdi:database-plus
+  unit_of_measurement: 'M tokens'
+  state_class: total
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and ((state_attr('sensor.cpamp_usage_updated', 'totals') or {}).get('cache_write_tokens')) is number }}"
+  state: "{{ (((state_attr('sensor.cpamp_usage_updated', 'totals') or {}).get('cache_write_tokens')) / 1000000) | round(3) }}"
+- name: AI Cache Write 5m Tokens
+  unique_id: cpamp_total_cache_write_5m_tokens
+  icon: mdi:timer-sand
+  unit_of_measurement: 'M tokens'
+  state_class: total
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and ((state_attr('sensor.cpamp_usage_updated', 'totals') or {}).get('cache_write_5m_tokens')) is number }}"
+  state: "{{ (((state_attr('sensor.cpamp_usage_updated', 'totals') or {}).get('cache_write_5m_tokens')) / 1000000) | round(3) }}"
+- name: AI Cache Write 1h Tokens
+  unique_id: cpamp_total_cache_write_1h_tokens
+  icon: mdi:timer-outline
+  unit_of_measurement: 'M tokens'
+  state_class: total
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and ((state_attr('sensor.cpamp_usage_updated', 'totals') or {}).get('cache_write_1h_tokens')) is number }}"
+  state: "{{ (((state_attr('sensor.cpamp_usage_updated', 'totals') or {}).get('cache_write_1h_tokens')) / 1000000) | round(3) }}"
+- name: AI Reasoning Tokens
+  unique_id: cpamp_total_reasoning_tokens
+  icon: mdi:brain
+  unit_of_measurement: 'M tokens'
+  state_class: total
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and ((state_attr('sensor.cpamp_usage_updated', 'totals') or {}).get('reasoning_tokens')) is number }}"
+  state: "{{ (((state_attr('sensor.cpamp_usage_updated', 'totals') or {}).get('reasoning_tokens')) / 1000000) | round(3) }}"
+- name: AI Cache Savings
+  unique_id: cpamp_total_cache_savings
+  icon: mdi:piggy-bank
+  unit_of_measurement: 'USD'
+  state_class: total
+  device_class: monetary
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and ((state_attr('sensor.cpamp_usage_updated', 'totals') or {}).get('cache_savings_usd')) is number }}"
+  state: "{{ (state_attr('sensor.cpamp_usage_updated', 'totals') or {}).get('cache_savings_usd') }}"
+- name: AI Requests
+  unique_id: cpamp_total_requests
+  icon: mdi:counter
+  unit_of_measurement: 'requests'
+  state_class: total
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and ((state_attr('sensor.cpamp_usage_updated', 'totals') or {}).get('requests')) is number }}"
+  state: "{{ (state_attr('sensor.cpamp_usage_updated', 'totals') or {}).get('requests') }}"
+- name: AI Failed Requests
+  unique_id: cpamp_total_failed_requests
+  icon: mdi:alert-circle
+  unit_of_measurement: 'requests'
+  state_class: total
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and ((state_attr('sensor.cpamp_usage_updated', 'totals') or {}).get('failed_requests')) is number }}"
+  state: "{{ (state_attr('sensor.cpamp_usage_updated', 'totals') or {}).get('failed_requests') }}"
+- name: AI Failure Rate 7d
+  unique_id: cpamp_total_failure_rate_7d
+  icon: mdi:percent
+  unit_of_measurement: '%'
+  state_class: measurement
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and (((state_attr('sensor.cpamp_usage_updated', 'rolling_7d') or {}).get('totals') or {}).get('failure_pct')) is number }}"
+  state: "{{ ((state_attr('sensor.cpamp_usage_updated', 'rolling_7d') or {}).get('totals') or {}).get('failure_pct') }}"
+- name: AI Unpriced Token Share 7d
+  unique_id: cpamp_total_unpriced_share_7d
+  icon: mdi:help-circle
+  unit_of_measurement: '%'
+  state_class: measurement
+  availability: "{{ as_timestamp(states('sensor.cpamp_usage_updated'), 0) > as_timestamp(now()) - 7200 and (((state_attr('sensor.cpamp_usage_updated', 'rolling_7d') or {}).get('totals') or {}).get('unpriced_token_pct')) is number }}"
+  state: "{{ ((state_attr('sensor.cpamp_usage_updated', 'rolling_7d') or {}).get('totals') or {}).get('unpriced_token_pct') }}"
