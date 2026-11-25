@@ -20,7 +20,11 @@ The gap between API-equivalent cost and cash spend is the subscription subsidy.
 - **Source:** `usage.sqlite`, opened read-only. Pricing uses CPAMP's price
   book and its segment rules (fresh input, cache read, cache write, output, and
   context tiers), shared with `scripts/effective-cost.py`. Failed requests are
-  counted but not priced.
+  counted but not priced. Cached prompt tokens are priced as cache reads
+  and cache writes at their own rates, never at the full input price. CPA does
+  not record Anthropic's cache-write duration, so every write uses the
+  configured cache-write price. That is usually the 5-minute rate; 1-hour
+  writes cost more.
 - **Day files:** `<archive>/days/YYYY/YYYY-MM-DD.json`. Each holds totals and
   per-model, per-provider and per-client-key figures:
   - requests, failures and sessions
