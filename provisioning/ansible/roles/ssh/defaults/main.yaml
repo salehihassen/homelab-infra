@@ -1,0 +1,9 @@
+---
+# Key-only SSH for new nodes. A host may keep password logins temporarily
+# (host_vars) until its keys are confirmed.
+ssh_password_authentication: false
+ssh_permit_root_login: "no"
+
+# Public keys for admin_user, set in the untracked inventory. Existing keys
+# are kept; the list only adds.
+ssh_authorized_keys: []

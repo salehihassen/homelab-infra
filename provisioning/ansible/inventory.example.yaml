@@ -1,0 +1,17 @@
+# Copy to local/ansible/inventory.yaml (untracked) and fill in real values.
+# Per-host settings go in local/ansible/host_vars/<alias>.yaml, which Ansible
+# loads automatically from beside the inventory.
+all:
+  vars:
+    ansible_user: replace-with-admin-user
+    admin_user: replace-with-admin-user
+    base_timezone: Region/City
+  children:
+    ubuntu:
+      hosts:
+        server-1:
+          ansible_host: server-1.tailnet.private.example
+    # Hosts that run Docker Compose stacks.
+    compose_hosts:
+      hosts:
+        server-1:

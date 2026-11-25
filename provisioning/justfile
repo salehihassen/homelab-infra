@@ -1,0 +1,42 @@
+# Host provisioning commands. Run inside the provisioning shell:
+#   nix develop .#provisioning
+#   just --justfile provisioning/justfile <recipe>
+# Host aliases and connection details come from the untracked
+# local/ansible/inventory.yaml.
+
+inventory := justfile_directory() / ".." / "local" / "ansible" / "inventory.yaml"
+export ANSIBLE_CONFIG := justfile_directory() / "ansible" / "ansible.cfg"
+
+default:
+    @just --justfile {{ justfile() }} --list
+
+# Read-only record of an existing host's setup, into local/harvest/<alias>-<date>.
+# Runs the user sections, then the root sections (prompts for sudo on the host).
+harvest ssh_target alias:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    stamp="$(date +%Y%m%d)"
+    remote="/tmp/harvest-{{ alias }}-${stamp}"
+    local_dir="{{ justfile_directory() }}/../local/harvest/{{ alias }}-${stamp}"
+    scp -q "{{ justfile_directory() }}/harvest/harvest-host.sh" "{{ ssh_target }}:/tmp/harvest-host.sh"
+    ssh "{{ ssh_target }}" bash /tmp/harvest-host.sh "${remote}"
+    ssh -t "{{ ssh_target }}" sudo bash /tmp/harvest-host.sh --privileged "${remote}"
+    ssh -t "{{ ssh_target }}" sudo chown -R '$(id -u):$(id -g)' "${remote}"
+    mkdir -p "${local_dir}" && chmod 700 "${local_dir}"
+    rsync -a "{{ ssh_target }}:${remote}/" "${local_dir}/"
+    ssh "{{ ssh_target }}" rm -rf "${remote}" /tmp/harvest-host.sh
+    echo "Saved to ${local_dir}"
+
+# Dry run with diffs; changes nothing. Prompts for the host's sudo password.
+check host:
+    cd {{ justfile_directory() }}/ansible && ansible-playbook -i {{ inventory }} site.yaml --limit {{ host }} --check --diff --ask-become-pass
+
+# Apply the configuration. Run `just check` first and read its diff.
+apply host:
+    cd {{ justfile_directory() }}/ansible && ansible-playbook -i {{ inventory }} site.yaml --limit {{ host }} --diff --ask-become-pass
+
+# Offline checks: playbook syntax, ansible-lint and shellcheck.
+lint:
+    cd {{ justfile_directory() }}/ansible && ansible-playbook -i inventory.example.yaml --syntax-check site.yaml
+    cd {{ justfile_directory() }}/ansible && ansible-lint site.yaml
+    shellcheck {{ justfile_directory() }}/harvest/harvest-host.sh

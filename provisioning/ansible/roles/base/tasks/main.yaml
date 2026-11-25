@@ -1,0 +1,41 @@
+---
+- name: Require Ubuntu 26.04 or later
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['distribution'] == 'Ubuntu'
+      - ansible_facts['distribution_version'] is version('26.04', '>=')
+    fail_msg: "The Ubuntu roles target Ubuntu Server 26.04+; found {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}"
+
+- name: Require an admin user
+  ansible.builtin.assert:
+    that:
+      - admin_user is defined
+      - admin_user | length > 0
+    fail_msg: Set admin_user in the untracked inventory (local/ansible/).
+
+- name: Install base packages
+  ansible.builtin.apt:
+    name: "{{ base_packages + base_extra_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Set the timezone
+  community.general.timezone:
+    name: "{{ base_timezone }}"
+
+- name: Add the admin user to supplementary groups
+  ansible.builtin.user:
+    name: "{{ admin_user }}"
+    groups: "{{ base_admin_groups }}"
+    append: true
+
+- name: Configure periodic unattended upgrades
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      APT::Periodic::Update-Package-Lists "{{ '1' if base_unattended_upgrades else '0' }}";
+      APT::Periodic::Unattended-Upgrade "{{ '1' if base_unattended_upgrades else '0' }}";

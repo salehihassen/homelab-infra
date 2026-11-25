@@ -1,0 +1,7 @@
+---
+# Picks up the drop-in on the next Docker start; never restarts running
+# containers by itself.
+- name: Reload systemd
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+  tags: [service]

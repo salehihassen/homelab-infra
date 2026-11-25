@@ -1,0 +1,16 @@
+---
+# Host configuration for Ubuntu nodes. Run through provisioning/justfile:
+# `just check <host>` (dry run with diffs) before `just apply <host>`.
+- name: Base Ubuntu node
+  hosts: ubuntu
+  become: true
+  roles:
+    - base
+    - ssh
+    - tailscale
+
+- name: Compose hosts
+  hosts: compose_hosts
+  become: true
+  roles:
+    - docker

@@ -1,0 +1,40 @@
+---
+# Ubuntu Server packages every node gets. User-level CLI tools come from the
+# portable-core Home Manager profile instead; these cover bootstrap, disks,
+# encryption and debugging before Nix is installed.
+base_packages:
+  - openssh-server
+  - sudo  # provides sudo.ws, which Ansible uses for become (group_vars/ubuntu.yaml)
+  - ca-certificates
+  - curl
+  - git
+  - tmux
+  - btop
+  - jq
+  - ripgrep
+  - lvm2
+  - cryptsetup
+  - cryptsetup-initramfs
+  - xfsprogs
+  - smartmontools
+  - efibootmgr
+  - ethtool
+  - chrony
+  - unattended-upgrades
+  - util-linux-extra
+  - wakeonlan
+
+# Host-specific additions (for example development packages on one host).
+base_extra_packages: []
+
+# Real value lives in the untracked inventory.
+base_timezone: Etc/UTC
+
+# Supplementary groups for the admin user (the account the installer creates).
+base_admin_groups:
+  - adm
+  - sudo
+  - kvm
+
+# Daily package-list refresh and unattended security upgrades.
+base_unattended_upgrades: true
