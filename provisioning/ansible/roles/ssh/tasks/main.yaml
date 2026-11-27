@@ -1,0 +1,39 @@
+---
+- name: Add authorized keys for the admin user
+  ansible.posix.authorized_key:
+    user: "{{ admin_user }}"
+    key: "{{ item }}"
+    state: present
+  loop: "{{ ssh_authorized_keys }}"
+
+- name: Read the admin user's authorized keys
+  ansible.builtin.slurp:
+    src: "/home/{{ admin_user }}/.ssh/authorized_keys"
+  register: ssh_current_keys
+  failed_when: false
+  when: not ssh_password_authentication
+
+# Disabling passwords without a working key locks the admin out.
+- name: Refuse to disable password logins without an authorized key
+  ansible.builtin.assert:
+    that:
+      - ssh_authorized_keys | length > 0 or
+        (ssh_current_keys.content is defined and
+         (ssh_current_keys.content | b64decode | regex_search('^ssh-|^ecdsa-|^sk-', multiline=True)))
+    fail_msg: "{{ admin_user }} has no authorized SSH key; set ssh_authorized_keys or keep ssh_password_authentication."
+  when: not ssh_password_authentication
+
+# sshd keeps the first value it reads, and the Include of sshd_config.d comes
+# first in Ubuntu's sshd_config, so this file takes precedence.
+- name: Configure sshd authentication
+  ansible.builtin.copy:
+    dest: /etc/ssh/sshd_config.d/10-homelab.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      # Managed by homelab-infra provisioning/ansible (ssh role).
+      PasswordAuthentication {{ 'yes' if ssh_password_authentication else 'no' }}
+      KbdInteractiveAuthentication no
+      PermitRootLogin {{ ssh_permit_root_login }}
+  notify: Validate and reload sshd

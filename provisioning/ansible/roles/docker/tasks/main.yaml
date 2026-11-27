@@ -1,0 +1,64 @@
+---
+- name: Install Docker's archive key
+  ansible.builtin.get_url:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    dest: /etc/apt/keyrings/docker.asc
+    owner: root
+    group: root
+    mode: "0644"
+    force: false
+
+- name: Add Docker's apt repository
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/docker.sources
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      Types: deb
+      URIs: https://download.docker.com/linux/ubuntu
+      Suites: {{ ansible_facts['distribution_release'] }}
+      Components: stable
+      Architectures: {{ 'amd64' if ansible_facts['architecture'] == 'x86_64' else 'arm64' }}
+      Signed-By: /etc/apt/keyrings/docker.asc
+  register: docker_repo
+
+- name: Install Docker Engine
+  ansible.builtin.apt:
+    name: "{{ docker_packages }}"
+    state: present
+    update_cache: "{{ docker_repo is changed }}"
+
+- name: Add the admin user to the docker group
+  ansible.builtin.user:
+    name: "{{ admin_user }}"
+    groups: [docker]
+    append: true
+
+- name: Create Docker's systemd drop-in directory
+  ansible.builtin.file:
+    path: /etc/systemd/system/docker.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: docker_requires_mounts | length > 0
+
+- name: Make Docker wait for its data mounts
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/docker.service.d/20-service-storage.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Unit]
+      RequiresMountsFor={{ docker_requires_mounts | join(' ') }}
+  when: docker_requires_mounts | length > 0
+  notify: Reload systemd
+
+- name: Enable Docker
+  ansible.builtin.systemd_service:
+    name: docker
+    enabled: true
+    state: started
+  tags: [service]

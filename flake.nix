@@ -15,6 +15,16 @@
         default = pkgs.mkShell {
           packages = [ (pkgs.python3.withPackages (p: [ p.pyyaml ])) ];
         };
+        # Host provisioning (provisioning/README.md): ansible-core plus the
+        # community collections, pinned by flake.lock instead of Galaxy.
+        provisioning = pkgs.mkShell {
+          packages = [
+            (pkgs.python3.withPackages (p: [ p.pyyaml p.ansible-core p.ansible ]))
+            pkgs.ansible-lint
+            pkgs.just
+            pkgs.shellcheck
+          ];
+        };
       });
     };
 }

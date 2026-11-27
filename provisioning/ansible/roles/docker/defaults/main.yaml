@@ -1,0 +1,13 @@
+---
+# Docker Engine from Docker's apt repository, for hosts that run Compose
+# stacks. K3s nodes do not need it: K3s ships its own containerd.
+docker_packages:
+  - docker-ce
+  - docker-ce-cli
+  - containerd.io
+  - docker-buildx-plugin
+  - docker-compose-plugin
+
+# Mount points Docker must wait for (data volumes on a separate disk). Empty
+# means no drop-in. Real paths live in the untracked host_vars.
+docker_requires_mounts: []

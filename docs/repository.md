@@ -27,7 +27,8 @@ RUNBOOK.md                # rebuild, restore, secrets, day-to-day operations
 docs/                     # backups format, agent telemetry, archived services
 scripts/                  # validation, dependency/backup/private-identifier checks
 kubernetes/               # public Flux root, new Kaneo instance and PostgreSQL
-provisioning/k3s/          # reviewed-by-operator host examples; no remote installer
+provisioning/              # host setup: Ansible roles, harvest script, justfile (README inside)
+  k3s/                    # reviewed-by-operator K3s config examples
 local/                    # untracked: real host names, domains, scan patterns
 ```
 

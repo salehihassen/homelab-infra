@@ -1,0 +1,4 @@
+# Ubuntu 25.10+ makes sudo-rs the default sudo. sudo-rs wraps Ansible's become
+# prompt as "[sudo: <prompt>] Password:", so Ansible never matches it and times
+# out. The classic sudo package is still installed as sudo.ws; use it.
+ansible_become_exe: sudo.ws
