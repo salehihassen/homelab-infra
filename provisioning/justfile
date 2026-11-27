@@ -4,7 +4,15 @@
 # Host aliases and connection details come from the untracked
 # local/ansible/inventory.yaml.
 
-inventory := justfile_directory() / ".." / "local" / "ansible" / "inventory.yaml"
+repo := justfile_directory() / ".."
+inventory := repo / "local" / "ansible" / "inventory.yaml"
+site := repo / "local" / "nixos-site"
+secrets := repo / "local" / "secrets"
+# Extra nix flags, for example a dotfiles hotfix:
+#   NIX_FLAGS="--override-input site/my-nixos-setup path:$HOME/src/my-nixos-setup" just deploy ...
+# Extra ssh/scp options for node recipes, as "-o Key=Value" pairs (VM tests).
+# NODE_SSH_OPTS="-o Port=2201" just enroll ...
+nix_flags := "--no-write-lock-file --override-input site path:" + site + " " + env("NIX_FLAGS", "")
 export ANSIBLE_CONFIG := justfile_directory() / "ansible" / "ansible.cfg"
 
 default:
@@ -39,4 +47,148 @@ apply host:
 lint:
     cd {{ justfile_directory() }}/ansible && ansible-playbook -i inventory.example.yaml --syntax-check site.yaml
     cd {{ justfile_directory() }}/ansible && ansible-lint site.yaml
-    shellcheck {{ justfile_directory() }}/harvest/harvest-host.sh
+    shellcheck {{ justfile_directory() }}/harvest/harvest-host.sh {{ justfile_directory() }}/enroll/luks-enroll.sh {{ justfile_directory() }}/vm-test/*.sh
+
+# NixOS nodes ---------------------------------------------------------------
+# Host modules come from the untracked local/nixos-site flake (start from
+# provisioning/nixos/site.example). Secrets stay in local/secrets/<alias>/.
+
+# Build the installer USB image (NixOS minimal, root SSH with the site's
+# installer keys) and print its path. Flash it with your usual tool.
+[doc("Build the installer USB image")]
+iso:
+    nix build {{ nix_flags }} --no-link --print-out-paths "{{ repo }}#packages.x86_64-linux.installer-iso"
+
+# Generate a node's secrets: install key, two recovery passphrases, SSH host
+# keys for the system and the initrd. Refuses to overwrite. Back the
+# directory up (password manager, NAS, B2) before installing.
+[doc("Generate a node's install and recovery secrets")]
+secrets alias:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    umask 077
+    dir="{{ secrets }}/{{ alias }}"
+    if [[ -e "$dir" ]]; then echo "$dir already exists; refusing to overwrite" >&2; exit 1; fi
+    mkdir -p "$dir/extra-files/etc/ssh" "$dir/extra-files/etc/secrets/initrd"
+    head -c 32 /dev/urandom | base64 -w0 >"$dir/install.key"
+    for n in 1 2; do printf '%s' "$(xkcdpass -n 7 -d -)" >"$dir/recovery-$n.txt"; done
+    ssh-keygen -q -t ed25519 -N "" -C "{{ alias }}" -f "$dir/extra-files/etc/ssh/ssh_host_ed25519_key"
+    ssh-keygen -q -t ed25519 -N "" -C "{{ alias }}-initrd" -f "$dir/extra-files/etc/secrets/initrd/ssh_host_ed25519_key"
+    echo "Created $dir. Back it up now, then save a single-use, pre-approved"
+    echo "Tailscale auth key as $dir/tailscale-auth.key (no trailing newline needed)."
+
+# Install NixOS on a machine booted from the NixOS minimal ISO with root SSH
+# access. ERASES the disk set in the host's storage.disk.
+[doc("Install NixOS on a node booted from the installer (erases its disk)")]
+install alias target:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    umask 077
+    read -ra o <<<"${NODE_SSH_OPTS:-}"
+    dir="{{ secrets }}/{{ alias }}"
+    attr="{{ repo }}#nixosConfigurations.{{ alias }}.config"
+    for f in install.key recovery-1.txt recovery-2.txt tailscale-auth.key; do
+      [[ -s "$dir/$f" ]] || { echo "missing $dir/$f (run: just secrets {{ alias }})" >&2; exit 1; }
+    done
+    report="{{ site }}/{{ alias }}.facter.json"
+    if [[ ! -s "$report" ]]; then
+      ssh -n "${o[@]}" "root@{{ target }}" 'nix --extra-experimental-features "nix-command flakes" run nixpkgs#nixos-facter' >"$report.tmp"
+      mv "$report.tmp" "$report"
+      echo "Saved $report; reference it with hardware.facter.reportPath in the site module."
+    fi
+    if [[ "$(nix eval {{ nix_flags }} --raw "$attr.hardware.facter.reportPath" --apply 'p: if p == null then "" else toString p' 2>/dev/null)" == "" ]]; then
+      echo "{{ alias }} has no hardware.facter.reportPath; add it to the site module first" >&2; exit 1
+    fi
+    disk="$(nix eval {{ nix_flags }} --raw "$attr.homelab.node.storage.disk")"
+    echo "Target disk on {{ target }}:"
+    ssh -n "${o[@]}" "root@{{ target }}" lsblk -o NAME,SIZE,MODEL,SERIAL,FSTYPE,MOUNTPOINTS "$disk"
+    read -r -p "Erase this disk and install {{ alias }}? Type the alias to continue: " answer
+    [[ "$answer" == "{{ alias }}" ]] || { echo "aborted" >&2; exit 1; }
+    stage="$(mktemp -d)"
+    trap 'rm -rf "$stage"' EXIT
+    cp -a "$dir/extra-files/." "$stage/"
+    install -D -m 0600 "$dir/tailscale-auth.key" "$stage/var/lib/homelab-enroll/tailscale-auth.key"
+    # Unattended first boot on the LAN: a Tang-only JWE wrapping the install
+    # key. `just enroll` replaces it with TPM2-or-Tang and removes that key.
+    tang_url="$(nix eval {{ nix_flags }} --raw "$attr.homelab.node.unlock.tang.url")"
+    thp="$(nix eval {{ nix_flags }} --raw "$attr.homelab.node.unlock.tang.thumbprint" --apply 't: if t == null then "" else t')"
+    pin="$(jose fmt -j '{}' -q "$tang_url" -s url -U ${thp:+-q "$thp" -s thp -U} -o-)"
+    trust=(); [[ -n "$thp" ]] || trust=(-y)
+    mkdir -p "$stage/var/lib/homelab-unlock"
+    clevis encrypt tang "$pin" "${trust[@]}" <"$dir/install.key" >"$stage/var/lib/homelab-unlock/cryptroot.jwe"
+    toplevel="$(nix build {{ nix_flags }} --no-link --print-out-paths "$attr.system.build.toplevel")"
+    disko="$(nix build {{ nix_flags }} --no-link --print-out-paths "$attr.system.build.diskoScript")"
+    na=()
+    for ((i = 0; i < ${#o[@]}; i++)); do
+      [[ "${o[i]}" == -o ]] && na+=(--ssh-option "${o[i + 1]}")
+    done
+    nixos-anywhere --store-paths "$disko" "$toplevel" "${na[@]}" \
+      --disk-encryption-keys /tmp/install.key "$dir/install.key" \
+      --extra-files "$stage" \
+      --target-host "root@{{ target }}"
+
+# Enroll unlock on an installed node: recovery passphrases, clevis TPM2-or-Tang,
+# remove the install key, back up the LUKS header to local/secrets/<alias>/.
+# `target` is the admin user's SSH destination. Rerunnable; after a TPM or
+# motherboard swap or a Tang key rotation, run with REBIND=1.
+[doc("Enroll TPM2-or-Tang unlock and recovery passphrases")]
+enroll alias target:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    umask 077
+    read -ra o <<<"${NODE_SSH_OPTS:-}"
+    dir="{{ secrets }}/{{ alias }}"
+    attr="{{ repo }}#nixosConfigurations.{{ alias }}.config"
+    tang_url="$(nix eval {{ nix_flags }} --raw "$attr.homelab.node.unlock.tang.url")"
+    thp="$(nix eval {{ nix_flags }} --raw "$attr.homelab.node.unlock.tang.thumbprint" --apply 't: if t == null then "" else t')"
+    pcrs="$(nix eval {{ nix_flags }} --raw "$attr.homelab.node.unlock.tpm2.pcrIds")"
+    remote="$(ssh "${o[@]}" "{{ target }}" 'mktemp -d -p /dev/shm')"
+    trap 'ssh "${o[@]}" "{{ target }}" sudo rm -rf "$remote"' EXIT
+    scp "${o[@]}" -q "{{ justfile_directory() }}/enroll/luks-enroll.sh" "$dir/install.key" \
+      "$dir/recovery-1.txt" "$dir/recovery-2.txt" "{{ target }}:$remote/"
+    ssh "${o[@]}" -t "{{ target }}" sudo bash "$remote/luks-enroll.sh" \
+      --old-key "$remote/install.key" \
+      --recovery "$remote/recovery-1.txt" --recovery "$remote/recovery-2.txt" \
+      --tang-url "$tang_url" ${thp:+--tang-thp "$thp"} --pcr-ids "$pcrs" \
+      --jwe-out /var/lib/homelab-unlock/cryptroot.jwe \
+      --header-out "$remote/luks-header.img" ${REBIND:+--rebind}
+    ssh "${o[@]}" "{{ target }}" sudo chown "\$(id -u)" "$remote/luks-header.img"
+    scp "${o[@]}" -q "{{ target }}:$remote/luks-header.img" "$dir/luks-header-$(date +%Y%m%d).img"
+    # Rewrite every boot entry's initrd secrets with the new JWE.
+    ssh "${o[@]}" "{{ target }}" sudo /run/current-system/bin/switch-to-configuration boot
+    ssh "${o[@]}" "{{ target }}" sudo rm -f /var/lib/homelab-enroll/tailscale-auth.key
+    echo "Enrolled. Header backup: $dir/luks-header-$(date +%Y%m%d).img (back it up)."
+
+# Create the VDO volume in a NixOS node's free LVM space and format it XFS.
+# First set homelab.node.storage.vdo.enable in the site and `just deploy`
+# (that installs VDO-capable LVM and declares the /srv/vdo mount). `size` is
+# physical space taken from the volume group, `virtual` what XFS sees, for
+# example `just vdo server-4 admin@server-4 200G 600G`. Never reformats.
+[doc("Create and mount a NixOS node's VDO volume")]
+vdo alias target size virtual:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    read -ra o <<<"${NODE_SSH_OPTS:-}"
+    ssh "${o[@]}" "{{ target }}" sudo bash -s -- "{{ size }}" "{{ virtual }}" <<'REMOTE'
+    set -euo pipefail
+    lv=/dev/vg_node/vdo
+    modprobe dm-vdo  # loaded at boot once enabled; needed before the first reboot
+    if ! lvs vg_node/vdo >/dev/null 2>&1; then
+      lvcreate --yes --type vdo --name vdo --size "$1" --virtualsize "$2" vg_node/vpool0
+    fi
+    if [[ -z "$(blkid -o value -s TYPE "$lv")" ]]; then
+      mkfs.xfs -K "$lv"
+    fi
+    systemctl start "$(systemd-escape --path --suffix=mount /srv/vdo)"
+    lvs -o lv_name,lv_size,data_percent,vdo_saving_percent vg_node
+    df -h /srv/vdo
+    REMOTE
+
+# Build and activate a node's configuration over SSH.
+[doc("Pin the latest my-nixos-setup (portable-core, dotfiles) in the site flake")]
+update-dotfiles:
+    nix flake update my-nixos-setup --flake "path:{{ site }}"
+
+[doc("Build and activate a NixOS node's configuration")]
+deploy alias target:
+    NIX_SSHOPTS="${NODE_SSH_OPTS:-}" nixos-rebuild switch {{ nix_flags }} --flake "{{ repo }}#{{ alias }}" --target-host "{{ target }}" --sudo
